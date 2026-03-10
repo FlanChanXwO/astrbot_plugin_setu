@@ -67,7 +67,7 @@
 1. 克隆本仓库到 AstrBot 的插件目录：
    ```bash
    cd AstrBot/data/plugins
-   git clone https://github.com/yourusername/astrbot_plugin_setu.git
+   git clone https://github.com/FlanChanXwO/astrbot_plugin_setu.git
    ```
 2. 重启 AstrBot 或重载插件
 
@@ -135,7 +135,7 @@
 
 ### 高级用法
 
-- **自定义 API**：可在配置中设置 `api_type` 为 `custom`，并填写自定义 API 地址和解析规则，实现对接任意第三方色图接口。
+- **自定义 API**：可在配置中设置 `api_type` 为 `custom`，并填写自定义 API 地址和解析规则，实现对接任意第三方色图接口, 注意标签和分级筛选目前还是实验性阶段。
 - **图片混淆**：如遇平台审核拦截，插件会自动尝试对图片进行字节级混淆重发，无需额外配置。
 - **自动撤回**：可通过 `auto_revoke_r18` 配置项开启 R18 图片的自动撤回，并可设置撤回延迟时间。
 - **Docx 封装**：开启 `r18_docx_mode` 后，R18 图片将以 Word 文档形式发送，进一步规避平台审核。
@@ -144,6 +144,13 @@
 - **标签与过滤**：支持多标签、中文标签、AI 过滤（`exclude_ai`），可灵活组合搜索条件。
 
 更多详细配置和玩法请参考上方“配置项”表格及实际管理面板说明。
+
+---
+
+## 未来更新
+- [ ] 更好的自定义API
+- [ ] 新增一个作者自己的图库内置API，该图库的更新速度会比目前的图库API更快，并且跟随了当前版本潮流！
+- [ ] 一些基于色图的额外插件功能
 
 ---
 
