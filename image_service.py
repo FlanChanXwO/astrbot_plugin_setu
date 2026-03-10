@@ -30,8 +30,8 @@ DEFAULT_HEADERS = {
     "Referer": "https://www.pixiv.net/",
 }
 
-# 安全限制常量
-MAX_CONCURRENT_DOWNLOADS = 10  # 最大并发下载数
+# 安全限制常量 - 可通过配置覆盖
+MAX_CONCURRENT_DOWNLOADS = 10  # 默认最大并发下载数
 MAX_DOWNLOAD_SIZE_BYTES = 50 * 1024 * 1024  # 最大下载大小：50MB
 
 
@@ -228,10 +228,20 @@ class UrlImageDiskCache:
 class ImageService:
     """图片下载/发送服务，具备健壮的回退机制。"""
 
-    def __init__(self, cache: UrlImageDiskCache | None = None):
+    def __init__(
+        self,
+        cache: UrlImageDiskCache | None = None,
+        concurrent_limit: int = 10,
+        timeout_seconds: int = 30,
+        tcp_connector_limit: int = 50,
+        tcp_connector_limit_per_host: int = 20,
+    ):
         self._cache = cache
         # 信号量控制并发下载数，防止资源耗尽
-        self._download_semaphore = asyncio.Semaphore(MAX_CONCURRENT_DOWNLOADS)
+        self._download_semaphore = asyncio.Semaphore(max(1, concurrent_limit))
+        self._timeout_seconds = max(10, timeout_seconds)
+        self._tcp_connector_limit = max(10, tcp_connector_limit)
+        self._tcp_connector_limit_per_host = max(5, tcp_connector_limit_per_host)
 
     def _is_safe_url(self, url: str) -> bool:
         """检查 URL 是否安全，防止 SSRF 攻击。
@@ -319,7 +329,7 @@ class ImageService:
         # 使用信号量控制并发下载
         async with self._download_semaphore:
             try:
-                async with session.get(url, headers=DEFAULT_HEADERS) as resp:
+                async with session.get(url) as resp:
                     if resp.status == 404:
                         logger.warning("image 404: %s", url)
                         return None
@@ -369,17 +379,37 @@ class ImageService:
         return data
 
     async def download_parallel(self, urls: list[str]) -> list[bytes]:
-        """并发下载多张图片，仅保留成功的图片数据。"""
+        """并发下载多张图片，仅保留成功的图片数据。
+
+        使用优化的TCP连接器和连接池以提高高带宽服务器的下载速度。
+        """
         if not urls:
             return []
-        timeout = aiohttp.ClientTimeout(total=HTTP_TIMEOUT_SECONDS)
+
+        timeout = aiohttp.ClientTimeout(total=self._timeout_seconds, connect=10)
+
+        # 配置TCP连接器以优化高带宽下载
+        connector = aiohttp.TCPConnector(
+            limit=self._tcp_connector_limit,                    # 总连接数限制
+            limit_per_host=self._tcp_connector_limit_per_host,  # 每个主机的连接数限制
+            enable_cleanup_closed=True,  # 清理关闭的连接
+            force_close=False,           # 允许连接复用
+        )
+
         try:
-            async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with aiohttp.ClientSession(
+                timeout=timeout,
+                connector=connector,
+                headers=DEFAULT_HEADERS,
+            ) as session:
                 tasks = [self.download_single(session, url) for url in urls]
                 results = await asyncio.gather(*tasks, return_exceptions=True)
         except Exception as exc:
-            logger.exception("download_parallel failed: %s",exc)
+            logger.exception("download_parallel failed: %s", exc)
             return []
+        finally:
+            # 确保连接器被关闭
+            await connector.close()
 
         downloaded: list[bytes] = []
         for result in results:

@@ -460,6 +460,54 @@ class SetuConfig:
         return _safe_bool(self._read(("cache", "cleanup_on_start"), default=True), True)
 
     @property
+    def download_concurrent_limit(self) -> int:
+        """并发下载限制。
+
+        返回:
+            同时下载图片的最大并发数，适用于高带宽服务器
+        """
+        return _safe_int(
+            self._read(("performance", "download_concurrent_limit"), default=10),
+            10,
+        )
+
+    @property
+    def download_timeout_seconds(self) -> int:
+        """下载超时时间（秒）。
+
+        返回:
+            单个图片下载的最大超时时间
+        """
+        return _safe_int(
+            self._read(("performance", "download_timeout_seconds"), default=30),
+            30,
+        )
+
+    @property
+    def tcp_connector_limit(self) -> int:
+        """TCP连接器总连接数限制。
+
+        返回:
+            aiohttp TCP连接器的总连接数限制
+        """
+        return _safe_int(
+            self._read(("performance", "tcp_connector_limit"), default=50),
+            50,
+        )
+
+    @property
+    def tcp_connector_limit_per_host(self) -> int:
+        """TCP连接器每主机连接数限制。
+
+        返回:
+            aiohttp TCP连接器每个主机的连接数限制
+        """
+        return _safe_int(
+            self._read(("performance", "tcp_connector_limit_per_host"), default=20),
+            20,
+        )
+
+    @property
     def tag_alias(self) -> dict[str, list[str]]:
         """标签别名映射。
 

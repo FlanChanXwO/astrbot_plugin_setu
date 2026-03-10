@@ -199,13 +199,25 @@ class SetuCore:
                     self.config.cache_ttl_hours,
                     self.config.cache_max_items,
                 )
-            self._image_service = ImageService(self._cache)
+            self._image_service = ImageService(
+                self._cache,
+                concurrent_limit=self.config.download_concurrent_limit,
+                timeout_seconds=self.config.download_timeout_seconds,
+                tcp_connector_limit=self.config.tcp_connector_limit,
+                tcp_connector_limit_per_host=self.config.tcp_connector_limit_per_host,
+            )
         except (OSError, RuntimeError, ValueError):
             logger.exception(
                 "SetuCore initialize failed, fallback to no-cache ImageService"
             )
             self._cache = None
-            self._image_service = ImageService(None)
+            self._image_service = ImageService(
+                None,
+                concurrent_limit=self.config.download_concurrent_limit,
+                timeout_seconds=self.config.download_timeout_seconds,
+                tcp_connector_limit=self.config.tcp_connector_limit,
+                tcp_connector_limit_per_host=self.config.tcp_connector_limit_per_host,
+            )
 
     async def _restore_pending_revokes(self) -> None:
         """恢复未处理的撤回任务（插件重启后）。"""
@@ -692,20 +704,40 @@ class SetuCore:
 
         downloaded = await self._image_service.download_parallel(img_urls)
         logger.info(
-            "initial download target=%d success=%d failed=%d",
+            "initial download target=%d requested=%d success=%d failed=%d",
             num,
+            len(img_urls),
             len(downloaded),
-            max(0, num - len(downloaded)),
+            max(0, len(img_urls) - len(downloaded)),
         )
 
+        # 如果API返回的数量本身就少于请求数量，说明库存不足，不再补充
+        if len(img_urls) < num:
+            logger.info(
+                "api returned fewer images than requested (%d < %d), skipping replenish",
+                len(img_urls), num
+            )
+            return downloaded
+
+        # 只补充实际下载失败的图片
         round_num = 0
         while len(downloaded) < num and round_num < max_replenish:
             missing = num - len(downloaded)
+            # 如果上一次下载全部成功但数量仍不足，说明API库存不足，停止补充
+            if len(downloaded) == len(img_urls):
+                logger.info(
+                    "all %d returned images downloaded successfully but still need %d more, "
+                    "stopping replenish (insufficient inventory)",
+                    len(img_urls), missing
+                )
+                break
+
             logger.info(
-                "replenish round %d/%d missing=%d",
+                "replenish round %d/%d missing=%d (failed=%d)",
                 round_num + 1,
                 max_replenish,
                 missing,
+                len(img_urls) - len(downloaded),
             )
             try:
                 extra_urls = await provider.fetch_image_urls(
@@ -719,6 +751,18 @@ class SetuCore:
                         extra_urls
                     )
                     downloaded.extend(extra_downloaded)
+                    # 如果这次补充的API返回数量不足，说明库存不够，停止
+                    if len(extra_urls) < missing:
+                        logger.info(
+                            "replenish returned fewer images than requested (%d < %d), "
+                            "stopping (insufficient inventory)",
+                            len(extra_urls), missing
+                        )
+                        break
+                else:
+                    # API 没有返回任何图片，说明库存不足，停止补充
+                    logger.info("replenish returned no images, stopping (insufficient inventory)")
+                    break
             except Exception as exc:
                 logger.warning("replenish round %d failed: %s", round_num + 1, exc)
             round_num += 1

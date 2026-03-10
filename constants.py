@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-# 图片下载的 HTTP 超时时间（秒）
+# 图片下载的 HTTP 超时时间（秒）- 默认值为 30，可通过配置覆盖
 HTTP_TIMEOUT_SECONDS = 30
 
 # 常见标签的默认别名映射
