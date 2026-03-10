@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 from pathlib import Path
 
@@ -155,8 +156,9 @@ class SetuPlugin(Star):
             return
 
         # 解析标签
-        tag_str = match.group(3).strip()
+        tag_str = match.group(4).strip()
         tags = cfg.resolve_tags(tag_str)
+
 
         if cfg.msg_fetching_enabled:
             yield event.plain_result(cfg.msg_fetching_text)
@@ -164,9 +166,23 @@ class SetuPlugin(Star):
             # 获取生效的内容模式（优先会话配置）
             effective_content_mode = await self._core.get_effective_content_mode(event)
             is_r18 = self._core.determine_r18(effective_content_mode)
-            downloaded = await self._core.fetch_and_download_images(num, tags, is_r18)
+            logger.debug(
+                "num = %d invoke params = %s , r18 = %s",
+                num,tags,is_r18
+            )
+            # 整体超时控制：60秒
+            downloaded = await asyncio.wait_for(
+                self._core.fetch_and_download_images(num, tags, is_r18),
+                timeout=60.0
+            )
+            if not downloaded:
+                yield event.plain_result("获取图片失败，请稍后再试。")
+                return
             async for result in self._core.send_images(event, downloaded, is_r18, tags):
                 yield result
+        except asyncio.TimeoutError:
+            logger.warning("get_random_picture timeout (>60s)")
+            yield event.plain_result("获取图片超时，请稍后再试。")
         except (OSError, RuntimeError, ValueError):
             logger.exception("get_random_picture failed")
             yield event.plain_result("获取图片失败，请稍后再试。")
@@ -224,13 +240,21 @@ class SetuPlugin(Star):
             # 获取生效的内容模式（优先会话配置）
             effective_content_mode = await self._core.get_effective_content_mode(event)
             is_r18 = self._core.determine_r18(effective_content_mode)
-            downloaded = await self._core.fetch_and_download_images(
-                num, parsed_tags, is_r18
+            # 整体超时控制：60秒
+            downloaded = await asyncio.wait_for(
+                self._core.fetch_and_download_images(num, parsed_tags, is_r18),
+                timeout=60.0
             )
+            if not downloaded:
+                yield event.plain_result("获取图片失败，请稍后再试。")
+                return
             async for result in self._core.send_images(
                 event, downloaded, is_r18, parsed_tags
             ):
                 yield result
+        except asyncio.TimeoutError:
+            logger.warning("setu command timeout (>60s)")
+            yield event.plain_result("获取图片超时，请稍后再试。")
         except (OSError, RuntimeError, ValueError):
             logger.exception("setu command failed")
             yield event.plain_result("获取图片失败，请稍后再试。")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import random
 import socket
@@ -185,11 +186,26 @@ class LoliconProvider(SetuImageProvider):
         if tag_params:
             url += f"&{tag_params}"
 
-        timeout = aiohttp.ClientTimeout(total=HTTP_TIMEOUT_SECONDS)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(url) as resp:
-                resp.raise_for_status()
-                data = await resp.json(content_type=None)
+        try:
+            timeout = aiohttp.ClientTimeout(total=HTTP_TIMEOUT_SECONDS)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(url) as resp:
+                    if not resp.ok:
+                        logger.warning("Lolicon API 错误: %d %s", resp.status, url)
+                        return []
+                    data = await resp.json(content_type=None)
+        except aiohttp.ClientResponseError as e:
+            logger.warning("Lolicon API 响应错误: %s %s", e, url)
+            return []
+        except aiohttp.ClientError as e:
+            logger.warning("Lolicon API 请求失败: %s %s", e, url)
+            return []
+        except asyncio.TimeoutError:
+            logger.warning("Lolicon API 请求超时: %s", url)
+            return []
+        except Exception as e:
+            logger.exception("Lolicon API 异常: %s", e)
+            return []
 
         urls: list[str] = []
         for item in data.get("data", []):
@@ -230,11 +246,26 @@ class SexNyanRunProvider(SetuImageProvider):
         if tag_params:
             url += f"&{tag_params}"
 
-        timeout = aiohttp.ClientTimeout(total=HTTP_TIMEOUT_SECONDS)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(url) as resp:
-                resp.raise_for_status()
-                data = await resp.json(content_type=None)
+        try:
+            timeout = aiohttp.ClientTimeout(total=HTTP_TIMEOUT_SECONDS)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(url) as resp:
+                    if not resp.ok:
+                        logger.warning("SexNyanRun API 错误: %d %s", resp.status, url)
+                        return []
+                    data = await resp.json(content_type=None)
+        except aiohttp.ClientResponseError as e:
+            logger.warning("SexNyanRun API 响应错误: %s %s", e, url)
+            return []
+        except aiohttp.ClientError as e:
+            logger.warning("SexNyanRun API 请求失败: %s %s", e, url)
+            return []
+        except asyncio.TimeoutError:
+            logger.warning("SexNyanRun API 请求超时: %s", url)
+            return []
+        except Exception as e:
+            logger.exception("SexNyanRun API 异常: %s", e)
+            return []
 
         urls: list[str] = []
         for item in data.get("data", []):
