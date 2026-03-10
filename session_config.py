@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from pathlib import Path
@@ -42,20 +43,23 @@ class SessionConfigManager:
         self.data_dir = data_dir
         self.config_file = data_dir / "session_config.json"
         self._data: dict[str, Any] = {"sessions": {}, "meta": {}}
+        self._lock = asyncio.Lock()
 
     async def initialize(self) -> None:
         """初始化配置，从文件加载现有配置。"""
         self.data_dir.mkdir(parents=True, exist_ok=True)
-        await self._load()
-        self._data.setdefault("sessions", {})
-        self._data.setdefault("meta", {"created_at": int(time.time())})
+        async with self._lock:
+            await self._load()
+            self._data.setdefault("sessions", {})
+            self._data.setdefault("meta", {"created_at": int(time.time())})
         logger.info("[session_config] SessionConfigManager initialized")
 
     async def _load(self) -> None:
-        """从文件加载配置。"""
+        """从文件加载配置（内部使用锁保护）。"""
         if not self.config_file.exists():
             self._data = {"sessions": {}, "meta": {"created_at": int(time.time())}}
-            await self._save()
+            async with self._lock:
+                await self._save()
             return
 
         try:
@@ -71,10 +75,11 @@ class SessionConfigManager:
                 "[session_config] Failed to load session config, creating new"
             )
             self._data = {"sessions": {}, "meta": {"created_at": int(time.time())}}
-            await self._save()
+            async with self._lock:
+                await self._save()
 
     async def _save(self) -> None:
-        """保存配置到文件。"""
+        """保存配置到文件（应在锁保护下调用）。"""
         try:
             tmp_path = self.config_file.with_suffix(".tmp")
             async with aiofiles.open(tmp_path, "w", encoding="utf-8") as f:
@@ -120,12 +125,16 @@ class SessionConfigManager:
             return False
 
         session_key = self._get_session_key(session_id, is_group)
-        if session_key not in self._data["sessions"]:
-            self._data["sessions"][session_key] = {}
 
-        self._data["sessions"][session_key][key] = value
-        self._data["sessions"][session_key]["updated_at"] = int(time.time())
-        await self._save()
+        # 使用锁保护并发写入
+        async with self._lock:
+            if session_key not in self._data["sessions"]:
+                self._data["sessions"][session_key] = {}
+
+            self._data["sessions"][session_key][key] = value
+            self._data["sessions"][session_key]["updated_at"] = int(time.time())
+            await self._save()
+
         logger.info(
             "[session_config] Set %s=%s for session %s", key, value, session_key
         )
@@ -161,14 +170,17 @@ class SessionConfigManager:
             清除成功返回 True，否则返回 False
         """
         session_key = self._get_session_key(session_id, is_group)
-        if session_key in self._data["sessions"]:
-            if key in self._data["sessions"][session_key]:
-                del self._data["sessions"][session_key][key]
-                await self._save()
-                logger.info(
-                    "[session_config] Cleared %s for session %s", key, session_key
-                )
-                return True
+
+        # 使用锁保护并发写入
+        async with self._lock:
+            if session_key in self._data["sessions"]:
+                if key in self._data["sessions"][session_key]:
+                    del self._data["sessions"][session_key][key]
+                    await self._save()
+                    logger.info(
+                        "[session_config] Cleared %s for session %s", key, session_key
+                    )
+                    return True
         return False
 
     async def get_session_content_mode(
@@ -224,16 +236,20 @@ class SessionConfigManager:
         cutoff = int(time.time()) - (max_age_days * 24 * 3600)
         to_remove = []
 
-        for session_key, session_data in self._data["sessions"].items():
-            updated_at = session_data.get("updated_at", 0)
-            if updated_at < cutoff:
-                to_remove.append(session_key)
+        # 使用锁保护并发读写
+        async with self._lock:
+            for session_key, session_data in self._data["sessions"].items():
+                updated_at = session_data.get("updated_at", 0)
+                if updated_at < cutoff:
+                    to_remove.append(session_key)
 
-        for session_key in to_remove:
-            del self._data["sessions"][session_key]
+            for session_key in to_remove:
+                del self._data["sessions"][session_key]
+
+            if to_remove:
+                await self._save()
 
         if to_remove:
-            await self._save()
             logger.info(
                 "[session_config] Cleaned up %d expired sessions", len(to_remove)
             )

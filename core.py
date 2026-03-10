@@ -135,7 +135,7 @@ class SetuCore:
 
     def __init__(self, plugin, config: SetuConfig, plugin_data_dir: Path):
         self.plugin = plugin
-        self.config = config
+        self._config = config
         self.plugin_data_dir = plugin_data_dir
         self._cache: UrlImageDiskCache | None = None
         self._image_service: ImageService | None = None
@@ -143,6 +143,7 @@ class SetuCore:
         self._html_renderer: HtmlCardRenderer | None = None
         self._revoke_manager = RevokeManager(plugin_data_dir)
         self._session_config = SessionConfigManager(plugin_data_dir)
+        self._revoke_tasks: set[asyncio.Task] = set()
 
         if config.enable_html_card:
             template_path = Path(__file__).parent / "templates" / "main.html"
@@ -291,6 +292,24 @@ class SetuCore:
             logger.debug("failed to inspect group id for blocked check")
         return False
 
+    def is_group_blocked(self, event: AstrMessageEvent) -> bool:
+        """公开方法：检查群聊是否被屏蔽。"""
+        return self._is_group_blocked(event)
+
+    def determine_r18(self, content_mode: str) -> bool:
+        """公开方法：根据内容模式确定是否为 R18。"""
+        return self._determine_r18(content_mode)
+
+    @property
+    def session_config(self) -> SessionConfigManager:
+        """公开属性：获取会话配置管理器。"""
+        return self._session_config
+
+    @property
+    def config(self) -> SetuConfig:
+        """公开属性：获取插件配置。"""
+        return self._config
+
     def _get_bot_api(self, event: AstrMessageEvent) -> Any | None:
         """从事件中获取底层 bot API 客户端。"""
         return getattr(event, "bot", None)
@@ -351,24 +370,29 @@ class SetuCore:
         )
 
         # 启动后台任务以在延迟后撤回
-        # 存储必要信息而不是事件引用
-        asyncio.create_task(
+        # 存储必要信息而不是事件引用，并保存任务引用以便后续管理
+        task = asyncio.create_task(
             self._delayed_revoke(
                 str(message_id), delay, platform, session_id, is_group, bot_id, bot
             )
         )
+        self._revoke_tasks.add(task)
+        task.add_done_callback(self._revoke_tasks.discard)
 
     async def _delayed_revoke(
         self,
         message_id: str,
         delay: int,
-        platform: str,
-        session_id: str,
-        is_group: bool,
+        _platform: str,
+        _session_id: str,
+        _is_group: bool,
         bot_id: int | None,
         bot: Any | None,
     ) -> None:
-        """后台任务：在 delay 秒后撤回消息。"""
+        """后台任务：在 delay 秒后撤回消息。
+
+        参数前缀为 _ 的表示在函数体内未直接使用，但保留以明确接口契约。
+        """
         await asyncio.sleep(delay)
 
         # 尝试使用存储的 bot 引用进行撤回
@@ -865,7 +889,7 @@ class SetuCore:
                             name="色图",
                             content=[Comp.Image.fromURL(image_url)],
                         )
-                        yield event.chain_result([node])
+                        yield event.chain_result([Comp.Nodes([node])])
                     else:
                         yield event.image_result(image_url)
             else:
@@ -877,7 +901,7 @@ class SetuCore:
                         name="色图",
                         content=[Comp.Image.fromURL(image_url)],
                     )
-                    yield event.chain_result([node])
+                    yield event.chain_result([Comp.Nodes([node])])
                 else:
                     yield event.image_result(image_url)
             return

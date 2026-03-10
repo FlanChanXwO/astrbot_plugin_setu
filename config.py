@@ -490,7 +490,7 @@ class SetuConfig:
 
         if not result:
             logger.debug("tag_alias parsing returned empty map, fallback to defaults")
-            return DEFAULT_TAG_ALIAS
+            return DEFAULT_TAG_ALIAS.copy()
         return result
 
     def resolve_tags(self, raw_tag: str) -> list[str]:
@@ -681,5 +681,6 @@ def parse_count(raw: str) -> int:
     try:
         result = cn_to_an(s)
         return result if result > 0 else -1
-    except Exception:
+    except Exception as e:
+        logger.debug("error parsing count: %s", e)
         return -1

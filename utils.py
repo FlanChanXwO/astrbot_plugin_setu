@@ -6,7 +6,7 @@ import base64
 import random
 
 from astrbot.api.event import MessageChain
-from astrbot.core.message.components import Image
+from astrbot.api.message_components import Image
 
 
 def obfuscate_image_bytes(data: bytes) -> bytes:

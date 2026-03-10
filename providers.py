@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import random
 from typing import Any
+from urllib.parse import quote
 
 import aiohttp
 
@@ -147,9 +148,9 @@ class LoliconProvider(SetuImageProvider):
         if self.keyword:
             params["keyword"] = self.keyword
 
-        # 构建带多个 'tag' 参数的 URL
-        tag_params = "&".join(f"tag={t}" for t in tags) if tags else ""
-        base_params = "&".join(f"{k}={v}" for k, v in params.items())
+        # 构建带多个 'tag' 参数的 URL（使用 URL 编码防止特殊字符问题）
+        tag_params = "&".join(f"tag={quote(t, safe='')}" for t in tags) if tags else ""
+        base_params = "&".join(f"{k}={quote(str(v), safe='')}" for k, v in params.items())
         url = f"{self.API_URL}?{base_params}"
         if tag_params:
             url += f"&{tag_params}"
@@ -192,8 +193,9 @@ class SexNyanRunProvider(SetuImageProvider):
             "r18": str(r18).lower(),
             "num": num,
         }
-        tag_params = "&".join(f"tag={t}" for t in tags) if tags else ""
-        base_params = "&".join(f"{k}={v}" for k, v in params.items())
+        # 构建带多个 'tag' 参数的 URL（使用 URL 编码防止特殊字符问题）
+        tag_params = "&".join(f"tag={quote(t, safe='')}" for t in tags) if tags else ""
+        base_params = "&".join(f"{k}={quote(str(v), safe='')}" for k, v in params.items())
         url = f"{self.API_URL}?{base_params}"
         if tag_params:
             url += f"&{tag_params}"
@@ -318,7 +320,8 @@ class CustomApiProvider(SetuImageProvider):
         parts = path.split(".")
         current = data
 
-        for part in parts:
+        # 使用索引遍历，避免重复字段名导致的解析错误
+        for idx, part in enumerate(parts):
             if current is None:
                 return None
 
@@ -337,7 +340,8 @@ class CustomApiProvider(SetuImageProvider):
 
                 if idx_str == "*":
                     # 遍历数组，获取下一级
-                    next_part = ".".join(parts[parts.index(part) + 1 :])
+                    # 使用 idx+1 代替 parts.index(part) 避免重复字段名问题
+                    next_part = ".".join(parts[idx + 1 :])
                     if next_part:
                         results = []
                         for item in current:
@@ -352,8 +356,8 @@ class CustomApiProvider(SetuImageProvider):
                         return current
                 else:
                     try:
-                        idx = int(idx_str)
-                        current = current[idx] if 0 <= idx < len(current) else None
+                        arr_idx = int(idx_str)
+                        current = current[arr_idx] if 0 <= arr_idx < len(current) else None
                     except (ValueError, IndexError):
                         return None
             else:

@@ -135,7 +135,7 @@ class SetuPlugin(Star):
         cfg = SetuConfig(self.config)
 
         # 检查群聊是否被屏蔽
-        if self._core and self._core._is_group_blocked(event):
+        if self._core and self._core.is_group_blocked(event):
             return
 
         # 解析数量
@@ -163,7 +163,7 @@ class SetuPlugin(Star):
         try:
             # 获取生效的内容模式（优先会话配置）
             effective_content_mode = await self._core.get_effective_content_mode(event)
-            is_r18 = self._core._determine_r18(effective_content_mode)
+            is_r18 = self._core.determine_r18(effective_content_mode)
             downloaded = await self._core.fetch_and_download_images(num, tags, is_r18)
             async for result in self._core.send_images(event, downloaded, is_r18, tags):
                 yield result
@@ -190,7 +190,7 @@ class SetuPlugin(Star):
         cfg = SetuConfig(self.config)
 
         # 检查群聊是否被屏蔽
-        if self._core and self._core._is_group_blocked(event):
+        if self._core and self._core.is_group_blocked(event):
             return
 
         max_count = cfg.max_count
@@ -199,9 +199,9 @@ class SetuPlugin(Star):
         num_str = count
         num = parse_count(num_str)
 
-        # 如果第一个参数不是有效数字，则将其视为标签的一部分
+        # 如果解析失败(num == -1)或参数不是数字，则将其视为标签的一部分
         extra_tag = ""
-        if num < 1:
+        if num == -1:
             num = 1
             extra_tag = count
 
@@ -223,7 +223,7 @@ class SetuPlugin(Star):
         try:
             # 获取生效的内容模式（优先会话配置）
             effective_content_mode = await self._core.get_effective_content_mode(event)
-            is_r18 = self._core._determine_r18(effective_content_mode)
+            is_r18 = self._core.determine_r18(effective_content_mode)
             downloaded = await self._core.fetch_and_download_images(
                 num, parsed_tags, is_r18
             )
@@ -283,7 +283,7 @@ class SetuPlugin(Star):
             # 显示当前会话的配置状态
             session_id = event.get_session_id()
             is_group = bool(event.get_group_id())
-            current_mode = await self._core._session_config.get_session_content_mode(
+            current_mode = await self._core.session_config.get_session_content_mode(
                 session_id, is_group
             )
             global_mode = self._core.config.content_mode
@@ -318,7 +318,7 @@ class SetuPlugin(Star):
         is_group = bool(event.get_group_id())
 
         if mode == "clear":
-            success = await self._core._session_config.clear_session_content_mode(
+            success = await self._core.session_config.clear_session_content_mode(
                 session_id, is_group
             )
             if success:
@@ -328,7 +328,7 @@ class SetuPlugin(Star):
             else:
                 yield event.plain_result("ℹ️ 当前会话没有设置覆盖，已在使用全局配置。")
         else:
-            success = await self._core._session_config.set_session_content_mode(
+            success = await self._core.session_config.set_session_content_mode(
                 session_id, is_group, mode
             )
             if success:

@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import ipaddress
 import json
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import aiohttp
 
@@ -25,6 +27,10 @@ DEFAULT_HEADERS = {
     ),
     "Referer": "https://www.pixiv.net/",
 }
+
+# 安全限制常量
+MAX_CONCURRENT_DOWNLOADS = 10  # 最大并发下载数
+MAX_DOWNLOAD_SIZE_BYTES = 50 * 1024 * 1024  # 最大下载大小：50MB
 
 
 class UrlImageDiskCache:
@@ -222,12 +228,63 @@ class ImageService:
 
     def __init__(self, cache: UrlImageDiskCache | None = None):
         self._cache = cache
+        # 信号量控制并发下载数，防止资源耗尽
+        self._download_semaphore = asyncio.Semaphore(MAX_CONCURRENT_DOWNLOADS)
+
+    def _is_safe_url(self, url: str) -> bool:
+        """检查 URL 是否安全，防止 SSRF 攻击。
+
+        禁止访问内网地址和敏感协议。
+        """
+        if not url:
+            return False
+        try:
+            parsed = urlparse(url)
+            # 只允许 http/https 协议
+            if parsed.scheme not in ("http", "https"):
+                logger.warning("[ssrf] blocked non-http(s) url: %s", url)
+                return False
+
+            hostname = parsed.hostname or ""
+            # 禁止 localhost
+            if hostname in ("localhost", "127.0.0.1", "0.0.0.0", "::1"):
+                logger.warning("[ssrf] blocked localhost url: %s", url)
+                return False
+
+            # 禁止内网 IP 地址
+            try:
+                ip = ipaddress.ip_address(hostname)
+                if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_multicast:
+                    logger.warning("[ssrf] blocked private ip url: %s", url)
+                    return False
+            except ValueError:
+                # 不是 IP 地址，是域名，继续检查
+                pass
+
+            # 禁止常见内网域名模式
+            if hostname.startswith(("10.", "172.16.", "172.17.", "172.18.",
+                                    "172.19.", "172.20.", "172.21.", "172.22.",
+                                    "172.23.", "172.24.", "172.25.", "172.26.",
+                                    "172.27.", "172.28.", "172.29.", "172.30.",
+                                    "172.31.", "192.168.")):
+                logger.warning("[ssrf] blocked internal network url: %s", url)
+                return False
+
+            return True
+        except Exception as exc:
+            logger.warning("[ssrf] url parse error: %s - %s", url, exc)
+            return False
 
     async def download_single(
         self, session: aiohttp.ClientSession, url: str
     ) -> bytes | None:
-        """下载单张图片，支持缓存。"""
+        """下载单张图片，支持缓存、并发控制和大小限制。"""
         if not url:
+            return None
+
+        # SSRF 防护：检查 URL 安全性
+        if not self._is_safe_url(url):
+            logger.warning("[ssrf] rejected unsafe url: %s", url)
             return None
 
         if self._cache:
@@ -238,20 +295,50 @@ class ImageService:
             except Exception as exc:
                 logger.exception("[setu.cache] read failed url=%s : %s", url, exc)
 
-        try:
-            async with session.get(url, headers=DEFAULT_HEADERS) as resp:
-                if resp.status == 404:
-                    logger.warning("image 404: %s", url)
-                    return None
-                if not resp.ok:
-                    logger.warning("image download failed (%d): %s", resp.status, url)
-                    return None
-                data = await resp.read()
-                if not data:
-                    return None
-        except Exception as exc:
-            logger.warning("image download error url=%s err=%s", url, exc)
-            return None
+        # 使用信号量控制并发下载
+        async with self._download_semaphore:
+            try:
+                async with session.get(url, headers=DEFAULT_HEADERS) as resp:
+                    if resp.status == 404:
+                        logger.warning("image 404: %s", url)
+                        return None
+                    if not resp.ok:
+                        logger.warning("image download failed (%d): %s", resp.status, url)
+                        return None
+
+                    # 检查 Content-Length 如果存在
+                    content_length = resp.headers.get("Content-Length")
+                    if content_length:
+                        try:
+                            total_size = int(content_length)
+                            if total_size > MAX_DOWNLOAD_SIZE_BYTES:
+                                logger.warning(
+                                    "image too large (Content-Length: %d > %d): %s",
+                                    total_size, MAX_DOWNLOAD_SIZE_BYTES, url
+                                )
+                                return None
+                        except (ValueError, TypeError):
+                            pass
+
+                    # 流式读取，防止内存 DoS
+                    chunks: list[bytes] = []
+                    total_read = 0
+                    async for chunk in resp.content.iter_chunked(8192):
+                        total_read += len(chunk)
+                        if total_read > MAX_DOWNLOAD_SIZE_BYTES:
+                            logger.warning(
+                                "image download exceeds size limit (%d > %d): %s",
+                                total_read, MAX_DOWNLOAD_SIZE_BYTES, url
+                            )
+                            return None
+                        chunks.append(chunk)
+
+                    data = b"".join(chunks) if chunks else b""
+                    if not data:
+                        return None
+            except Exception as exc:
+                logger.warning("image download error url=%s err=%s", url, exc)
+                return None
 
         if self._cache:
             try:
