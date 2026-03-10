@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import ipaddress
 import random
+import socket
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import aiohttp
 
@@ -87,11 +89,39 @@ class MultiApiProvider(SetuImageProvider):
                         return urls
                 except Exception as e:
                     logger.warning("API %d 失败: %s，尝试下一个", idx, e)
+                    continue
+            return []
+        elif self.strategy == "random":
+            # 随机模式：逐个随机选择，失败时继续尝试其他
+            tried_indices = set()
+            while len(tried_indices) < len(self.providers):
+                idx = random.randrange(len(self.providers))
+                if idx in tried_indices:
+                    continue
+                tried_indices.add(idx)
+                provider = self.providers[idx]
+                try:
+                    urls = await provider.fetch_image_urls(num, tags, r18, exclude_ai)
+                    if urls:
+                        return urls
+                except Exception as e:
+                    logger.warning("API %d 失败: %s，尝试下一个", idx, e)
+                    continue
             return []
         else:
-            # 轮询或随机：只尝试一次
-            provider = self._get_next_provider()
-            return await provider.fetch_image_urls(num, tags, r18, exclude_ai)
+            # 轮询模式：逐个尝试，失败时继续尝试其他
+            for i in range(len(self.providers)):
+                idx = (self._current_index + i) % len(self.providers)
+                provider = self.providers[idx]
+                try:
+                    urls = await provider.fetch_image_urls(num, tags, r18, exclude_ai)
+                    self._current_index = (idx + 1) % len(self.providers)
+                    if urls:
+                        return urls
+                except Exception as e:
+                    logger.warning("API %d 失败: %s，尝试下一个", idx, e)
+                    continue
+            return []
 
 
 class LoliconProvider(SetuImageProvider):
@@ -235,12 +265,69 @@ class CustomApiProvider(SetuImageProvider):
         self.api_config = api_config or {}
         self.parser_config = parser_config or {}
 
+    def _is_safe_url(self, url: str) -> bool:
+        """检查 URL 是否安全，防止 SSRF 攻击。"""
+        if not url:
+            return False
+        try:
+            parsed = urlparse(url)
+            if parsed.scheme not in ("http", "https"):
+                return False
+
+            hostname = parsed.hostname or ""
+            # 禁止 localhost
+            if hostname in ("localhost", "127.0.0.1", "0.0.0.0", "::1"):
+                return False
+
+            # 禁止内网 IP 地址
+            try:
+                ip = ipaddress.ip_address(hostname)
+                if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_multicast:
+                    return False
+            except ValueError:
+                pass
+
+            # 禁止常见内网域名模式
+            if hostname.startswith(("10.", "172.16.", "172.17.", "172.18.",
+                                    "172.19.", "172.20.", "172.21.", "172.22.",
+                                    "172.23.", "172.24.", "172.25.", "172.26.",
+                                    "172.27.", "172.28.", "172.29.", "172.30.",
+                                    "172.31.", "192.168.")):
+                return False
+
+            # DNS 解析后私网校验
+            try:
+                resolved_ips = socket.getaddrinfo(hostname, None, socket.AF_INET)
+                for _, _, _, _, sockaddr in resolved_ips:
+                    ip_str = sockaddr[0]
+                    try:
+                        ip = ipaddress.ip_address(ip_str)
+                        if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_multicast:
+                            logger.warning("[ssrf] blocked resolved private ip %s for hostname %s", ip_str, hostname)
+                            return False
+                    except ValueError:
+                        continue
+            except (socket.gaierror, socket.herror):
+                pass
+            except Exception as exc:
+                logger.debug("[ssrf] dns resolution check error: %s", exc)
+
+            return True
+        except Exception as exc:
+            logger.warning("[ssrf] url parse error: %s", exc)
+            return False
+
     def _build_url(
         self, num: int, tags: list[str], r18: bool, exclude_ai: bool
     ) -> tuple[str, dict[str, Any] | None]:
         """构建请求 URL 和请求体。"""
         url_template = self.api_config.get("url", "")
         method = self.api_config.get("method", "GET").upper()
+
+        # SSRF 防护：检查 URL 安全性
+        if not self._is_safe_url(url_template):
+            logger.warning("[ssrf] custom api url blocked: %s", url_template)
+            return "", None
 
         # 替换 URL 中的占位符
         tags_str = ",".join(tags) if tags else ""

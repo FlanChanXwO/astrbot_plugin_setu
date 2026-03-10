@@ -176,6 +176,8 @@ class SetuCore:
             logger.info(
                 "[revoke] RevokeManager initialized, cleaned %d old entries", cleaned
             )
+            # 恢复调度：检查是否有未处理的 pending entries，立即执行
+            await self._restore_pending_revokes()
         except (OSError, json.JSONDecodeError, RuntimeError):
             logger.exception("[revoke] Failed to initialize RevokeManager")
 
@@ -204,6 +206,49 @@ class SetuCore:
             )
             self._cache = None
             self._image_service = ImageService(None)
+
+    async def _restore_pending_revokes(self) -> None:
+        """恢复未处理的撤回任务（插件重启后）。"""
+        try:
+            pending = self._revoke_manager.get_pending_entries()
+            if not pending:
+                return
+            logger.info("[revoke] Restoring %d pending revoke tasks", len(pending))
+            now = int(time.time())
+            for entry in pending:
+                message_id = entry.get("message_id")
+                revoke_time = entry.get("revoke_time", 0)
+                if revoke_time <= now:
+                    # 已过期，立即标记为已撤回（无法执行）
+                    await self._revoke_manager.mark_revoked(message_id)
+                    logger.debug("[revoke] Expired entry marked as revoked: %s", message_id)
+                else:
+                    # 重新调度
+                    delay = revoke_time - now
+                    # 无法恢复 bot 引用，所以使用 None
+                    task = asyncio.create_task(
+                        self._delayed_revoke(
+                            message_id, delay,
+                            entry.get("platform", ""),
+                            entry.get("session_id", ""),
+                            entry.get("is_group", False),
+                            None, None
+                        )
+                    )
+                    self._revoke_tasks.add(task)
+                    task.add_done_callback(self._revoke_tasks.discard)
+                    logger.debug("[revoke] Restored revoke task for message %s in %ds", message_id, delay)
+        except Exception as exc:
+            logger.exception("[revoke] Failed to restore pending revokes: %s", exc)
+
+    def terminate(self) -> None:
+        """终止插件，取消所有后台任务。"""
+        # 取消所有未完成的撤回任务
+        for task in list(self._revoke_tasks):
+            if not task.done():
+                task.cancel()
+        self._revoke_tasks.clear()
+        logger.info("[revoke] All revoke tasks cancelled")
 
     def _get_provider(self):
         cfg = self.config
@@ -421,7 +466,9 @@ class SetuCore:
             await self._revoke_manager.mark_revoked(message_id)
             logger.info("[revoke] Successfully revoked message %s", message_id)
         else:
-            logger.warning("[revoke] Failed to revoke message %s", message_id)
+            # 即使撤回失败，也标记为已处理，避免记录长期累积
+            await self._revoke_manager.mark_revoked(message_id)
+            logger.warning("[revoke] Failed to revoke message %s, marked as revoked", message_id)
 
     async def _send_with_revoke_support(
         self,

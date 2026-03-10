@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import ipaddress
 import json
+import socket
 import time
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,7 @@ from astrbot.api.event import AstrMessageEvent
 from astrbot.api.message_components import Image, Node, Nodes, Plain
 
 from .constants import HTTP_TIMEOUT_SECONDS
+from .utils import obfuscate_image_bytes
 
 # Image download headers.
 DEFAULT_HEADERS = {
@@ -234,7 +236,7 @@ class ImageService:
     def _is_safe_url(self, url: str) -> bool:
         """检查 URL 是否安全，防止 SSRF 攻击。
 
-        禁止访问内网地址和敏感协议。
+        禁止访问内网地址和敏感协议。包含 DNS 解析后私网校验。
         """
         if not url:
             return False
@@ -251,7 +253,7 @@ class ImageService:
                 logger.warning("[ssrf] blocked localhost url: %s", url)
                 return False
 
-            # 禁止内网 IP 地址
+            # 禁止内网 IP 地址（字面量）
             try:
                 ip = ipaddress.ip_address(hostname)
                 if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_multicast:
@@ -269,6 +271,25 @@ class ImageService:
                                     "172.31.", "192.168.")):
                 logger.warning("[ssrf] blocked internal network url: %s", url)
                 return False
+
+            # DNS 解析后私网校验：对域名进行 DNS 解析，检查解析后的 IP 是否是内网地址
+            try:
+                # 只解析 IPv4 地址
+                resolved_ips = socket.getaddrinfo(hostname, None, socket.AF_INET)
+                for _, _, _, _, sockaddr in resolved_ips:
+                    ip_str = sockaddr[0]
+                    try:
+                        ip = ipaddress.ip_address(ip_str)
+                        if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_multicast:
+                            logger.warning("[ssrf] blocked resolved private ip %s for hostname %s", ip_str, hostname)
+                            return False
+                    except ValueError:
+                        continue
+            except (socket.gaierror, socket.herror):
+                # DNS 解析失败，不阻止，让后续请求处理
+                pass
+            except Exception as exc:
+                logger.debug("[ssrf] dns resolution check error: %s", exc)
 
             return True
         except Exception as exc:
@@ -417,8 +438,5 @@ class ImageService:
         yield event.chain_result([Nodes(nodes)])
 
     def _obfuscate_image_bytes(self, data: bytes) -> bytes:
-        # 对图片字节流添加噪声以混淆
-        import random
-
-        noise = bytes(random.randint(0, 255) for _ in range(8))
-        return data + noise
+        # 复用 utils.py 中的实现，避免重复
+        return obfuscate_image_bytes(data)

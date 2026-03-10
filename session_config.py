@@ -55,11 +55,10 @@ class SessionConfigManager:
         logger.info("[session_config] SessionConfigManager initialized")
 
     async def _load(self) -> None:
-        """从文件加载配置（内部使用锁保护）。"""
+        """从文件加载配置（调用方应确保锁保护）。"""
         if not self.config_file.exists():
             self._data = {"sessions": {}, "meta": {"created_at": int(time.time())}}
-            async with self._lock:
-                await self._save()
+            await self._save()
             return
 
         try:
@@ -75,8 +74,7 @@ class SessionConfigManager:
                 "[session_config] Failed to load session config, creating new"
             )
             self._data = {"sessions": {}, "meta": {"created_at": int(time.time())}}
-            async with self._lock:
-                await self._save()
+            await self._save()
 
     async def _save(self) -> None:
         """保存配置到文件（应在锁保护下调用）。"""
@@ -155,8 +153,10 @@ class SessionConfigManager:
             配置值，如果不存在则返回默认值
         """
         session_key = self._get_session_key(session_id, is_group)
-        session_data = self._data["sessions"].get(session_key, {})
-        return session_data.get(key, default)
+        # 使用锁保护读操作，防止并发可见性问题
+        async with self._lock:
+            session_data = self._data["sessions"].get(session_key, {})
+            return session_data.get(key, default)
 
     async def clear_config(self, session_id: str, is_group: bool, key: str) -> bool:
         """清除会话配置项。

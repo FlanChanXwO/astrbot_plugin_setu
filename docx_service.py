@@ -13,7 +13,7 @@ class DocxService:
     """Docx 文件生成服务。"""
 
     def __init__(self):
-        self._check_dependency()
+        self._has_dependency = self._check_dependency()
 
     def _check_dependency(self) -> bool:
         """检查 python-docx 是否已安装。"""
@@ -41,6 +41,11 @@ class DocxService:
         返回:
             生成的 Docx 文件路径，失败返回 None
         """
+        # 提前检查依赖，避免重复 try-import
+        if not self._has_dependency:
+            logger.error("python-docx 未安装，无法生成 Docx 文件")
+            return None
+
         try:
             from docx import Document
             from docx.enum.text import WD_ALIGN_PARAGRAPH
