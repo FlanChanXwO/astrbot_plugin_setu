@@ -1,0 +1,167 @@
+{
+  "api_type": {
+    "type": "string",
+    "description": "API 提供商类型",
+    "hint": "选择图片数据源。all 会从内置 API 中轮流获取",
+    "default": "lolicon",
+    "options": ["lolicon", "sexnyan", "custom", "all"]
+  },
+  "multi_api_strategy": {
+    "type": "string",
+    "description": "多 API 策略",
+    "hint": "仅在 api_type 为 all 或 custom 时生效。round_robin: 轮流使用；random: 随机选择；failover: 故障转移",
+    "default": "round_robin",
+    "options": ["round_robin", "random", "failover"]
+  },
+  "content_mode": {
+    "type": "string",
+    "description": "内容模式",
+    "hint": "选择返回图片的内容类型",
+    "default": "sfw",
+    "options": ["sfw", "r18", "mix"]
+  },
+  "r18_docx_mode": {
+    "type": "bool",
+    "description": "R18 Docx 封装",
+    "hint": "R18 图片是否使用 Docx 文件封装发送（需要安装 python-docx）。开启后可规避部分平台审核",
+    "default": true
+  },
+  "send_mode": {
+    "type": "string",
+    "description": "发送模式",
+    "hint": "选择图片的发送方式。auto 模式下，图片数量大于1时自动使用合并转发",
+    "default": "image",
+    "options": ["image", "forward", "auto"]
+  },
+  "max_count": {
+    "type": "int",
+    "description": "每次请求的最大图片数量",
+    "hint": "限制单次请求的最大图片数，防止滥用",
+    "default": 10
+  },
+  "exclude_ai": {
+    "type": "bool",
+    "description": "排除 AI 生成作品",
+    "hint": "是否过滤掉 AI 生成的图片（仅 Lolicon API 有效）",
+    "default": true
+  },
+  "image_size": {
+    "type": "string",
+    "description": "图片规格",
+    "hint": "返回图片的规格地址（仅 Lolicon API 有效）。original: 原图，regular: 中等尺寸，small: 小图，thumb: 缩略图，mini: 最小图",
+    "default": "original",
+    "options": ["original", "regular", "small", "thumb", "mini"]
+  },
+  "proxy": {
+    "type": "string",
+    "description": "图片反代服务",
+    "hint": "图片地址使用的在线反代服务（仅 Lolicon API 有效）。默认使用 i.pixiv.re，可设置假值获取原始 i.pximg.net 地址",
+    "default": "i.pixiv.re"
+  },
+  "aspect_ratio": {
+    "type": "string",
+    "description": "图片长宽比",
+    "hint": "筛选指定长宽比的图片（仅 Lolicon API 有效）",
+    "default": "",
+    "options": ["", "horizontal", "vertical", "square"]
+  },
+  "uid": {
+    "type": "list",
+    "description": "指定作者 UID",
+    "hint": "返回指定 UID 作者的作品，每行一个 UID（仅 Lolicon API 有效）",
+    "default": [],
+    "obvious_hint": true
+  },
+  "keyword": {
+    "type": "string",
+    "description": "关键词搜索",
+    "hint": "从标题、作者、标签中按关键字模糊匹配（仅 Lolicon API 有效）。性能和准度较差，建议使用标签代替",
+    "default": ""
+  },
+  "max_replenish_rounds": {
+    "type": "int",
+    "description": "最大补充轮数",
+    "hint": "图片下载失败时的最大重试次数",
+    "default": 3
+  },
+  "enable_html_card": {
+    "type": "bool",
+    "description": "启用 HTML 卡片包装",
+    "hint": "开启后图片会被包装成带随机旋转、底色和边框的卡片样式，可规避部分平台审核",
+    "default": false
+  },
+  "html_card_mode": {
+    "type": "string",
+    "description": "HTML 卡片模式",
+    "hint": "single: 多图合并为一张卡片（节省空间）；multiple: 每张图单独卡片，可配合合并转发使用",
+    "default": "single",
+    "options": ["single", "multiple"]
+  },
+  "custom_api_configs": {
+    "type": "template_list",
+    "description": "自定义 API 配置列表",
+    "hint": "配置多个自定义 API，每个 API 可以有不同的地址、方法和解析方式",
+    "default": [],
+    "obvious_hint": true,
+    "templates": {
+      "api_template": {
+        "name": "自定义 API",
+        "hint": "配置一个自定义图片 API",
+        "items": {
+          "name": {
+            "type": "string",
+            "description": "API 名称",
+            "hint": "给这个 API 起个名字，方便识别",
+            "default": "我的自定义API"
+          },
+          "url": {
+            "type": "string",
+            "description": "API 地址",
+            "hint": "可使用 {num}、{r18}、{tags} 占位符",
+            "default": "https://api.example.com/images?num={num}&tag={tags}"
+          },
+          "method": {
+            "type": "string",
+            "description": "请求方法",
+            "hint": "API 请求方式",
+            "default": "GET",
+            "options": ["GET", "POST"]
+          },
+          "timeout": {
+            "type": "int",
+            "description": "超时时间（秒）",
+            "hint": "请求超时时间",
+            "default": 30
+          },
+          "parser_type": {
+            "type": "string",
+            "description": "响应解析类型",
+            "hint": "auto 自动提取所有链接，json 使用路径表达式解析",
+            "default": "auto",
+            "options": ["auto", "json"]
+          },
+          "json_path": {
+            "type": "string",
+            "description": "JSON 路径表达式",
+            "hint": "当解析类型为 json 时使用，例如：$.data[*].url",
+            "default": ""
+          }
+        }
+      }
+    }
+  },
+  "blocked_groups": {
+    "type": "list",
+    "description": "屏蔽群聊列表",
+    "hint": "在这些群聊中禁用插件功能。请输入群号，每行一个",
+    "default": [],
+    "obvious_hint": true
+  },
+  "tag_alias": {
+    "type": "text",
+    "description": "标签别名映射",
+    "hint": "配置标签别名，每行一个，格式：标准标签=别名1,别名2,别名3。例如：白丝=白丝,白絲,white stockings",
+    "default": "",
+    "obvious_hint": true
+  }
+}
