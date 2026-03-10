@@ -1,4 +1,4 @@
-"""Setu plugin core logic."""
+"""Setu 插件核心逻辑。"""
 
 from __future__ import annotations
 
@@ -19,10 +19,11 @@ from .docx_service import DocxService
 from .html_renderer import HtmlCardRenderer
 from .image_service import ImageService, UrlImageDiskCache
 from .providers import get_provider
+from .session_config import SessionConfigManager
 
 
 class RevokeManager:
-    """Manages revoke.json for tracking revoked R18 messages."""
+    """管理 revoke.json，用于追踪被撤回的 R18 消息。"""
 
     def __init__(self, data_dir: Path):
         self.data_dir = data_dir
@@ -31,12 +32,12 @@ class RevokeManager:
         self._data: dict[str, Any] = {"entries": {}, "meta": {}}
 
     async def initialize(self) -> None:
-        """Initialize the revoke.json file."""
+        """初始化 revoke.json 文件。"""
         self.data_dir.mkdir(parents=True, exist_ok=True)
         await self._load()
 
     async def _load(self) -> None:
-        """Load revoke data from file."""
+        """从文件加载撤回数据。"""
         if not self.revoke_file.exists():
             self._data = {"entries": {}, "meta": {"created_at": int(time.time())}}
             await self._save()
@@ -49,13 +50,13 @@ class RevokeManager:
                     "entries": loaded.get("entries", {}),
                     "meta": loaded.get("meta", {}),
                 }
-        except Exception:
+        except (OSError, json.JSONDecodeError):
             logger.exception("[revoke] Failed to load revoke.json, creating new")
             self._data = {"entries": {}, "meta": {"created_at": int(time.time())}}
             await self._save()
 
     async def _save(self) -> None:
-        """Save revoke data to file."""
+        """将撤回数据保存到文件。"""
         try:
             tmp_path = self.revoke_file.with_suffix(".tmp")
             tmp_path.write_text(
@@ -63,7 +64,7 @@ class RevokeManager:
                 encoding="utf-8",
             )
             tmp_path.replace(self.revoke_file)
-        except Exception:
+        except OSError:
             logger.exception("[revoke] Failed to save revoke.json")
 
     async def add_entry(
@@ -74,7 +75,7 @@ class RevokeManager:
         is_group: bool,
         revoke_time: int,
     ) -> None:
-        """Add a new entry to be revoked."""
+        """添加一个需要撤回的新条目。"""
         async with self._lock:
             self._data["entries"][message_id] = {
                 "message_id": message_id,
@@ -86,10 +87,14 @@ class RevokeManager:
                 "revoked": False,
             }
             await self._save()
-            logger.debug("[revoke] Added entry message_id=%s revoke_time=%d", message_id, revoke_time)
+            logger.debug(
+                "[revoke] Added entry message_id=%s revoke_time=%d",
+                message_id,
+                revoke_time,
+            )
 
     async def mark_revoked(self, message_id: str) -> None:
-        """Mark an entry as revoked."""
+        """将条目标记为已撤回。"""
         async with self._lock:
             if message_id in self._data["entries"]:
                 self._data["entries"][message_id]["revoked"] = True
@@ -98,7 +103,7 @@ class RevokeManager:
                 logger.debug("[revoke] Marked as revoked message_id=%s", message_id)
 
     def get_pending_entries(self) -> list[dict[str, Any]]:
-        """Get all pending entries that need to be revoked."""
+        """获取所有需要撤回的待处理条目。"""
         now = int(time.time())
         pending = []
         for entry in self._data["entries"].values():
@@ -106,9 +111,9 @@ class RevokeManager:
                 pending.append(entry)
         return pending
 
-    async def cleanup_old_entries(self, max_age_days: int = 7) -> int:
-        """Remove old entries older than max_age_days."""
-        cutoff = int(time.time()) - (max_age_days * 86400)
+    async def cleanup_revoked_entries(self, max_age_hours: int = 24) -> int:
+        """移除超过 max_age_hours 的已撤回条目，防止文件膨胀。"""
+        cutoff = int(time.time()) - (max_age_hours * 3600)
         async with self._lock:
             to_remove = [
                 msg_id
@@ -119,11 +124,14 @@ class RevokeManager:
                 del self._data["entries"][msg_id]
             if to_remove:
                 await self._save()
+                logger.info(
+                    "[revoke] Cleaned up %d old revoked entries", len(to_remove)
+                )
             return len(to_remove)
 
 
 class SetuCore:
-    """Business logic handler for Setu plugin."""
+    """Setu 插件的业务逻辑处理器。"""
 
     def __init__(self, plugin, config: SetuConfig, plugin_data_dir: Path):
         self.plugin = plugin
@@ -134,18 +142,40 @@ class SetuCore:
         self._docx_service = DocxService()
         self._html_renderer: HtmlCardRenderer | None = None
         self._revoke_manager = RevokeManager(plugin_data_dir)
+        self._session_config = SessionConfigManager(plugin_data_dir)
 
         if config.enable_html_card:
             template_path = Path(__file__).parent / "templates" / "main.html"
             self._html_renderer = HtmlCardRenderer(template_path)
 
     async def initialize(self) -> None:
-        """Initialize cache and dependent services."""
-        # Initialize revoke manager
+        """初始化缓存和依赖服务。"""
+        # 初始化会话配置管理器
+        try:
+            await self._session_config.initialize()
+            cleaned = await self._session_config.cleanup_expired_sessions(
+                max_age_days=30
+            )
+            logger.info(
+                "[session_config] SessionConfigManager initialized, cleaned %d sessions",
+                cleaned,
+            )
+        except (OSError, json.JSONDecodeError, RuntimeError):
+            logger.exception(
+                "[session_config] Failed to initialize SessionConfigManager"
+            )
+
+        # 初始化撤回管理器并清理旧条目
         try:
             await self._revoke_manager.initialize()
-            logger.info("[revoke] RevokeManager initialized")
-        except Exception:
+            # 清理 24 小时之前撤回的条目
+            cleaned = await self._revoke_manager.cleanup_revoked_entries(
+                max_age_hours=24
+            )
+            logger.info(
+                "[revoke] RevokeManager initialized, cleaned %d old entries", cleaned
+            )
+        except (OSError, json.JSONDecodeError, RuntimeError):
             logger.exception("[revoke] Failed to initialize RevokeManager")
 
         try:
@@ -167,7 +197,7 @@ class SetuCore:
                     self.config.cache_max_items,
                 )
             self._image_service = ImageService(self._cache)
-        except Exception:
+        except (OSError, RuntimeError, ValueError):
             logger.exception(
                 "SetuCore initialize failed, fallback to no-cache ImageService"
             )
@@ -197,7 +227,37 @@ class SetuCore:
             lolicon_config=lolicon_config,
         )
 
+    async def get_effective_content_mode(self, event: AstrMessageEvent) -> str:
+        """获取生效的内容模式。
+
+        优先检查会话级别的配置，如果没有设置则使用全局配置。
+
+        Args:
+            event: 消息事件对象
+
+        Returns:
+            内容模式: sfw/r18/mix
+        """
+        session_id = event.get_session_id()
+        is_group = bool(event.get_group_id())
+
+        # 优先检查会话配置
+        session_mode = await self._session_config.get_session_content_mode(
+            session_id, is_group
+        )
+        if session_mode:
+            logger.debug(
+                "[session_config] Using session content_mode=%s for %s",
+                session_mode,
+                session_id,
+            )
+            return session_mode
+
+        # 回退到全局配置
+        return self.config.content_mode
+
     def _determine_r18(self, content_mode: str) -> bool:
+        """根据内容模式确定是否为 R18。"""
         if content_mode == "r18":
             return True
         if content_mode == "mix":
@@ -218,7 +278,7 @@ class SetuCore:
             template_path = Path(__file__).parent / "templates" / "main.html"
             self._html_renderer = HtmlCardRenderer(template_path)
             return True
-        except Exception:
+        except (OSError, ValueError):
             logger.exception("html renderer initialize failed")
             return False
 
@@ -227,28 +287,32 @@ class SetuCore:
             group_id = event.message_obj.group_id
             if group_id and self.config.is_group_blocked(str(group_id)):
                 return True
-        except Exception:
+        except AttributeError:
             logger.debug("failed to inspect group id for blocked check")
         return False
 
     def _get_bot_api(self, event: AstrMessageEvent) -> Any | None:
-        """Get the underlying bot API client from event."""
+        """从事件中获取底层 bot API 客户端。"""
         return getattr(event, "bot", None)
 
     async def _revoke_message(
         self, event: AstrMessageEvent, message_id: str | int
     ) -> bool:
-        """Revoke a message by its ID."""
+        """通过消息 ID 撤回消息。"""
         try:
             bot = self._get_bot_api(event)
             if not bot:
                 logger.warning("[revoke] No bot instance available")
                 return False
 
-            # Try different parameter formats for different platforms
+            # 尝试不同的参数格式以适应不同平台
             params_list = [
                 {"message_id": message_id},
-                {"message_id": int(message_id) if str(message_id).isdigit() else message_id},
+                {
+                    "message_id": int(message_id)
+                    if str(message_id).isdigit()
+                    else message_id
+                },
             ]
 
             for params in params_list:
@@ -256,20 +320,20 @@ class SetuCore:
                     await bot.call_action("delete_msg", **params)
                     logger.info("[revoke] Successfully revoked message %s", message_id)
                     return True
-                except Exception as exc:
+                except (RuntimeError, ConnectionError, TimeoutError) as exc:
                     logger.debug("[revoke] Failed with params %s: %s", params, exc)
                     continue
 
             logger.warning("[revoke] All attempts failed for message %s", message_id)
             return False
-        except Exception:
+        except (RuntimeError, ConnectionError):
             logger.exception("[revoke] Error revoking message %s", message_id)
             return False
 
     async def _schedule_revoke(
         self, event: AstrMessageEvent, message_id: str | int, delay: int
     ) -> None:
-        """Schedule a message to be revoked after delay seconds."""
+        """调度消息在 delay 秒后撤回。"""
         if not message_id:
             return
 
@@ -278,7 +342,7 @@ class SetuCore:
         is_group = bool(event.get_group_id())
         revoke_time = int(time.time()) + delay
 
-        # Get bot reference for later use
+        # 获取 bot 引用以备后用
         bot = self._get_bot_api(event)
         bot_id = id(bot) if bot else None
 
@@ -286,8 +350,8 @@ class SetuCore:
             str(message_id), platform, session_id, is_group, revoke_time
         )
 
-        # Start a background task to revoke after delay
-        # Store necessary info instead of event reference
+        # 启动后台任务以在延迟后撤回
+        # 存储必要信息而不是事件引用
         asyncio.create_task(
             self._delayed_revoke(
                 str(message_id), delay, platform, session_id, is_group, bot_id, bot
@@ -304,25 +368,29 @@ class SetuCore:
         bot_id: int | None,
         bot: Any | None,
     ) -> None:
-        """Background task to revoke message after delay."""
+        """后台任务：在 delay 秒后撤回消息。"""
         await asyncio.sleep(delay)
 
-        # Try to revoke using stored bot reference
+        # 尝试使用存储的 bot 引用进行撤回
         success = False
         if bot and bot_id:
             try:
                 params_list = [
                     {"message_id": message_id},
-                    {"message_id": int(message_id) if str(message_id).isdigit() else message_id},
+                    {
+                        "message_id": int(message_id)
+                        if str(message_id).isdigit()
+                        else message_id
+                    },
                 ]
                 for params in params_list:
                     try:
                         await bot.call_action("delete_msg", **params)
                         success = True
                         break
-                    except Exception:
+                    except (RuntimeError, ConnectionError, TimeoutError):
                         continue
-            except Exception as exc:
+            except (RuntimeError, ConnectionError, TimeoutError) as exc:
                 logger.warning("[revoke] Background revoke failed: %s", exc)
 
         if success:
@@ -338,23 +406,23 @@ class SetuCore:
         is_group: bool,
         session_id: str,
     ) -> str | None:
-        """Send message and return message_id for revoke support.
+        """发送消息并返回 message_id 以支持撤回。
 
-        Returns the message_id if successful, None otherwise.
+        成功返回 message_id，否则返回 None。
         """
         try:
             bot = self._get_bot_api(event)
             if not bot:
                 return None
 
-            # Parse chain to OneBot format if possible
+            # 将链条解析为 OneBot 格式（如果可能）
             messages = []
             for comp in chain:
                 if isinstance(comp, Comp.Plain):
                     if comp.text.strip():
                         messages.append({"type": "text", "data": {"text": comp.text}})
                 elif isinstance(comp, Comp.Image):
-                    # Handle image - convert to base64 if needed
+                    # 处理图片 - 如果需要，转换为 base64
                     if comp.file and comp.file.startswith("base64://"):
                         messages.append({"type": "image", "data": {"file": comp.file}})
                     elif comp.file:
@@ -368,7 +436,7 @@ class SetuCore:
             if not messages:
                 return None
 
-            # Call send API based on message type
+            # 根据消息类型调用发送 API
             if is_group:
                 result = await bot.call_action(
                     "send_group_msg",
@@ -382,7 +450,7 @@ class SetuCore:
                     message=messages,
                 )
 
-            # Extract message_id from result
+            # 从结果中提取 message_id
             if isinstance(result, dict):
                 data = result.get("data", result)
                 message_id = data.get("message_id") if isinstance(data, dict) else None
@@ -399,11 +467,11 @@ class SetuCore:
         file_path: str,
         file_name: str,
     ) -> str | None:
-        """Send file as message and return message_id for revoke support.
+        """以消息形式发送文件并返回 message_id 以支持撤回。
 
-        Note: Uses send_group_msg/send_private_msg with file segment instead of
-        upload_group_file, so we can get message_id for revoke.
-        Falls back to normal file send if file is too large (>5MB).
+        注意：使用 send_group_msg/send_private_msg 携带 file 段而不是
+        upload_group_file，这样我们可以获得 message_id 以便撤回。
+        如果文件过大（>5MB）则回退为普通文件发送。
         """
         try:
             bot = self._get_bot_api(event)
@@ -413,10 +481,10 @@ class SetuCore:
             is_group = bool(event.get_group_id())
             session_id = event.get_group_id() or event.get_sender_id()
 
-            # Check file size
+            # 检查文件大小
             path_obj = Path(file_path)
             file_size = path_obj.stat().st_size
-            max_size = 5 * 1024 * 1024  # 5MB limit for base64
+            max_size = 5 * 1024 * 1024  # 5MB 的 base64 限制
 
             if file_size > max_size:
                 logger.warning(
@@ -426,37 +494,44 @@ class SetuCore:
                 )
                 return None
 
-            # Convert file to base64 for sending as message
+            # 将文件转换为 base64 以便作为消息发送
             import base64
 
             file_data = path_obj.read_bytes()
             file_b64 = base64.b64encode(file_data).decode()
 
             messages = [
-                {"type": "file", "data": {"file": f"base64://{file_b64}", "name": file_name}}
+                {
+                    "type": "file",
+                    "data": {"file": f"base64://{file_b64}", "name": file_name},
+                }
             ]
 
             if is_group:
                 result = await bot.call_action(
                     "send_group_msg",
-                    group_id=int(session_id) if str(session_id).isdigit() else session_id,
+                    group_id=int(session_id)
+                    if str(session_id).isdigit()
+                    else session_id,
                     message=messages,
                 )
             else:
                 result = await bot.call_action(
                     "send_private_msg",
-                    user_id=int(session_id) if str(session_id).isdigit() else session_id,
+                    user_id=int(session_id)
+                    if str(session_id).isdigit()
+                    else session_id,
                     message=messages,
                 )
 
-            # Extract message_id from result
+            # 提取结果中的 message_id
             if isinstance(result, dict):
                 data = result.get("data", result)
                 message_id = data.get("message_id") if isinstance(data, dict) else None
                 if message_id:
                     return str(message_id)
             return None
-        except Exception:
+        except (OSError, RuntimeError):
             logger.exception("[revoke] Failed to send file with revoke support")
             return None
 
@@ -465,7 +540,7 @@ class SetuCore:
         event: AstrMessageEvent,
         nodes: list[Comp.Node],
     ) -> str | None:
-        """Send forward nodes and return message_id for revoke support."""
+        """发送合并转发消息并返回 message_id 以支持撤回。"""
         try:
             bot = self._get_bot_api(event)
             if not bot:
@@ -474,7 +549,7 @@ class SetuCore:
             is_group = bool(event.get_group_id())
             session_id = event.get_group_id() or event.get_sender_id()
 
-            # Convert nodes to dict format
+            # 将节点转换为字典格式
             messages = []
             for node in nodes:
                 node_dict = await node.to_dict()
@@ -483,24 +558,28 @@ class SetuCore:
             if is_group:
                 result = await bot.call_action(
                     "send_group_forward_msg",
-                    group_id=int(session_id) if str(session_id).isdigit() else session_id,
+                    group_id=int(session_id)
+                    if str(session_id).isdigit()
+                    else session_id,
                     messages=messages,
                 )
             else:
                 result = await bot.call_action(
                     "send_private_forward_msg",
-                    user_id=int(session_id) if str(session_id).isdigit() else session_id,
+                    user_id=int(session_id)
+                    if str(session_id).isdigit()
+                    else session_id,
                     messages=messages,
                 )
 
-            # Extract message_id from result
+            # 提取结果中的 message_id
             if isinstance(result, dict):
                 data = result.get("data", result)
                 message_id = data.get("message_id") if isinstance(data, dict) else None
                 if message_id:
                     return str(message_id)
             return None
-        except Exception:
+        except (OSError, RuntimeError):
             logger.exception("[revoke] Failed to send nodes with revoke support")
             return None
 
@@ -510,7 +589,7 @@ class SetuCore:
         provider = None
         try:
             provider = self._get_provider()
-        except Exception:
+        except (ValueError, RuntimeError):
             logger.exception("provider initialization failed")
             return []
 
@@ -528,7 +607,7 @@ class SetuCore:
                 r18=is_r18,
                 exclude_ai=exclude_ai,
             )
-        except Exception as exc:
+        except (RuntimeError, ConnectionError, TimeoutError) as exc:
             logger.error("provider fetch failed: %s", exc)
             return []
 
@@ -579,6 +658,7 @@ class SetuCore:
         event: AstrMessageEvent,
         images: list[bytes],
         is_r18: bool,
+        tags: list[str] | None = None,
     ) -> AsyncGenerator[Any, None]:
         if not images:
             yield event.plain_result("运气不好，一张图都没拿到...")
@@ -591,15 +671,17 @@ class SetuCore:
 
         actual_send_mode = self._resolve_send_mode(send_mode, len(images))
 
-        # Handle R18 docx mode with auto-revoke support
+        # 处理 R18 docx 模式和自动撤回支持
         if is_r18 and cfg.r18_docx_mode:
             logger.info("[r18] use docx wrapper")
-            docx_path = self._docx_service.create_docx_with_images(images)
+            docx_path = self._docx_service.create_docx_with_images(images, tags=tags)
             if docx_path:
                 if auto_revoke:
-                    # Send file directly to get message_id
+                    # 直接发送文件以获取 message_id
+                    # 使用来自 docx_path 的实际文件名
+                    actual_filename = docx_path.name
                     message_id = await self._send_file_with_revoke(
-                        event, str(docx_path), "setu.docx"
+                        event, str(docx_path), actual_filename
                     )
                     if message_id:
                         await self._schedule_revoke(
@@ -607,7 +689,7 @@ class SetuCore:
                         )
                         if cfg.msg_found_enabled:
                             yield event.plain_result(
-                                f"{cfg.format_found_message(len(images))}（已封装，将在 {cfg.auto_revoke_delay} 秒后自动撤回）"
+                                f"{cfg.format_found_message(len(images))}（将在 {cfg.auto_revoke_delay} 秒后自动撤回）"
                             )
                         logger.info(
                             "[r18] Scheduled docx revoke in %ds, message_id=%s",
@@ -615,20 +697,29 @@ class SetuCore:
                             message_id,
                         )
                     else:
-                        # Fallback to normal file send if revoke setup failed (e.g., file too large)
+                        # 如果撤回设置失败（例如，文件太大），则回退到正常文件发送
                         if cfg.msg_found_enabled:
                             yield event.plain_result(
-                                cfg.format_found_message(len(images)) + "（已封装，文件过大无法自动撤回）"
+                                cfg.format_found_message(len(images))
                             )
-                        yield event.file_result(str(docx_path), "setu.docx")
+                        # 使用来自 docx_path 的实际文件名
+                        actual_filename = docx_path.name
+                        yield event.chain_result(
+                            [Comp.File(file=str(docx_path), name=actual_filename)]
+                        )
                 else:
                     if cfg.msg_found_enabled:
-                        yield event.plain_result(
-                            cfg.format_found_message(len(images)) + "（已封装）"
-                        )
-                    yield event.file_result(str(docx_path), "setu.docx")
+                        yield event.plain_result(cfg.format_found_message(len(images)))
+                    # 使用来自 docx_path 的实际文件名
+                    actual_filename = docx_path.name
+                    yield event.chain_result(
+                        [Comp.File(file=str(docx_path), name=actual_filename)]
+                    )
                 return
-            logger.warning("docx wrapping failed, fallback to regular send")
+            # Docx 生成失败
+            logger.warning("[r18] docx wrapping failed")
+            yield event.plain_result("R18 Docx 封装失败，请稍后再试或联系管理员。")
+            return
 
         if enable_html_card:
             try:
@@ -637,7 +728,7 @@ class SetuCore:
                 ):
                     yield result
                 return
-            except Exception:
+            except (RuntimeError, ValueError, ConnectionError):
                 logger.exception("html card send failed, fallback to regular send")
 
         async for result in self._send_images_fallback(
@@ -691,13 +782,13 @@ class SetuCore:
                     nodes.append(node)
 
                 if auto_revoke:
-                    # For forward messages, we need to send and get message_id
+                    # 对于转发消息，我们需要发送并获取 message_id
                     message_id = await self._send_nodes_with_revoke(event, nodes)
                     if message_id:
                         await self._schedule_revoke(
                             event, message_id, cfg.auto_revoke_delay
                         )
-                        # Send combined notice with found message
+                        # 发送合并通知和找到的消息
                         if cfg.msg_found_enabled:
                             notice = f"{cfg.format_found_message(len(html_image_urls))}\n将在 {cfg.auto_revoke_delay} 秒后自动撤回~"
                             yield event.plain_result(notice)
@@ -707,7 +798,7 @@ class SetuCore:
                             message_id,
                         )
                     else:
-                        # Fallback to normal yield
+                        # 回退到正常发送
                         if cfg.msg_found_enabled:
                             yield event.plain_result(
                                 cfg.format_found_message(len(html_image_urls))
@@ -735,7 +826,7 @@ class SetuCore:
         )
         if image_url:
             if auto_revoke:
-                # Send directly to get message_id
+                # 直接发送以获取 message_id
                 chain = [Comp.Image.fromURL(image_url)]
                 if send_mode == "forward":
                     node = Comp.Node(
@@ -755,7 +846,7 @@ class SetuCore:
                     await self._schedule_revoke(
                         event, message_id, cfg.auto_revoke_delay
                     )
-                    # Send combined notice with found message
+                    # 发送合并通知和找到的消息
                     if cfg.msg_found_enabled:
                         notice = f"{cfg.format_found_message(len(images))}\n将在 {cfg.auto_revoke_delay} 秒后自动撤回~"
                         yield event.plain_result(notice)
@@ -765,7 +856,7 @@ class SetuCore:
                         message_id,
                     )
                 else:
-                    # Fallback: use normal yield
+                    # 回退：使用正常发送
                     if cfg.msg_found_enabled:
                         yield event.plain_result(cfg.format_found_message(len(images)))
                     if send_mode == "forward":
@@ -814,7 +905,7 @@ class SetuCore:
         )
 
         if auto_revoke:
-            # For auto-revoke, we need to send directly to get message_id
+            # 对于自动撤回，我们需要直接发送以获取 message_id
             if send_mode == "forward":
                 nodes = []
                 for img_data in images:
@@ -826,7 +917,7 @@ class SetuCore:
                     nodes.append(node)
                 message_id = await self._send_nodes_with_revoke(event, nodes)
             else:
-                # Send images with found message
+                # 带有找到的消息发送图片
                 chain: list[Any] = []
                 if found_message:
                     chain.append(Comp.Plain(found_message))
@@ -841,7 +932,7 @@ class SetuCore:
 
             if message_id:
                 await self._schedule_revoke(event, message_id, cfg.auto_revoke_delay)
-                # Send revoke notice
+                # 发送撤回通知
                 notice = f"R18 内容已发送，将在 {cfg.auto_revoke_delay} 秒后自动撤回~"
                 yield event.plain_result(notice)
                 logger.info(
@@ -863,7 +954,9 @@ class SetuCore:
                         yield result
         else:
             if send_mode == "forward":
-                async for result in self._image_service.send_forward(event, images, "色图"):
+                async for result in self._image_service.send_forward(
+                    event, images, "色图"
+                ):
                     yield result
             else:
                 async for result in self._image_service.send_images(
@@ -918,7 +1011,7 @@ class SetuCore:
                 event, self._send_with_html_card(event, images, send_mode)
             )
             return media_count > 0
-        except Exception as exc:
+        except (RuntimeError, ConnectionError, TimeoutError) as exc:
             logger.warning("llm html fallback send failed: %s", exc)
             return False
 
@@ -931,7 +1024,7 @@ class SetuCore:
 
         try:
             num = max(1, min(int(count), cfg.max_count))
-        except Exception:
+        except (ValueError, TypeError):
             num = 1
         if isinstance(tags, list):
             normalized_tags = [str(t).strip() for t in tags if str(t).strip()]
@@ -941,7 +1034,9 @@ class SetuCore:
         else:
             parsed_tags = cfg.resolve_tags(str(tags or ""))
 
-        is_r18 = self._determine_r18(cfg.content_mode)
+        # 获取生效的内容模式（优先会话配置）
+        effective_content_mode = await self.get_effective_content_mode(event)
+        is_r18 = self._determine_r18(effective_content_mode)
         downloaded = await self.fetch_and_download_images(num, parsed_tags, is_r18)
         if not downloaded:
             return False, "未能获取到图片或图片下载失败。"
@@ -949,11 +1044,11 @@ class SetuCore:
         actual_send_mode = self._resolve_send_mode(cfg.send_mode, len(downloaded))
         try:
             _, media_count = await self._send_generator_results_to_origin(
-                event, self.send_images(event, downloaded, is_r18)
+                event, self.send_images(event, downloaded, is_r18, parsed_tags)
             )
             if media_count > 0:
                 return True, f"已成功发送 {len(downloaded)} 张图片"
-        except Exception as exc:
+        except (RuntimeError, ConnectionError, TimeoutError) as exc:
             logger.warning("llm primary send failed: %s", exc)
 
         if cfg.auto_handle_send_failure:

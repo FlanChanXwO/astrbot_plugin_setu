@@ -1,4 +1,4 @@
-"""Setu plugin image download/send service with URL-based disk cache."""
+"""Setu 插件图片下载/发送服务，支持基于 URL 的磁盘缓存。"""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ DEFAULT_HEADERS = {
 
 
 class UrlImageDiskCache:
-    """Simple URL-based image disk cache with TTL and item limit."""
+    """基于 URL 的简单图片磁盘缓存，支持 TTL 和数量限制。"""
 
     def __init__(
         self, cache_dir: Path, ttl_hours: int, max_items: int, enabled: bool = True
@@ -42,6 +42,7 @@ class UrlImageDiskCache:
         self._lock = asyncio.Lock()
 
     async def initialize(self, cleanup_on_start: bool = True) -> None:
+        # 如果未启用缓存，直接返回
         if not self.enabled:
             logger.info("[setu.cache] cache disabled")
             return
@@ -51,10 +52,11 @@ class UrlImageDiskCache:
             if cleanup_on_start:
                 removed = await self.cleanup_expired()
                 logger.info("[setu.cache] startup cleanup removed=%d", removed)
-        except Exception:
-            logger.exception("[setu.cache] initialize failed")
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.exception("[setu.cache] initialize failed: %s", exc)
 
     async def get(self, url: str) -> bytes | None:
+        # 获取缓存图片，如果不存在或已过期则返回 None
         if not self.enabled:
             return None
         key = self._url_key(url)
@@ -73,8 +75,8 @@ class UrlImageDiskCache:
 
             try:
                 data = cached_path.read_bytes()
-            except Exception:
-                logger.exception("[setu.cache] failed to read cache file key=%s", key)
+            except OSError as exc:
+                logger.exception("[setu.cache] failed to read cache file key=%s: %s", key, exc)
                 self._remove_entry_locked(key, delete_file=True)
                 await self._save_index_locked()
                 return None
@@ -85,6 +87,7 @@ class UrlImageDiskCache:
             return data
 
     async def put(self, url: str, data: bytes) -> None:
+        # 写入图片到缓存
         if not self.enabled or not data:
             return
         key = self._url_key(url)
@@ -94,9 +97,9 @@ class UrlImageDiskCache:
         async with self._lock:
             try:
                 file_path.write_bytes(data)
-            except Exception:
+            except OSError as exc:
                 logger.exception(
-                    "[setu.cache] failed to write cache file=%s", file_path
+                    "[setu.cache] failed to write cache file=%s: %s", file_path, exc
                 )
                 return
 
@@ -118,6 +121,7 @@ class UrlImageDiskCache:
             )
 
     async def cleanup_expired(self) -> int:
+        # 清理过期缓存
         if not self.enabled:
             return 0
         now = int(time.time())
@@ -129,6 +133,7 @@ class UrlImageDiskCache:
             return removed
 
     async def _load_index(self) -> None:
+        # 加载缓存索引文件
         if not self.index_path.is_file():
             self._index = {"entries": {}, "meta": {}}
             await self._save_index_locked()
@@ -142,12 +147,13 @@ class UrlImageDiskCache:
                 "entries": entries if isinstance(entries, dict) else {},
                 "meta": meta if isinstance(meta, dict) else {},
             }
-        except Exception:
-            logger.exception("[setu.cache] index parse failed, reset index")
+        except Exception as exc:
+            logger.exception("[setu.cache] index parse failed, reset index: %s", exc)
             self._index = {"entries": {}, "meta": {}}
             await self._save_index_locked()
 
     async def _save_index_locked(self) -> None:
+        # 保存缓存索引（加锁）
         tmp_path = self.index_path.with_suffix(".json.tmp")
         try:
             tmp_path.write_text(
@@ -155,15 +161,16 @@ class UrlImageDiskCache:
                 encoding="utf-8",
             )
             tmp_path.replace(self.index_path)
-        except Exception:
-            logger.exception("[setu.cache] failed to save index %s", self.index_path)
+        except Exception as exc:
+            logger.exception("[setu.cache] failed to save index %s: %s", self.index_path, exc)
             try:
                 if tmp_path.exists():
                     tmp_path.unlink()
-            except Exception:
-                logger.debug("[setu.cache] failed to remove temp index file")
+            except Exception as exc2:
+                logger.debug("[setu.cache] failed to remove temp index file: %s", exc2)
 
     def _prune_locked(self, now: int) -> int:
+        # 清理过期和超出数量限制的缓存项
         entries = self._index.setdefault("entries", {})
         removed = 0
 
@@ -188,6 +195,7 @@ class UrlImageDiskCache:
         return removed
 
     def _remove_entry_locked(self, key: str, delete_file: bool) -> None:
+        # 移除缓存项（可选删除文件）
         entries = self._index.setdefault("entries", {})
         entry = entries.pop(key, None)
         if not entry:
@@ -198,18 +206,19 @@ class UrlImageDiskCache:
         try:
             if cached_path.is_file():
                 cached_path.unlink()
-        except Exception:
+        except Exception as exc:
             logger.warning(
-                "[setu.cache] failed to remove cache file path=%s", cached_path
+                "[setu.cache] failed to remove cache file path=%s: %s", cached_path, exc
             )
 
     @staticmethod
     def _url_key(url: str) -> str:
+        # 生成 URL 的哈希 key
         return hashlib.sha256(url.encode("utf-8", errors="ignore")).hexdigest()
 
 
 class ImageService:
-    """Image downloading/sending service with robust fallback behaviors."""
+    """图片下载/发送服务，具备健壮的回退机制。"""
 
     def __init__(self, cache: UrlImageDiskCache | None = None):
         self._cache = cache
@@ -217,7 +226,7 @@ class ImageService:
     async def download_single(
         self, session: aiohttp.ClientSession, url: str
     ) -> bytes | None:
-        """Download single image with cache support."""
+        """下载单张图片，支持缓存。"""
         if not url:
             return None
 
@@ -226,8 +235,8 @@ class ImageService:
                 cached = await self._cache.get(url)
                 if cached:
                     return cached
-            except Exception:
-                logger.exception("[setu.cache] read failed url=%s", url)
+            except Exception as exc:
+                logger.exception("[setu.cache] read failed url=%s : %s", url, exc)
 
         try:
             async with session.get(url, headers=DEFAULT_HEADERS) as resp:
@@ -247,12 +256,12 @@ class ImageService:
         if self._cache:
             try:
                 await self._cache.put(url, data)
-            except Exception:
-                logger.exception("[setu.cache] write failed url=%s", url)
+            except Exception as exc:
+                logger.exception("[setu.cache] write failed url=%s : %s", url, exc)
         return data
 
     async def download_parallel(self, urls: list[str]) -> list[bytes]:
-        """Download images concurrently and keep only successful bytes."""
+        """并发下载多张图片，仅保留成功的图片数据。"""
         if not urls:
             return []
         timeout = aiohttp.ClientTimeout(total=HTTP_TIMEOUT_SECONDS)
@@ -260,8 +269,8 @@ class ImageService:
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 tasks = [self.download_single(session, url) for url in urls]
                 results = await asyncio.gather(*tasks, return_exceptions=True)
-        except Exception:
-            logger.exception("download_parallel failed")
+        except Exception as exc:
+            logger.exception("download_parallel failed: %s",exc)
             return []
 
         downloaded: list[bytes] = []
@@ -278,7 +287,7 @@ class ImageService:
         images: list[bytes],
         found_message: str | None = None,
     ):
-        """Send all images in one chain, fallback to obfuscated bytes."""
+        """将所有图片一次性发送，失败时尝试混淆重发。"""
         try:
             message_chain = [Plain(found_message)] if found_message else []
             for img_data in images:
@@ -295,14 +304,14 @@ class ImageService:
                 obf_data = self._obfuscate_image_bytes(img_data)
                 message_chain.append(Image.fromBytes(obf_data))
             yield event.chain_result(message_chain)
-        except Exception:
-            logger.exception("send_images obfuscated retry failed")
+        except Exception as exc:
+            logger.exception("send_images obfuscated retry failed: %s",exc)
             yield event.plain_result("图片发送失败，可能被平台审核拦截。")
 
     async def send_forward(
         self, event: AstrMessageEvent, images: list[bytes], bot_name: str = "Bot"
     ):
-        """Send images as forward nodes."""
+        """以合并转发节点方式发送图片。"""
         logger.info("[forward] building nodes total=%d", len(images))
         nodes = []
         for index, img_data in enumerate(images):
@@ -313,14 +322,15 @@ class ImageService:
                     content=[Image.fromBytes(img_data)],
                 )
                 nodes.append(node)
-            except Exception:
-                logger.exception("[forward] build node failed index=%d", index)
+            except Exception as exc:
+                logger.exception("[forward] build node failed index=%d: %s", index, exc)
         if not nodes:
             yield event.plain_result("合并转发构建失败，未发送任何图片。")
             return
         yield event.chain_result([Nodes(nodes)])
 
     def _obfuscate_image_bytes(self, data: bytes) -> bytes:
+        # 对图片字节流添加噪声以混淆
         import random
 
         noise = bytes(random.randint(0, 255) for _ in range(8))

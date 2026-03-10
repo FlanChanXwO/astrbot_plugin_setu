@@ -36,12 +36,6 @@
         "description": "最大补充轮次",
         "hint": "部分图片下载失败时的重试轮次。",
         "default": 3
-      },
-      "exclude_ai": {
-        "type": "bool",
-        "description": "排除 AI 生成作品",
-        "hint": "仅对 lolicon 提供者生效。",
-        "default": true
       }
     }
   },
@@ -185,6 +179,12 @@
             "type": "string",
             "description": "关键词过滤",
             "default": ""
+          },
+          "exclude_ai": {
+            "type": "bool",
+            "description": "排除 AI 生成作品",
+            "hint": "排除 AI 生成的图片。",
+            "default": true
           }
         }
       },

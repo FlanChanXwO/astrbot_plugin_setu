@@ -21,7 +21,7 @@ class DocxService:
             import importlib.util
 
             return importlib.util.find_spec("docx") is not None
-        except Exception:
+        except ImportError:
             logger.error("python-docx 未安装，请运行: pip install python-docx")
             return False
 
@@ -29,12 +29,14 @@ class DocxService:
         self,
         images: list[bytes],
         output_path: Path | None = None,
+        tags: list[str] | None = None,
     ) -> Path | None:
         """创建包含图片的 Docx 文件。
 
         参数:
             images: 图片字节数据列表
             output_path: 输出文件路径，如果不指定则使用临时目录
+            tags: 搜索标签列表，用于生成文件名
 
         返回:
             生成的 Docx 文件路径，失败返回 None
@@ -81,13 +83,49 @@ class DocxService:
                 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
                 temp_dir = get_astrbot_temp_path()
-                output_path = temp_dir / f"setu_r18_{os.urandom(4).hex()}.docx"
+                if isinstance(temp_dir, str):
+                    temp_dir = Path(temp_dir)
+
+                # 生成文件名：标签_随机UID.docx
+                if tags:
+                    # 清理标签，移除特殊字符
+                    clean_tags = [
+                        self._sanitize_filename(t) for t in tags[:3]
+                    ]  # 最多取前3个标签
+                    tag_str = ",".join(clean_tags)
+                else:
+                    tag_str = "setu"
+
+                random_suffix = os.urandom(6).hex()  # 12位随机十六进制
+                filename = f"{tag_str}_{random_suffix}.docx"
+                output_path = temp_dir / filename
 
             # 保存文档
             doc.save(str(output_path))
             logger.info("Docx 文件已生成: %s", output_path)
             return output_path
 
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             logger.error("生成 Docx 文件失败: %s", e)
             return None
+
+    def _sanitize_filename(self, text: str) -> str:
+        """清理文件名中的非法字符。"""
+        import re
+
+        # 移除或替换Windows和Linux中的非法字符
+        illegal_chars = r'[<>:"/\\|?*\x00-\x1f]'
+        sanitized = re.sub(illegal_chars, "", text)
+
+        # 限制长度，避免文件名过长
+        if len(sanitized) > 30:
+            sanitized = sanitized[:30]
+
+        # 去除首尾空格和点
+        sanitized = sanitized.strip(" .")
+
+        # 如果为空，返回默认值
+        if not sanitized:
+            return "tag"
+
+        return sanitized

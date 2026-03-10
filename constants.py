@@ -2,21 +2,6 @@
 
 from __future__ import annotations
 
-# 中文数字映射（用于解析 "来三份色图" 等命令）
-CN_NUM: dict[str, int] = {
-    "一": 1,
-    "二": 2,
-    "两": 2,
-    "三": 3,
-    "四": 4,
-    "五": 5,
-    "六": 6,
-    "七": 7,
-    "八": 8,
-    "九": 9,
-    "十": 10,
-}
-
 # 图片下载的 HTTP 超时时间（秒）
 HTTP_TIMEOUT_SECONDS = 30
 

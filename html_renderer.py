@@ -131,7 +131,7 @@ class HtmlCardRenderer:
                 return_url=True,
                 options=render_options,
             )
-        except Exception:
+        except (ValueError, RuntimeError, OSError):
             logger.exception("html single-card render failed")
             return None
 
@@ -156,7 +156,7 @@ class HtmlCardRenderer:
                 return_url=True,
                 options=render_options,
             )
-        except Exception:
+        except (ValueError, RuntimeError, OSError):
             logger.exception("html card render failed")
             return None
 
@@ -165,6 +165,6 @@ class HtmlCardRenderer:
             images_b64 = [base64.b64encode(img).decode("ascii") for img in images]
             output_path.write_text(self._build_html(images_b64), encoding="utf-8")
             return True
-        except Exception:
+        except (OSError, ValueError):
             logger.exception("html debug file save failed")
             return False
