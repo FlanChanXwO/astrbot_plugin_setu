@@ -155,7 +155,7 @@ class SetuPlugin(Star):
             return
 
         # 解析标签
-        tag_str = match.group(4).strip()
+        tag_str = match.group(3).strip()
         tags = cfg.resolve_tags(tag_str)
 
         if cfg.msg_fetching_enabled:
