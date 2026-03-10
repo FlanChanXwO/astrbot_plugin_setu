@@ -832,23 +832,30 @@ class SetuCore:
         }
 
         if html_card_mode == "multiple":
-            html_image_urls: list[str] = []
+            # 渲染每张图片为 HTML 卡片，并下载为字节数据
+            html_image_data: list[bytes] = []
             for img_data in images:
                 image_url = await self._html_renderer.render_single_image(
                     context=self.plugin,
                     image=img_data,
                     style_options=render_style,
                 )
-                if image_url:
-                    html_image_urls.append(image_url)
+                if image_url and self._image_service:
+                    # 下载渲染后的图片数据
+                    try:
+                        downloaded = await self._image_service.download_parallel([image_url])
+                        if downloaded:
+                            html_image_data.extend(downloaded)
+                    except Exception as exc:
+                        logger.warning("[html-card] failed to download rendered image: %s", exc)
 
-            if html_image_urls:
+            if html_image_data:
                 nodes = []
-                for img_url in html_image_urls:
+                for img_data in html_image_data:
                     node = Comp.Node(
                         uin=event.get_self_id(),
                         name="色图",
-                        content=[Comp.Image.fromURL(img_url)],
+                        content=[Comp.Image.fromBytes(img_data)],
                     )
                     nodes.append(node)
 
@@ -861,7 +868,7 @@ class SetuCore:
                         )
                         # 发送合并通知和找到的消息
                         if cfg.msg_found_enabled:
-                            notice = f"{cfg.format_found_message(len(html_image_urls))}\n将在 {cfg.auto_revoke_delay} 秒后自动撤回~"
+                            notice = f"{cfg.format_found_message(len(html_image_data))}\n将在 {cfg.auto_revoke_delay} 秒后自动撤回~"
                             yield event.plain_result(notice)
                         logger.info(
                             "[r18] Scheduled forward revoke in %ds, message_id=%s",
@@ -872,13 +879,13 @@ class SetuCore:
                         # 回退到正常发送
                         if cfg.msg_found_enabled:
                             yield event.plain_result(
-                                cfg.format_found_message(len(html_image_urls))
+                                cfg.format_found_message(len(html_image_data))
                             )
                         yield event.chain_result([Comp.Nodes(nodes)])
                 else:
                     if cfg.msg_found_enabled:
                         yield event.plain_result(
-                            cfg.format_found_message(len(html_image_urls))
+                            cfg.format_found_message(len(html_image_data))
                         )
                     yield event.chain_result([Comp.Nodes(nodes)])
                 return
@@ -895,63 +902,73 @@ class SetuCore:
             images=images,
             style_options=render_style,
         )
-        if image_url:
-            if auto_revoke:
-                # 直接发送以获取 message_id
-                chain = [Comp.Image.fromURL(image_url)]
-                if send_mode == "forward":
-                    node = Comp.Node(
-                        uin=event.get_self_id(),
-                        name="色图",
-                        content=chain,
-                    )
-                    message_id = await self._send_nodes_with_revoke(event, [node])
+        if image_url and self._image_service:
+            # 下载渲染后的 HTML 卡片图片数据
+            html_image_data: bytes | None = None
+            try:
+                downloaded = await self._image_service.download_parallel([image_url])
+                if downloaded:
+                    html_image_data = downloaded[0]
+            except Exception as exc:
+                logger.warning("[html-card] failed to download rendered image: %s", exc)
+
+            if html_image_data:
+                if auto_revoke:
+                    # 直接发送以获取 message_id
+                    chain = [Comp.Image.fromBytes(html_image_data)]
+                    if send_mode == "forward":
+                        node = Comp.Node(
+                            uin=event.get_self_id(),
+                            name="色图",
+                            content=chain,
+                        )
+                        message_id = await self._send_nodes_with_revoke(event, [node])
+                    else:
+                        message_id = await self._send_with_revoke_support(
+                            event,
+                            chain,
+                            bool(event.get_group_id()),
+                            event.get_group_id() or event.get_sender_id(),
+                        )
+                    if message_id:
+                        await self._schedule_revoke(
+                            event, message_id, cfg.auto_revoke_delay
+                        )
+                        # 发送合并通知和找到的消息
+                        if cfg.msg_found_enabled:
+                            notice = f"{cfg.format_found_message(len(images))}\n将在 {cfg.auto_revoke_delay} 秒后自动撤回~"
+                            yield event.plain_result(notice)
+                        logger.info(
+                            "[r18] Scheduled html-card revoke in %ds, message_id=%s",
+                            cfg.auto_revoke_delay,
+                            message_id,
+                        )
+                    else:
+                        # 回退：使用正常发送
+                        if cfg.msg_found_enabled:
+                            yield event.plain_result(cfg.format_found_message(len(images)))
+                        if send_mode == "forward":
+                            node = Comp.Node(
+                                uin=event.get_self_id(),
+                                name="色图",
+                                content=[Comp.Image.fromBytes(html_image_data)],
+                            )
+                            yield event.chain_result([Comp.Nodes([node])])
+                        else:
+                            yield event.chain_result([Comp.Image.fromBytes(html_image_data)])
                 else:
-                    message_id = await self._send_with_revoke_support(
-                        event,
-                        chain,
-                        bool(event.get_group_id()),
-                        event.get_group_id() or event.get_sender_id(),
-                    )
-                if message_id:
-                    await self._schedule_revoke(
-                        event, message_id, cfg.auto_revoke_delay
-                    )
-                    # 发送合并通知和找到的消息
-                    if cfg.msg_found_enabled:
-                        notice = f"{cfg.format_found_message(len(images))}\n将在 {cfg.auto_revoke_delay} 秒后自动撤回~"
-                        yield event.plain_result(notice)
-                    logger.info(
-                        "[r18] Scheduled html-card revoke in %ds, message_id=%s",
-                        cfg.auto_revoke_delay,
-                        message_id,
-                    )
-                else:
-                    # 回退：使用正常发送
                     if cfg.msg_found_enabled:
                         yield event.plain_result(cfg.format_found_message(len(images)))
                     if send_mode == "forward":
                         node = Comp.Node(
                             uin=event.get_self_id(),
                             name="色图",
-                            content=[Comp.Image.fromURL(image_url)],
+                            content=[Comp.Image.fromBytes(html_image_data)],
                         )
                         yield event.chain_result([Comp.Nodes([node])])
                     else:
-                        yield event.image_result(image_url)
-            else:
-                if cfg.msg_found_enabled:
-                    yield event.plain_result(cfg.format_found_message(len(images)))
-                if send_mode == "forward":
-                    node = Comp.Node(
-                        uin=event.get_self_id(),
-                        name="色图",
-                        content=[Comp.Image.fromURL(image_url)],
-                    )
-                    yield event.chain_result([Comp.Nodes([node])])
-                else:
-                    yield event.image_result(image_url)
-            return
+                        yield event.chain_result([Comp.Image.fromBytes(html_image_data)])
+                return
 
         yield event.plain_result("图片包装失败，尝试直接发送...")
         async for result in self._send_images_fallback(
