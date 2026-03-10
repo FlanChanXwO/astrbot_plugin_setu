@@ -12,15 +12,17 @@
     来5个白丝福利图       - 获取 5 张 tagged "白丝" 的图片。
     /setu [数量] [标签]   - 使用 /setu 命令获取图片，标签支持多标签（用,或，或空格分隔）。
 """
+
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 import mcp.types
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
-from astrbot.api.star import Context, Star, register
+from astrbot.api.star import Context, Star, StarTools, register
 from astrbot.core import AstrBotConfig
 from astrbot.core.provider.register import llm_tools
 
@@ -38,55 +40,94 @@ class SetuPlugin(Star):
         self.context = context
         self.config = config
         self._core: SetuCore | None = None
+        self._plugin_data_dir: Path = StarTools.get_data_dir(self.name)
 
     async def initialize(self) -> None:
         """初始化插件，注册 LLM 工具。"""
-        # 注册 LLM 工具
-        llm_tools.add_func(
-            name="get_setu_image",
-            func_args=[
-                {"name": "count", "type": "integer", "description": "要获取的图片数量，默认为1"},
-                {"name": "tags", "type": "string", "description": "搜索标签，多个标签用逗号分隔，例如：白丝,萝莉"},
-            ],
-            desc="获取随机动漫/插画图片（色图）。当用户想要看图片、anime pictures 或要求发图时调用。支持指定数量和标签。",
-            handler=self._llm_get_setu_handler,
-        )
-        tool = llm_tools.get_func("get_setu_image")
-        if tool:
-            tool.handler_module_path = __name__
+        try:
+            llm_tools.add_func(
+                name="get_setu_image",
+                func_args=[
+                    {
+                        "name": "count",
+                        "type": "integer",
+                        "description": "Number of images to fetch. Default is 1.",
+                    },
+                    {
+                        "name": "tags",
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of search tags. Pass as an array of strings.",
+                    },
+                ],
+                desc=(
+                    "Fetch random anime/illustration images. "
+                    "Use this when users ask for images. "
+                    "Supports count and tags."
+                ),
+                handler=self._llm_get_setu_handler,
+            )
+            tool = llm_tools.get_func("get_setu_image")
+            if tool:
+                tool.handler_module_path = __name__
+        except Exception:
+            logger.exception("LLM tool registration failed")
 
-        # 初始化核心处理器
-        cfg = SetuConfig(self.config)
-        self._core = SetuCore(self, cfg)
+        try:
+            cfg = SetuConfig(self.config)
+            self._core = SetuCore(self, cfg, self._plugin_data_dir)
+            await self._core.initialize()
+        except Exception:
+            logger.exception("Setu core initialize failed")
+            self._core = None
 
     async def terminate(self) -> None:
         """卸载插件，注销 LLM 工具。"""
-        llm_tools.remove_func("get_setu_image")
+        try:
+            llm_tools.remove_func("get_setu_image")
+        except Exception:
+            logger.exception("LLM tool unregister failed")
 
     async def _llm_get_setu_handler(
-        self, event: AstrMessageEvent, count=1, tags=""
+        self,
+        event: AstrMessageEvent,
+        count=1,
+        tags: list[str] | str | dict | None = None,
     ) -> mcp.types.CallToolResult:
         """LLM 工具处理器：获取色图并直接发送。"""
+        if not self._core:
+            return mcp.types.CallToolResult(
+                content=[
+                    mcp.types.TextContent(
+                        type="text", text="插件尚未就绪，请稍后再试。"
+                    )
+                ]
+            )
         try:
             # 处理可能被包装成字典的参数
             if isinstance(count, dict):
                 count = count.get("value", 1)
             if isinstance(tags, dict):
-                tags = tags.get("value", "")
+                tags = tags.get("value", [])
 
-            success, message = await self._core.handle_llm_tool(event, int(count), str(tags))
+            success, message = await self._core.handle_llm_tool(event, int(count), tags)
             return mcp.types.CallToolResult(
                 content=[mcp.types.TextContent(type="text", text=message)]
             )
         except Exception as e:
             logger.exception("LLM 工具获取色图失败")
             return mcp.types.CallToolResult(
-                content=[mcp.types.TextContent(type="text", text=f"获取图片失败：{str(e)}")]
+                content=[
+                    mcp.types.TextContent(type="text", text=f"获取图片失败：{str(e)}")
+                ]
             )
 
     @filter.regex(COMMAND_PATTERN)
     async def get_random_picture(self, event: AstrMessageEvent):
         """处理色图请求命令，支持中文数字解析和标签。"""
+        if not self._core:
+            yield event.plain_result("插件尚未就绪，请稍后再试。")
+            return
         match = re.match(COMMAND_PATTERN, event.message_str.strip())
         if not match:
             return
@@ -117,17 +158,21 @@ class SetuPlugin(Star):
         tag_str = match.group(4).strip()
         tags = cfg.resolve_tags(tag_str)
 
-        # 处理请求
-        yield event.plain_result("正在获取图片，请稍候...")
-
-        is_r18 = self._core._determine_r18(cfg.content_mode)
-        downloaded = await self._core.fetch_and_download_images(num, tags, is_r18)
-
-        async for result in self._core.send_images(event, downloaded, is_r18):
-            yield result
+        if cfg.msg_fetching_enabled:
+            yield event.plain_result(cfg.msg_fetching_text)
+        try:
+            is_r18 = self._core._determine_r18(cfg.content_mode)
+            downloaded = await self._core.fetch_and_download_images(num, tags, is_r18)
+            async for result in self._core.send_images(event, downloaded, is_r18):
+                yield result
+        except Exception:
+            logger.exception("get_random_picture failed")
+            yield event.plain_result("获取图片失败，请稍后再试。")
 
     @filter.command("setu")
-    async def setu_command(self, event: AstrMessageEvent, count: str = "1", *, tags: str = ""):
+    async def setu_command(
+        self, event: AstrMessageEvent, count: str = "1", *, tags: str = ""
+    ):
         """/setu 命令处理器，作为正则匹配响应器的别名。
 
         用法：
@@ -137,6 +182,9 @@ class SetuPlugin(Star):
             /setu 白丝,萝莉    - 获取 1 张带白丝和萝莉标签的图片
             /setu 5 白丝 萝莉  - 获取 5 张带白丝和萝莉标签的图片
         """
+        if not self._core:
+            yield event.plain_result("插件尚未就绪，请稍后再试。")
+            return
         cfg = SetuConfig(self.config)
 
         # 检查群聊是否被屏蔽
@@ -168,11 +216,15 @@ class SetuPlugin(Star):
         # 解析标签（支持,，和空格分隔）
         parsed_tags = cfg.resolve_tags(all_tags)
 
-        # 处理请求
-        yield event.plain_result("正在获取图片，请稍候...")
-
-        is_r18 = self._core._determine_r18(cfg.content_mode)
-        downloaded = await self._core.fetch_and_download_images(num, parsed_tags, is_r18)
-
-        async for result in self._core.send_images(event, downloaded, is_r18):
-            yield result
+        if cfg.msg_fetching_enabled:
+            yield event.plain_result(cfg.msg_fetching_text)
+        try:
+            is_r18 = self._core._determine_r18(cfg.content_mode)
+            downloaded = await self._core.fetch_and_download_images(
+                num, parsed_tags, is_r18
+            )
+            async for result in self._core.send_images(event, downloaded, is_r18):
+                yield result
+        except Exception:
+            logger.exception("setu command failed")
+            yield event.plain_result("获取图片失败，请稍后再试。")

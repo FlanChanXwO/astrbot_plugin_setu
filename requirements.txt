@@ -1,2 +1,2 @@
 aiohttp>=3.9.0
-python-docx
+python-docx>=1.0.0

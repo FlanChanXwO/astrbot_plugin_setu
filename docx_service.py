@@ -5,7 +5,6 @@ from __future__ import annotations
 import io
 import os
 from pathlib import Path
-from typing import Any
 
 from astrbot.api import logger
 
@@ -19,9 +18,10 @@ class DocxService:
     def _check_dependency(self) -> bool:
         """检查 python-docx 是否已安装。"""
         try:
-            import docx
-            return True
-        except ImportError:
+            import importlib.util
+
+            return importlib.util.find_spec("docx") is not None
+        except Exception:
             logger.error("python-docx 未安装，请运行: pip install python-docx")
             return False
 
@@ -41,8 +41,8 @@ class DocxService:
         """
         try:
             from docx import Document
-            from docx.shared import Inches, Pt
             from docx.enum.text import WD_ALIGN_PARAGRAPH
+            from docx.shared import Inches
         except ImportError:
             logger.error("python-docx 未安装，无法生成 Docx 文件")
             return None
@@ -79,6 +79,7 @@ class DocxService:
             # 确定输出路径
             if output_path is None:
                 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+
                 temp_dir = get_astrbot_temp_path()
                 output_path = temp_dir / f"setu_r18_{os.urandom(4).hex()}.docx"
 

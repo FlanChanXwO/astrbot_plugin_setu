@@ -6,12 +6,11 @@
     <title>Safe Render Template</title>
     <style>
         #main {
-            width: auto;
-            max-width: 1200px;
-            display: flex;
-            justify-content: center;
+            width: fit-content;
+            display: inline-flex;
+            justify-content: flex-start;
             align-items: flex-start;
-            padding: 10px;
+            position: relative;
         }
 
         body {
@@ -20,13 +19,12 @@
 
         /* 容器：自适应内容大小 */
         .container {
-            width: auto;
-            max-width: 1200px;
+            width: fit-content;
             position: relative;
             z-index: 1;
             display: flex;
             flex-direction: column;
-            align-items: center;
+            align-items: flex-start;
         }
 
         /* 图片卡片样式 - 紧凑包装 */
@@ -45,7 +43,7 @@
         /* 图片本身的处理 - 保持原始尺寸 */
         .safe-img {
             max-width: 100%;
-            max-height: 1200px;
+            max-height: 1600px;
             width: auto;
             height: auto;
             display: block;
@@ -56,11 +54,11 @@
 
         /* 全局噪点层 (关键) */
         .noise-overlay {
-            position: fixed;
+            position: absolute;
             top: 0;
             left: 0;
-            width: 100vw;
-            height: 100vh;
+            width: 100%;
+            height: 100%;
             pointer-events: none;
             z-index: 9999;
             opacity: {noise_opacity};

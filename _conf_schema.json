@@ -1,167 +1,322 @@
 {
-  "api_type": {
-    "type": "string",
-    "description": "API 提供商类型",
-    "hint": "选择图片数据源。all 会从内置 API 中轮流获取",
-    "default": "lolicon",
-    "options": ["lolicon", "sexnyan", "custom", "all"]
+  "general": {
+    "description": "基础行为",
+    "type": "object",
+    "hint": "核心请求和提供者策略设置。",
+    "items": {
+      "api_type": {
+        "type": "string",
+        "description": "API 提供者类型",
+        "hint": "all 同时使用内置 API。",
+        "default": "lolicon",
+        "options": ["lolicon", "sexnyan", "custom", "all"]
+      },
+      "multi_api_strategy": {
+        "type": "string",
+        "description": "多 API 策略",
+        "hint": "当 api_type 为 all/custom 时生效。",
+        "default": "round_robin",
+        "options": ["round_robin", "random", "failover"]
+      },
+      "content_mode": {
+        "type": "string",
+        "description": "内容模式",
+        "hint": "全年龄/成人/混合",
+        "default": "sfw",
+        "options": ["sfw", "r18", "mix"]
+      },
+      "max_count": {
+        "type": "int",
+        "description": "每次请求最大图片数",
+        "hint": "单次命令的上限。",
+        "default": 10
+      },
+      "max_replenish_rounds": {
+        "type": "int",
+        "description": "最大补充轮次",
+        "hint": "部分图片下载失败时的重试轮次。",
+        "default": 3
+      },
+      "exclude_ai": {
+        "type": "bool",
+        "description": "排除 AI 生成作品",
+        "hint": "仅对 lolicon 提供者生效。",
+        "default": true
+      }
+    }
   },
-  "multi_api_strategy": {
-    "type": "string",
-    "description": "多 API 策略",
-    "hint": "仅在 api_type 为 all 或 custom 时生效。round_robin: 轮流使用；random: 随机选择；failover: 故障转移",
-    "default": "round_robin",
-    "options": ["round_robin", "random", "failover"]
-  },
-  "content_mode": {
-    "type": "string",
-    "description": "内容模式",
-    "hint": "选择返回图片的内容类型",
-    "default": "sfw",
-    "options": ["sfw", "r18", "mix"]
-  },
-  "r18_docx_mode": {
-    "type": "bool",
-    "description": "R18 Docx 封装",
-    "hint": "R18 图片是否使用 Docx 文件封装发送（需要安装 python-docx）。开启后可规避部分平台审核",
-    "default": true
-  },
-  "send_mode": {
-    "type": "string",
+  "delivery": {
     "description": "发送模式",
-    "hint": "选择图片的发送方式。auto 模式下，图片数量大于1时自动使用合并转发",
-    "default": "image",
-    "options": ["image", "forward", "auto"]
+    "type": "object",
+    "hint": "消息发送和 R18 打包设置。",
+    "items": {
+      "send_mode": {
+        "type": "string",
+        "description": "发送模式",
+        "hint": "auto 在图片数量>1时使用转发。",
+        "default": "image",
+        "options": ["image", "forward", "auto"]
+      },
+      "r18_docx_mode": {
+        "type": "bool",
+        "description": "R18 Docx 打包模式",
+        "hint": "将 R18 图片打包到 docx 文件中。",
+        "default": true
+      },
+      "auto_handle_send_failure": {
+        "type": "bool",
+        "description": "自动处理消息发送失败",
+        "hint": "当图片发送失败时，自动尝试 HTML 卡片渲染绕过审核。",
+        "default": true
+      },
+      "auto_revoke_r18": {
+        "type": "bool",
+        "description": "自动撤回 R18 图片/文件",
+        "hint": "发送 R18 分级内容后，是否自动撤回消息（mix 模式随机到 r18 也算）。",
+        "default": false
+      },
+      "auto_revoke_delay": {
+        "type": "int",
+        "description": "R18 撤回延迟时间(秒)",
+        "hint": "发送 R18 内容后多久自动撤回，默认 30 秒。",
+        "default": 30
+      }
+    }
   },
-  "max_count": {
-    "type": "int",
-    "description": "每次请求的最大图片数量",
-    "hint": "限制单次请求的最大图片数，防止滥用",
-    "default": 10
+  "html_card": {
+    "description": "HTML 卡片包装",
+    "type": "object",
+    "hint": "将图片包装为防审查卡片。",
+    "items": {
+      "enabled": {
+        "type": "bool",
+        "description": "启用 HTML 卡片",
+        "hint": "发送前将原图包装为 HTML 卡片。",
+        "default": false
+      },
+      "mode": {
+        "type": "string",
+        "description": "卡片模式",
+        "hint": "single=所有图片放入一张卡片，multiple=每张图片一张卡片。",
+        "default": "single",
+        "options": ["single", "multiple"]
+      },
+      "card_padding": {
+        "type": "int",
+        "description": "卡片内边距",
+        "hint": "值越小卡片越紧凑。",
+        "default": 6
+      },
+      "card_gap": {
+        "type": "int",
+        "description": "卡片间距",
+        "hint": "卡片之间的垂直间距。",
+        "default": 6
+      }
+    }
   },
-  "exclude_ai": {
-    "type": "bool",
-    "description": "排除 AI 生成作品",
-    "hint": "是否过滤掉 AI 生成的图片（仅 Lolicon API 有效）",
-    "default": true
+  "cache": {
+    "description": "图片缓存",
+    "type": "object",
+    "hint": "简单的基于 URL 键值的本地图片缓存，带索引文件。",
+    "items": {
+      "enabled": {
+        "type": "bool",
+        "description": "启用缓存",
+        "hint": "通过 URL 缓存图片以减少重复下载。",
+        "default": true
+      },
+      "ttl_hours": {
+        "type": "int",
+        "description": "缓存 TTL（小时）",
+        "hint": "默认为 2 小时。",
+        "default": 2
+      },
+      "max_items": {
+        "type": "int",
+        "description": "最大缓存图片数",
+        "hint": "默认只保留 1 条图片缓存。",
+        "default": 1
+      },
+      "cleanup_on_start": {
+        "type": "bool",
+        "description": "启动时清理",
+        "hint": "插件启动时自动删除过期和溢出的条目。",
+        "default": true
+      }
+    }
   },
-  "image_size": {
-    "type": "string",
-    "description": "图片规格",
-    "hint": "返回图片的规格地址（仅 Lolicon API 有效）。original: 原图，regular: 中等尺寸，small: 小图，thumb: 缩略图，mini: 最小图",
-    "default": "original",
-    "options": ["original", "regular", "small", "thumb", "mini"]
-  },
-  "proxy": {
-    "type": "string",
-    "description": "图片反代服务",
-    "hint": "图片地址使用的在线反代服务（仅 Lolicon API 有效）。默认使用 i.pixiv.re，可设置假值获取原始 i.pximg.net 地址",
-    "default": "i.pixiv.re"
-  },
-  "aspect_ratio": {
-    "type": "string",
-    "description": "图片长宽比",
-    "hint": "筛选指定长宽比的图片（仅 Lolicon API 有效）",
-    "default": "",
-    "options": ["", "horizontal", "vertical", "square"]
-  },
-  "uid": {
-    "type": "list",
-    "description": "指定作者 UID",
-    "hint": "返回指定 UID 作者的作品，每行一个 UID（仅 Lolicon API 有效）",
-    "default": [],
-    "obvious_hint": true
-  },
-  "keyword": {
-    "type": "string",
-    "description": "关键词搜索",
-    "hint": "从标题、作者、标签中按关键字模糊匹配（仅 Lolicon API 有效）。性能和准度较差，建议使用标签代替",
-    "default": ""
-  },
-  "max_replenish_rounds": {
-    "type": "int",
-    "description": "最大补充轮数",
-    "hint": "图片下载失败时的最大重试次数",
-    "default": 3
-  },
-  "enable_html_card": {
-    "type": "bool",
-    "description": "启用 HTML 卡片包装",
-    "hint": "开启后图片会被包装成带随机旋转、底色和边框的卡片样式，可规避部分平台审核",
-    "default": false
-  },
-  "html_card_mode": {
-    "type": "string",
-    "description": "HTML 卡片模式",
-    "hint": "single: 多图合并为一张卡片（节省空间）；multiple: 每张图单独卡片，可配合合并转发使用",
-    "default": "single",
-    "options": ["single", "multiple"]
-  },
-  "custom_api_configs": {
-    "type": "template_list",
-    "description": "自定义 API 配置列表",
-    "hint": "配置多个自定义 API，每个 API 可以有不同的地址、方法和解析方式",
-    "default": [],
-    "obvious_hint": true,
-    "templates": {
-      "api_template": {
-        "name": "自定义 API",
-        "hint": "配置一个自定义图片 API",
+  "api": {
+    "description": "提供者详情",
+    "type": "object",
+    "hint": "提供者特定的设置。",
+    "items": {
+      "lolicon": {
+        "description": "Lolicon 选项",
+        "type": "object",
+        "hint": "仅用于 lolicon 提供者。",
         "items": {
-          "name": {
+          "image_size": {
             "type": "string",
-            "description": "API 名称",
-            "hint": "给这个 API 起个名字，方便识别",
-            "default": "我的自定义API"
+            "description": "图片尺寸",
+            "default": "original",
+            "options": ["original", "regular", "small", "thumb", "mini"]
           },
-          "url": {
+          "proxy": {
             "type": "string",
-            "description": "API 地址",
-            "hint": "可使用 {num}、{r18}、{tags} 占位符",
-            "default": "https://api.example.com/images?num={num}&tag={tags}"
+            "description": "图片代理主机",
+            "hint": "默认为 i.pixiv.re。",
+            "default": "i.pixiv.re"
           },
-          "method": {
+          "aspect_ratio": {
             "type": "string",
-            "description": "请求方法",
-            "hint": "API 请求方式",
-            "default": "GET",
-            "options": ["GET", "POST"]
+            "description": "宽高比过滤",
+            "default": "",
+            "options": ["", "horizontal", "vertical", "square"]
           },
-          "timeout": {
-            "type": "int",
-            "description": "超时时间（秒）",
-            "hint": "请求超时时间",
-            "default": 30
+          "uid": {
+            "type": "list",
+            "description": "作者 UID 列表",
+            "hint": "每行一个 UID。",
+            "default": [],
+            "obvious_hint": true
           },
-          "parser_type": {
+          "keyword": {
             "type": "string",
-            "description": "响应解析类型",
-            "hint": "auto 自动提取所有链接，json 使用路径表达式解析",
-            "default": "auto",
-            "options": ["auto", "json"]
-          },
-          "json_path": {
-            "type": "string",
-            "description": "JSON 路径表达式",
-            "hint": "当解析类型为 json 时使用，例如：$.data[*].url",
+            "description": "关键词过滤",
             "default": ""
+          }
+        }
+      },
+      "custom_api_configs": {
+        "type": "template_list",
+        "description": "自定义 API 列表",
+        "hint": "配置一个或多个自定义图片 API。",
+        "default": [],
+        "obvious_hint": true,
+        "templates": {
+          "api_template": {
+            "name": "自定义 API",
+            "hint": "一个自定义 API 配置。",
+            "items": {
+              "name": {
+                "type": "string",
+                "description": "API 配置名称",
+                "default": "My custom API"
+              },
+              "url": {
+                "type": "string",
+                "description": "API 地址",
+                "hint": "支持 {num}、{r18}、{tags} 占位符。",
+                "default": "https://api.example.com/images?num={num}&tag={tags}"
+              },
+              "method": {
+                "type": "string",
+                "description": "HTTP 方法",
+                "default": "GET",
+                "options": ["GET", "POST"]
+              },
+              "timeout": {
+                "type": "int",
+                "description": "超时秒数",
+                "default": 30
+              },
+              "parser_type": {
+                "type": "string",
+                "description": "解析器类型",
+                "hint": "auto/json",
+                "default": "auto",
+                "options": ["auto", "json"]
+              },
+              "json_path": {
+                "type": "string",
+                "description": "JSON 路径",
+                "hint": "当 parser_type=json 时使用。示例：$.data[*].url",
+                "default": ""
+              }
+            }
           }
         }
       }
     }
   },
-  "blocked_groups": {
-    "type": "list",
-    "description": "屏蔽群聊列表",
-    "hint": "在这些群聊中禁用插件功能。请输入群号，每行一个",
-    "default": [],
-    "obvious_hint": true
+  "messages": {
+    "description": "提示消息",
+    "type": "object",
+    "hint": "自定义插件发送的提示消息文本。",
+    "items": {
+      "fetching": {
+        "description": "获取图片提示",
+        "type": "object",
+        "hint": "开始获取图片时发送的提示消息。",
+        "items": {
+          "enabled": {
+            "type": "bool",
+            "description": "启用该提示",
+            "hint": "是否发送此提示消息。",
+            "default": true
+          },
+          "text": {
+            "type": "string",
+            "description": "提示文本",
+            "hint": "开始获取图片时显示的文本。",
+            "default": "正在获取图片，请稍候..."
+          }
+        }
+      },
+      "found": {
+        "description": "找到图片提示",
+        "type": "object",
+        "hint": "成功找到图片后发送的提示消息。",
+        "items": {
+          "enabled": {
+            "type": "bool",
+            "description": "启用该提示",
+            "hint": "是否发送此提示消息。",
+            "default": true
+          },
+          "text": {
+            "type": "string",
+            "description": "提示文本",
+            "hint": "成功找到图片时显示的文本，{count} 会被替换为实际数量。",
+            "default": "找到 {count} 张符合要求的图片~"
+          }
+        }
+      },
+      "send_failed": {
+        "description": "发送失败提示",
+        "type": "object",
+        "hint": "图片最终发送失败时的提示消息。",
+        "items": {
+          "text": {
+            "type": "string",
+            "description": "提示文本",
+            "hint": "自动降级也失败后发送的文本。",
+            "default": "图片发送失败，请稍后再试。"
+          }
+        }
+      }
+    }
   },
-  "tag_alias": {
-    "type": "text",
-    "description": "标签别名映射",
-    "hint": "配置标签别名，每行一个，格式：标准标签=别名1,别名2,别名3。例如：白丝=白丝,白絲,white stockings",
-    "default": "",
-    "obvious_hint": true
+  "safety": {
+    "description": "安全和过滤",
+    "type": "object",
+    "hint": "群组限制和标签规范化。",
+    "items": {
+      "blocked_groups": {
+        "type": "list",
+        "description": "屏蔽群组列表",
+        "hint": "在这些群组中禁用插件。每行一个 ID。",
+        "default": [],
+        "obvious_hint": true
+      },
+      "tag_alias": {
+        "type": "text",
+        "description": "标签别名映射",
+        "hint": "格式：canonical=alias1,alias2",
+        "default": "",
+        "obvious_hint": true
+      }
+    }
   }
 }

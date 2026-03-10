@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import random
-import re
 from typing import Any
 
 import aiohttp
 
 from astrbot.api import logger
+
 from .constants import HTTP_TIMEOUT_SECONDS
 
 
@@ -39,7 +39,9 @@ class SetuImageProvider:
 class MultiApiProvider(SetuImageProvider):
     """多 API 提供商，支持轮询、随机和故障转移策略。"""
 
-    def __init__(self, providers: list[SetuImageProvider], strategy: str = "round_robin"):
+    def __init__(
+        self, providers: list[SetuImageProvider], strategy: str = "round_robin"
+    ):
         """初始化多 API 提供商。
 
         参数:
@@ -98,8 +100,14 @@ class LoliconProvider(SetuImageProvider):
 
     API_URL = "https://api.lolicon.app/setu/v2"
 
-    def __init__(self, image_size: str = "original", proxy: str = "i.pixiv.re",
-                 aspect_ratio: str = "", uid: list[int] | None = None, keyword: str = ""):
+    def __init__(
+        self,
+        image_size: str = "original",
+        proxy: str = "i.pixiv.re",
+        aspect_ratio: str = "",
+        uid: list[int] | None = None,
+        keyword: str = "",
+    ):
         """初始化 Lolicon 提供商。
 
         参数:
@@ -231,7 +239,6 @@ class CustomApiProvider(SetuImageProvider):
         """构建请求 URL 和请求体。"""
         url_template = self.api_config.get("url", "")
         method = self.api_config.get("method", "GET").upper()
-        headers = self.api_config.get("headers", {})
 
         # 替换 URL 中的占位符
         tags_str = ",".join(tags) if tags else ""
@@ -317,18 +324,20 @@ class CustomApiProvider(SetuImageProvider):
 
             # 处理数组索引 [*] 或 [n]
             if "[" in part and "]" in part:
-                arr_name = part[:part.index("[")]
-                idx_str = part[part.index("[") + 1:part.index("]")]
+                arr_name = part[: part.index("[")]
+                idx_str = part[part.index("[") + 1 : part.index("]")]
 
                 if arr_name:
-                    current = current.get(arr_name) if isinstance(current, dict) else None
+                    current = (
+                        current.get(arr_name) if isinstance(current, dict) else None
+                    )
 
                 if not isinstance(current, list):
                     return None
 
                 if idx_str == "*":
                     # 遍历数组，获取下一级
-                    next_part = ".".join(parts[parts.index(part) + 1:])
+                    next_part = ".".join(parts[parts.index(part) + 1 :])
                     if next_part:
                         results = []
                         for item in current:
@@ -367,7 +376,15 @@ class CustomApiProvider(SetuImageProvider):
             elif isinstance(obj, dict):
                 for key, value in obj.items():
                     # 优先检查可能的 URL 键
-                    if key.lower() in ("url", "link", "src", "image", "img", "original", "regular"):
+                    if key.lower() in (
+                        "url",
+                        "link",
+                        "src",
+                        "image",
+                        "img",
+                        "original",
+                        "regular",
+                    ):
                         if isinstance(value, str) and self._is_image_url(value):
                             urls.append(value)
                     else:
@@ -474,7 +491,11 @@ def get_provider(
 
     if api_type == "custom":
         # 优先使用新的 template_list 配置格式
-        if custom_api_configs and isinstance(custom_api_configs, list) and len(custom_api_configs) > 0:
+        if (
+            custom_api_configs
+            and isinstance(custom_api_configs, list)
+            and len(custom_api_configs) > 0
+        ):
             if len(custom_api_configs) == 1:
                 # 只有一个配置，直接使用
                 cfg = custom_api_configs[0]
