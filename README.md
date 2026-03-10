@@ -2,7 +2,7 @@
 
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/FlanChanXwO/astrbot_plugin_status/master/logo.png" width="400" alt="Setu 插件"/>
+<img src="https://raw.githubusercontent.com/FlanChanXwO/astrbot_plugin_setu/master/logo.png" width="400" alt="Setu 插件"/>
 
 **一个支持多平台、可自定义、带防审核机制的随机色图插件，支持多 API、HTML 卡片包装、LLM 工具调用。**
 
