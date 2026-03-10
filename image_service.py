@@ -243,79 +243,12 @@ class ImageService:
         self._tcp_connector_limit = max(10, tcp_connector_limit)
         self._tcp_connector_limit_per_host = max(5, tcp_connector_limit_per_host)
 
-    def _is_safe_url(self, url: str) -> bool:
-        """检查 URL 是否安全，防止 SSRF 攻击。
-
-        禁止访问内网地址和敏感协议。包含 DNS 解析后私网校验。
-        """
-        if not url:
-            return False
-        try:
-            parsed = urlparse(url)
-            # 只允许 http/https 协议
-            if parsed.scheme not in ("http", "https"):
-                logger.warning("[ssrf] blocked non-http(s) url: %s", url)
-                return False
-
-            hostname = parsed.hostname or ""
-            # 禁止 localhost
-            if hostname in ("localhost", "127.0.0.1", "0.0.0.0", "::1"):
-                logger.warning("[ssrf] blocked localhost url: %s", url)
-                return False
-
-            # 禁止内网 IP 地址（字面量）
-            try:
-                ip = ipaddress.ip_address(hostname)
-                if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_multicast:
-                    logger.warning("[ssrf] blocked private ip url: %s", url)
-                    return False
-            except ValueError:
-                # 不是 IP 地址，是域名，继续检查
-                pass
-
-            # 禁止常见内网域名模式
-            if hostname.startswith(("10.", "172.16.", "172.17.", "172.18.",
-                                    "172.19.", "172.20.", "172.21.", "172.22.",
-                                    "172.23.", "172.24.", "172.25.", "172.26.",
-                                    "172.27.", "172.28.", "172.29.", "172.30.",
-                                    "172.31.", "192.168.")):
-                logger.warning("[ssrf] blocked internal network url: %s", url)
-                return False
-
-            # DNS 解析后私网校验：对域名进行 DNS 解析，检查解析后的 IP 是否是内网地址
-            try:
-                # 只解析 IPv4 地址
-                resolved_ips = socket.getaddrinfo(hostname, None, socket.AF_INET)
-                for _, _, _, _, sockaddr in resolved_ips:
-                    ip_str = sockaddr[0]
-                    try:
-                        ip = ipaddress.ip_address(ip_str)
-                        if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_multicast:
-                            logger.warning("[ssrf] blocked resolved private ip %s for hostname %s", ip_str, hostname)
-                            return False
-                    except ValueError:
-                        continue
-            except (socket.gaierror, socket.herror):
-                # DNS 解析失败，不阻止，让后续请求处理
-                pass
-            except Exception as exc:
-                logger.debug("[ssrf] dns resolution check error: %s", exc)
-
-            return True
-        except Exception as exc:
-            logger.warning("[ssrf] url parse error: %s - %s", url, exc)
-            return False
 
     async def download_single(
         self, session: aiohttp.ClientSession, url: str
     ) -> bytes | None:
         """下载单张图片，支持缓存、并发控制和大小限制。"""
         if not url:
-            return None
-
-        # SSRF 防护：检查 URL 安全性
-        if not self._is_safe_url(url):
-            logger.warning("[ssrf] rejected unsafe url: %s", url)
             return None
 
         if self._cache:
