@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-import ipaddress
 import random
-import socket
 from typing import Any
-from urllib.parse import quote, urlparse
+from urllib.parse import quote
 
 import aiohttp
 

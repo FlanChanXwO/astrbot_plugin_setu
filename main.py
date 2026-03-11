@@ -45,6 +45,7 @@ class SetuPlugin(Star):
 
     async def initialize(self) -> None:
         """初始化插件，注册 LLM 工具。"""
+        # 注册获取色图工具
         try:
             llm_tools.add_func(
                 name="get_setu_image",
@@ -72,7 +73,49 @@ class SetuPlugin(Star):
             if tool:
                 tool.handler_module_path = __name__
         except (AttributeError, RuntimeError):
-            logger.exception("LLM tool registration failed")
+            logger.exception("LLM tool registration failed for get_setu_image")
+
+        # 注册查看内容分级工具
+        try:
+            llm_tools.add_func(
+                name="get_setu_content_mode",
+                func_args=[],
+                desc=(
+                    "Get the current content mode (sfw/r18/mix) for this conversation. "
+                    "Use this when users ask about the current content rating or mode settings."
+                ),
+                handler=self._llm_get_content_mode_handler,
+            )
+            tool = llm_tools.get_func("get_setu_content_mode")
+            if tool:
+                tool.handler_module_path = __name__
+        except (AttributeError, RuntimeError):
+            logger.exception("LLM tool registration failed for get_setu_content_mode")
+
+        # 注册设置内容分级工具
+        try:
+            llm_tools.add_func(
+                name="set_setu_content_mode",
+                func_args=[
+                    {
+                        "name": "mode",
+                        "type": "string",
+                        "description": "Content mode to set: 'sfw' (safe for work), 'r18' (adult), 'mix' (random), or 'clear' (reset to global).",
+                        "enum": ["sfw", "r18", "mix", "clear"],
+                    },
+                ],
+                desc=(
+                    "Set the content mode (sfw/r18/mix/clear) for this conversation. "
+                    "Use this when users want to change the content rating. "
+                    "Requires admin privileges."
+                ),
+                handler=self._llm_set_content_mode_handler,
+            )
+            tool = llm_tools.get_func("set_setu_content_mode")
+            if tool:
+                tool.handler_module_path = __name__
+        except (AttributeError, RuntimeError):
+            logger.exception("LLM tool registration failed for set_setu_content_mode")
 
         try:
             cfg = SetuConfig(self.config)
@@ -86,6 +129,8 @@ class SetuPlugin(Star):
         """卸载插件，注销 LLM 工具。"""
         try:
             llm_tools.remove_func("get_setu_image")
+            llm_tools.remove_func("get_setu_content_mode")
+            llm_tools.remove_func("set_setu_content_mode")
         except (AttributeError, RuntimeError):
             logger.exception("LLM tool unregister failed")
 
@@ -120,6 +165,170 @@ class SetuPlugin(Star):
             return mcp.types.CallToolResult(
                 content=[
                     mcp.types.TextContent(type="text", text=f"获取图片失败：{str(e)}")
+                ]
+            )
+
+    async def _llm_get_content_mode_handler(
+        self,
+        event: AstrMessageEvent,
+    ) -> mcp.types.CallToolResult:
+        """LLM 工具处理器：查看当前内容分级。"""
+        if not self._core:
+            return mcp.types.CallToolResult(
+                content=[
+                    mcp.types.TextContent(
+                        type="text", text="插件尚未就绪，请稍后再试。"
+                    )
+                ]
+            )
+        try:
+            session_id = event.get_session_id()
+            is_group = bool(event.get_group_id())
+
+            # 获取会话级别的覆盖配置
+            session_mode = await self._core.session_config.get_session_content_mode(
+                session_id, is_group
+            )
+            # 获取全局配置
+            global_mode = self._core.config.content_mode
+            # 获取实际生效的模式
+            effective_mode = await self._core.get_effective_content_mode(event)
+
+            session_type = "群聊" if is_group else "私聊"
+
+            if session_mode:
+                msg = (
+                    f"当前{session_type}的内容分级设置：\n"
+                    f"- 会话覆盖：{session_mode}\n"
+                    f"- 全局配置：{global_mode}\n"
+                    f"- 生效模式：{effective_mode}\n\n"
+                    f"说明：此会话已设置独立的内容分级，优先于全局配置。"
+                )
+            else:
+                msg = (
+                    f"当前{session_type}的内容分级设置：\n"
+                    f"- 会话覆盖：未设置（使用全局配置）\n"
+                    f"- 全局配置：{global_mode}\n"
+                    f"- 生效模式：{effective_mode}\n\n"
+                    f"说明：此会话使用全局内容分级配置。"
+                )
+
+            return mcp.types.CallToolResult(
+                content=[mcp.types.TextContent(type="text", text=msg)]
+            )
+        except Exception as e:
+            logger.exception("LLM 工具查看内容分级失败")
+            return mcp.types.CallToolResult(
+                content=[
+                    mcp.types.TextContent(type="text", text=f"查看内容分级失败：{str(e)}")
+                ]
+            )
+
+    async def _llm_set_content_mode_handler(
+        self,
+        event: AstrMessageEvent,
+        mode: str | dict | None = None,
+    ) -> mcp.types.CallToolResult:
+        """LLM 工具处理器：设置内容分级。"""
+        if not self._core:
+            return mcp.types.CallToolResult(
+                content=[
+                    mcp.types.TextContent(
+                        type="text", text="插件尚未就绪，请稍后再试。"
+                    )
+                ]
+            )
+
+        # 检查权限（管理员或超级管理员）
+        is_admin = False
+        try:
+            if hasattr(event, "is_admin") and callable(getattr(event, "is_admin")):
+                is_admin = event.is_admin()
+            if (
+                not is_admin
+                and hasattr(event, "is_super_user")
+                and callable(getattr(event, "is_super_user"))
+            ):
+                is_admin = event.is_super_user()
+            if not is_admin and hasattr(event, "message_obj"):
+                msg_obj = event.message_obj
+                if hasattr(msg_obj, "sender") and hasattr(msg_obj.sender, "role"):
+                    role = msg_obj.sender.role
+                    if role in ("admin", "owner"):
+                        is_admin = True
+        except AttributeError:
+            pass
+
+        if not is_admin:
+            return mcp.types.CallToolResult(
+                content=[
+                    mcp.types.TextContent(
+                        type="text", text="❌ 权限不足：设置内容分级需要管理员或超级管理员权限。"
+                    )
+                ]
+            )
+
+        try:
+            # 处理可能被包装成字典的参数
+            if isinstance(mode, dict):
+                mode = mode.get("value", "")
+            if not mode:
+                return mcp.types.CallToolResult(
+                    content=[
+                        mcp.types.TextContent(
+                            type="text", text="❌ 请指定要设置的内容分级：sfw（全年龄）、r18（成人）、mix（混合）或 clear（清除设置）。"
+                        )
+                    ]
+                )
+
+            mode = str(mode).strip().lower()
+
+            if mode not in ("sfw", "r18", "mix", "clear"):
+                return mcp.types.CallToolResult(
+                    content=[
+                        mcp.types.TextContent(
+                            type="text",
+                            text=f"❌ 无效的模式 '{mode}'。\n可用模式：sfw（全年龄）、r18（成人）、mix（混合）、clear（清除设置）"
+                        )
+                    ]
+                )
+
+            session_id = event.get_session_id()
+            is_group = bool(event.get_group_id())
+            session_type = "群聊" if is_group else "私聊"
+
+            if mode == "clear":
+                success = await self._core.session_config.clear_session_content_mode(
+                    session_id, is_group
+                )
+                if success:
+                    global_mode = self._core.config.content_mode
+                    msg = (
+                        f"✅ 已清除当前{session_type}的内容分级设置，将使用全局配置。\n"
+                        f"当前全局配置为：{global_mode}"
+                    )
+                else:
+                    msg = "ℹ️ 当前会话没有设置覆盖，已在使用全局配置。"
+            else:
+                success = await self._core.session_config.set_session_content_mode(
+                    session_id, is_group, mode
+                )
+                if success:
+                    msg = (
+                        f"✅ 已将当前{session_type}的内容分级设置为：{mode}\n"
+                        f"此后发送的图片将使用此模式（优先于全局配置）。"
+                    )
+                else:
+                    msg = "❌ 设置失败，请稍后再试。"
+
+            return mcp.types.CallToolResult(
+                content=[mcp.types.TextContent(type="text", text=msg)]
+            )
+        except Exception as e:
+            logger.exception("LLM 工具设置内容分级失败")
+            return mcp.types.CallToolResult(
+                content=[
+                    mcp.types.TextContent(type="text", text=f"设置内容分级失败：{str(e)}")
                 ]
             )
 

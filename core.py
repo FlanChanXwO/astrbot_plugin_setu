@@ -145,9 +145,12 @@ class SetuCore:
         self._session_config = SessionConfigManager(plugin_data_dir)
         self._revoke_tasks: set[asyncio.Task] = set()
 
-        if config.enable_html_card:
-            template_path = Path(__file__).parent / "templates" / "main.html"
+        # 总是初始化 HTML 渲染器，以便在发送失败时作为降级方案使用
+        template_path = Path(__file__).parent / "templates" / "main.html"
+        if template_path.exists():
             self._html_renderer = HtmlCardRenderer(template_path)
+        else:
+            logger.warning("[init] HTML template not found at %s, html card fallback disabled", template_path)
 
     async def initialize(self) -> None:
         """初始化缓存和依赖服务。"""
@@ -846,10 +849,38 @@ class SetuCore:
             except (RuntimeError, ValueError, ConnectionError):
                 logger.exception("html card send failed, fallback to regular send")
 
-        async for result in self._send_images_fallback(
+        # 尝试普通发送，基于 message_id 判断是否成功
+        message_id, send_success = await self._try_send_with_message_id(
             event, images, actual_send_mode, auto_revoke
-        ):
-            yield result
+        )
+
+        if send_success:
+            # 发送成功，已经通过 _try_send_with_message_id 处理了撤回逻辑
+            if cfg.msg_found_enabled and not auto_revoke:
+                yield event.plain_result(cfg.format_found_message(len(images)))
+            return
+
+        # 发送失败（没有获取到 message_id），尝试 HTML 卡片降级
+        logger.warning(
+            "[send-fallback] regular send failed (no message_id), trying html card"
+        )
+
+        if self._html_renderer:
+            try:
+                yield event.plain_result("图片发送可能失败，正在尝试使用 HTML 卡片发送...")
+                async for result in self._send_with_html_card(
+                    event, images, actual_send_mode, auto_revoke
+                ):
+                    yield result
+            except (RuntimeError, ValueError, ConnectionError) as exc:
+                logger.exception("html card fallback failed: %s", exc)
+                yield event.plain_result(
+                    "图片发送失败，HTML 卡片发送也失败了，请稍后再试。"
+                )
+        else:
+            yield event.plain_result(
+                "图片发送失败，请稍后再试或联系管理员。"
+            )
 
     async def _send_with_html_card(
         self,
@@ -1095,6 +1126,106 @@ class SetuCore:
                     event, images, found_message
                 ):
                     yield result
+
+    async def _try_send_with_message_id(
+        self,
+        event: AstrMessageEvent,
+        images: list[bytes],
+        send_mode: str,
+        auto_revoke: bool,
+    ) -> tuple[str | None, bool]:
+        """尝试发送图片并获取 message_id 以确认发送成功。
+
+        返回:
+            tuple: (message_id, send_success)
+            - message_id: 成功时返回消息ID，失败时返回 None
+            - send_success: 是否发送成功（获取到 message_id）
+        """
+        if not self._image_service:
+            logger.error("image service unavailable")
+            return None, False
+
+        cfg = self.config
+        is_group = bool(event.get_group_id())
+        session_id = event.get_group_id() or event.get_sender_id()
+
+        if send_mode == "forward":
+            # 转发模式
+            nodes = []
+            for img_data in images:
+                node = Comp.Node(
+                    uin=event.get_self_id(),
+                    name="色图",
+                    content=[Comp.Image.fromBytes(img_data)],
+                )
+                nodes.append(node)
+
+            if auto_revoke:
+                # 自动撤回模式：使用 _send_nodes_with_revoke 获取 message_id
+                message_id = await self._send_nodes_with_revoke(event, nodes)
+                if message_id:
+                    await self._schedule_revoke(event, message_id, cfg.auto_revoke_delay)
+                    if cfg.msg_found_enabled:
+                        notice = f"{cfg.format_found_message(len(images))}\n将在 {cfg.auto_revoke_delay} 秒后自动撤回~"
+                        await event.send_result(event.plain_result(notice))
+                    logger.info(
+                        "[r18] Scheduled forward revoke in %ds, message_id=%s",
+                        cfg.auto_revoke_delay,
+                        message_id,
+                    )
+                    return message_id, True
+                else:
+                    logger.warning("[send-check] forward send returned no message_id")
+                    return None, False
+            else:
+                # 非自动撤回模式：尝试获取 message_id
+                message_id = await self._send_nodes_with_revoke(event, nodes)
+                if message_id:
+                    logger.debug("[send-check] forward send success, message_id=%s", message_id)
+                    return message_id, True
+                else:
+                    logger.warning("[send-check] forward send returned no message_id, will trigger html card fallback")
+                    return None, False  # 返回失败，让调用者处理降级
+        else:
+            # 普通图片模式
+            found_message = (
+                cfg.format_found_message(len(images)) if cfg.msg_found_enabled else None
+            )
+            chain: list[Any] = []
+            if found_message:
+                chain.append(Comp.Plain(found_message))
+            for img_data in images:
+                chain.append(Comp.Image.fromBytes(img_data))
+
+            if auto_revoke:
+                # 自动撤回模式：使用 _send_with_revoke_support 获取 message_id
+                message_id = await self._send_with_revoke_support(
+                    event, chain, is_group, session_id
+                )
+                if message_id:
+                    await self._schedule_revoke(event, message_id, cfg.auto_revoke_delay)
+                    notice = f"R18 内容已发送，将在 {cfg.auto_revoke_delay} 秒后自动撤回~"
+                    await event.send_result(event.plain_result(notice))
+                    logger.info(
+                        "[r18] Scheduled image revoke in %ds, message_id=%s",
+                        cfg.auto_revoke_delay,
+                        message_id,
+                    )
+                    return message_id, True
+                else:
+                    logger.warning("[send-check] image send returned no message_id")
+                    return None, False
+            else:
+                # 非自动撤回模式：尝试获取 message_id
+                message_id = await self._send_with_revoke_support(
+                    event, chain, is_group, session_id
+                )
+                if message_id:
+                    logger.debug("[send-check] image send success, message_id=%s", message_id)
+                    return message_id, True
+                else:
+                    logger.warning("[send-check] image send returned no message_id, will trigger html card fallback")
+                    return None, False  # 返回失败，让调用者处理降级
 
     async def _send_event_result_to_origin(
         self, event: AstrMessageEvent, result: Any

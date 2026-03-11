@@ -60,7 +60,7 @@
       "auto_handle_send_failure": {
         "type": "bool",
         "description": "自动处理消息发送失败",
-        "hint": "当图片发送失败时，自动尝试 HTML 卡片渲染绕过审核。",
+        "hint": "当图片发送失败（无法获取message_id）时，自动尝试 HTML 卡片渲染绕过审核。",
         "default": true
       },
       "auto_revoke_r18": {
@@ -129,8 +129,8 @@
       "max_items": {
         "type": "int",
         "description": "最大缓存图片数",
-        "hint": "默认只保留 1 条图片缓存。",
-        "default": 1
+        "hint": "默认只保留 200 条图片缓存。",
+        "default": 200
       },
       "cleanup_on_start": {
         "type": "bool",

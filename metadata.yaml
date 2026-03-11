@@ -1,6 +1,6 @@
 name: astrbot_plugin_setu
 display_name: 瑟瑟！
-version: v1.0.2
+version: v1.0.3
 author: FlanChanXwO
 desc: 随机福利图插件，支持标签与数量，以及图片分级控制，可以针对于特定平台配置概率绕过审核的发送方式。
 repo: https://github.com/FlanChanXwO/astrbot_plugin_setu

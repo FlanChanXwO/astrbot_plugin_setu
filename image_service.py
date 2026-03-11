@@ -4,13 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import ipaddress
 import json
-import socket
 import time
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
 
 import aiohttp
 
@@ -18,7 +15,6 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
 from astrbot.api.message_components import Image, Node, Nodes, Plain
 
-from .constants import HTTP_TIMEOUT_SECONDS
 from .utils import obfuscate_image_bytes
 
 # Image download headers.
