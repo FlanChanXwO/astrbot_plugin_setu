@@ -16,6 +16,10 @@ class DocxService:
     def __init__(self):
         self._has_dependency = self._check_dependency()
 
+    async def initialize(self) -> None:
+        """初始化 Docx 服务（异步占位，实际初始化在 __init__ 完成）。"""
+        pass
+
     def _check_dependency(self) -> bool:
         """检查 python-docx 是否已安装。"""
         try:

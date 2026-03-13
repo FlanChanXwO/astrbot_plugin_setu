@@ -67,9 +67,26 @@ class LlmHandlers:
             if isinstance(tags, dict):
                 tags = tags.get("value", [])
 
-            success, message = await self.core.handle_llm_tool(event, int(count), tags)
+            # 调用命令处理器，走与普通命令相同的逻辑
+            from .command_handlers import CommandHandler
+            cmd_handler = CommandHandler(self.core, self.core.config)
+
+            # 构建 tags 字符串
+            tags_str = " ".join(tags) if isinstance(tags, list) else str(tags or "")
+
+            async for result in cmd_handler.handle_setu_command(
+                event, count=str(count), tags=tags_str
+            ):
+                if result is not None:
+                    try:
+                        await self.plugin.context.send_message(
+                            event.unified_msg_origin, result
+                        )
+                    except Exception as exc:
+                        logger.warning("[llm_tool] Failed to send: %s", exc)
+
             return mcp.types.CallToolResult(
-                content=[mcp.types.TextContent(type="text", text=message)]
+                content=[mcp.types.TextContent(type="text", text="图片已发送")]
             )
         except (TypeError, ValueError, RuntimeError) as e:
             logger.exception("LLM 工具获取色图失败")
