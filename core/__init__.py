@@ -308,7 +308,9 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
                         )
                         if cfg.msg_found_enabled:
                             yield event.plain_result(
-                                cfg.format_found_message(len(images), cfg.auto_revoke_delay)
+                                cfg.format_found_message(
+                                    len(images), cfg.auto_revoke_delay
+                                )
                             )
                         send_success = True
                 else:
@@ -331,7 +333,9 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
                         )
                         if cfg.msg_found_enabled:
                             yield event.plain_result(
-                                cfg.format_found_message(len(images), cfg.auto_revoke_delay)
+                                cfg.format_found_message(
+                                    len(images), cfg.auto_revoke_delay
+                                )
                             )
                         send_success = True
                 else:
@@ -392,18 +396,26 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
             )
             if image_url:
                 try:
-                    downloaded = await self._image_service.download_parallel([image_url])
+                    downloaded = await self._image_service.download_parallel(
+                        [image_url]
+                    )
                     if downloaded:
                         html_image_data.extend(downloaded)
                 except Exception as exc:
-                    logger.warning("[html-card] failed to download rendered image: %s", exc)
+                    logger.warning(
+                        "[html-card] failed to download rendered image: %s", exc
+                    )
 
         if not html_image_data:
             yield event.plain_result("HTML 卡片渲染失败")
             return
 
         # 发送渲染后的 HTML 卡片图片
-        found_message = cfg.format_found_message(len(html_image_data)) if cfg.msg_found_enabled else None
+        found_message = (
+            cfg.format_found_message(len(html_image_data))
+            if cfg.msg_found_enabled
+            else None
+        )
 
         if send_mode == "forward":
             nodes = []
@@ -418,10 +430,14 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
             if auto_revoke:
                 message_id = await self._send_nodes_with_revoke(event, nodes)
                 if message_id:
-                    await self._schedule_revoke(event, message_id, cfg.auto_revoke_delay)
+                    await self._schedule_revoke(
+                        event, message_id, cfg.auto_revoke_delay
+                    )
                     if cfg.msg_found_enabled:
                         yield event.plain_result(
-                            cfg.format_found_message(len(html_image_data), cfg.auto_revoke_delay)
+                            cfg.format_found_message(
+                                len(html_image_data), cfg.auto_revoke_delay
+                            )
                         )
                     return
 
@@ -432,14 +448,20 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
             if auto_revoke:
                 chain = [Comp.Image.fromBytes(img) for img in html_image_data]
                 message_id = await self._send_with_revoke_support(
-                    event, chain, bool(event.get_group_id()),
-                    event.get_group_id() or event.get_sender_id()
+                    event,
+                    chain,
+                    bool(event.get_group_id()),
+                    event.get_group_id() or event.get_sender_id(),
                 )
                 if message_id:
-                    await self._schedule_revoke(event, message_id, cfg.auto_revoke_delay)
+                    await self._schedule_revoke(
+                        event, message_id, cfg.auto_revoke_delay
+                    )
                     if cfg.msg_found_enabled:
                         yield event.plain_result(
-                            cfg.format_found_message(len(html_image_data), cfg.auto_revoke_delay)
+                            cfg.format_found_message(
+                                len(html_image_data), cfg.auto_revoke_delay
+                            )
                         )
                     return
 
