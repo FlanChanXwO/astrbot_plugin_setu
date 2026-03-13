@@ -17,7 +17,10 @@ class DocxService:
         self._has_dependency = self._check_dependency()
 
     async def initialize(self) -> None:
-        """初始化 Docx 服务（异步占位，实际初始化在 __init__ 完成）。"""
+        """初始化 Docx 服务（统一初始化接口占位）。
+
+        实际依赖检查已在 __init__ 完成，此方法供 SetuCore 统一调用。
+        """
         pass
 
     def _check_dependency(self) -> bool:
