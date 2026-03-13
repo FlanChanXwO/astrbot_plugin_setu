@@ -29,7 +29,7 @@ class SessionConfigManager:
     """
 
     # 允许会话覆盖的配置项
-    ALLOWED_KEYS = {"content_mode"}
+    ALLOWED_KEYS = {"content_mode", "r18_docx_mode", "auto_revoke_r18"}
 
     # 有效的内容模式值
     VALID_CONTENT_MODES = {"sfw", "r18", "mix"}
@@ -223,6 +223,88 @@ class SessionConfigManager:
             清除成功返回 True，否则返回 False
         """
         return await self.clear_config(session_id, is_group, "content_mode")
+
+    async def get_session_r18_docx_mode(
+        self, session_id: str, is_group: bool
+    ) -> bool | None:
+        """获取会话的 R18 Docx 模式设置。
+
+        参数:
+            session_id: 会话ID
+            is_group: 是否为群聊
+
+        返回:
+            R18 Docx 模式设置 (True/False)，如果未设置则返回 None
+        """
+        return await self.get_config(session_id, is_group, "r18_docx_mode")
+
+    async def set_session_r18_docx_mode(
+        self, session_id: str, is_group: bool, enabled: bool
+    ) -> bool:
+        """设置会话的 R18 Docx 模式。
+
+        参数:
+            session_id: 会话ID
+            is_group: 是否为群聊
+            enabled: 是否启用 R18 Docx 模式
+
+        返回:
+            设置成功返回 True，否则返回 False
+        """
+        return await self.set_config(session_id, is_group, "r18_docx_mode", bool(enabled))
+
+    async def clear_session_r18_docx_mode(self, session_id: str, is_group: bool) -> bool:
+        """清除会话的 R18 Docx 模式设置。
+
+        参数:
+            session_id: 会话ID
+            is_group: 是否为群聊
+
+        返回:
+            清除成功返回 True，否则返回 False
+        """
+        return await self.clear_config(session_id, is_group, "r18_docx_mode")
+
+    async def get_session_auto_revoke_r18(
+        self, session_id: str, is_group: bool
+    ) -> bool | None:
+        """获取会话的自动撤回 R18 设置。
+
+        参数:
+            session_id: 会话ID
+            is_group: 是否为群聊
+
+        返回:
+            自动撤回设置 (True/False)，如果未设置则返回 None
+        """
+        return await self.get_config(session_id, is_group, "auto_revoke_r18")
+
+    async def set_session_auto_revoke_r18(
+        self, session_id: str, is_group: bool, enabled: bool
+    ) -> bool:
+        """设置会话的自动撤回 R18。
+
+        参数:
+            session_id: 会话ID
+            is_group: 是否为群聊
+            enabled: 是否启用自动撤回
+
+        返回:
+            设置成功返回 True，否则返回 False
+        """
+        return await self.set_config(session_id, is_group, "auto_revoke_r18", bool(enabled))
+
+    async def clear_session_auto_revoke_r18(self, session_id: str, is_group: bool) -> bool:
+        """清除会话的自动撤回 R18 设置。
+
+        参数:
+            session_id: 会话ID
+            is_group: 是否为群聊
+
+        返回:
+            清除成功返回 True，否则返回 False
+        """
+        return await self.clear_config(session_id, is_group, "auto_revoke_r18")
 
     async def cleanup_expired_sessions(self, max_age_days: int = 30) -> int:
         """清理超过指定天数的过期会话配置。
