@@ -242,7 +242,7 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
         is_r18: bool,
         tags: list[str] | None = None,
     ) -> AsyncGenerator[Any, None]:
-        """发送图片，失败时尝试 HTML 卡片降级发送（复用已下载的图片）。"""
+        """发送图片（简化版核心逻辑）。"""
         if not images:
             yield event.plain_result("运气不好，一张图都没拿到...")
             return
@@ -283,143 +283,14 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
             yield event.plain_result("R18 Docx 封装失败，请稍后再试或联系管理员。")
             return
 
-        # 尝试普通发送
+        # 普通发送逻辑
         found_message = (
             cfg.format_found_message(len(images)) if cfg.msg_found_enabled else None
         )
 
-        send_success = False
-        try:
-            if actual_send_mode == "forward":
-                nodes = []
-                for img_data in images:
-                    node = Comp.Node(
-                        uin=event.get_self_id(),
-                        name="色图",
-                        content=[Comp.Image.fromBytes(img_data)],
-                    )
-                    nodes.append(node)
-
-                if auto_revoke:
-                    message_id = await self._send_nodes_with_revoke(event, nodes)
-                    if message_id:
-                        await self._schedule_revoke(
-                            event, message_id, cfg.auto_revoke_delay
-                        )
-                        if cfg.msg_found_enabled:
-                            yield event.plain_result(
-                                cfg.format_found_message(
-                                    len(images), cfg.auto_revoke_delay
-                                )
-                            )
-                        send_success = True
-                else:
-                    if found_message:
-                        yield event.plain_result(found_message)
-                    yield event.chain_result([Comp.Nodes(nodes)])
-                    send_success = True
-            else:
-                if auto_revoke:
-                    chain = [Comp.Image.fromBytes(img) for img in images]
-                    message_id = await self._send_with_revoke_support(
-                        event,
-                        chain,
-                        bool(event.get_group_id()),
-                        event.get_group_id() or event.get_sender_id(),
-                    )
-                    if message_id:
-                        await self._schedule_revoke(
-                            event, message_id, cfg.auto_revoke_delay
-                        )
-                        if cfg.msg_found_enabled:
-                            yield event.plain_result(
-                                cfg.format_found_message(
-                                    len(images), cfg.auto_revoke_delay
-                                )
-                            )
-                        send_success = True
-                else:
-                    if found_message:
-                        yield event.plain_result(found_message)
-                    for img_data in images:
-                        yield event.chain_result([Comp.Image.fromBytes(img_data)])
-                    send_success = True
-        except Exception as exc:
-            logger.warning("send_images failed: %s, will try HTML card fallback", exc)
-            send_success = False
-
-        # 如果普通发送失败，尝试 HTML 卡片降级（使用已下载的图片）
-        if not send_success and cfg.enable_html_card:
-            logger.info("Attempting HTML card fallback with existing images")
-            if self._ensure_html_renderer():
-                try:
-                    async for result in self._send_with_html_card(
-                        event, images, actual_send_mode, auto_revoke
-                    ):
-                        yield result
-                    return
-                except Exception as exc:
-                    logger.exception("HTML card fallback failed: %s", exc)
-                    yield event.plain_result("图片发送失败，HTML 卡片发送也失败了。")
-            else:
-                logger.warning("HTML renderer not available for fallback")
-                yield event.plain_result("图片发送失败，请稍后再试。")
-        elif not send_success:
-            yield event.plain_result("图片发送失败，请稍后再试。")
-
-    async def _send_with_html_card(
-        self,
-        event: AstrMessageEvent,
-        images: list[bytes],
-        send_mode: str,
-        auto_revoke: bool = False,
-    ) -> AsyncGenerator[Any, None]:
-        """使用 HTML 卡片包装已下载的图片发送。"""
-        cfg = self._config
-
-        if not self._html_renderer or not self._image_service:
-            yield event.plain_result("HTML 渲染器不可用")
-            return
-
-        render_style = {
-            "card_padding": cfg.html_card_padding,
-            "card_gap": cfg.html_card_gap,
-        }
-
-        # 渲染 HTML 卡片
-        html_image_data: list[bytes] = []
-        for img_data in images:
-            image_url = await self._html_renderer.render_single_image(
-                context=self.plugin,
-                image=img_data,
-                style_options=render_style,
-            )
-            if image_url:
-                try:
-                    downloaded = await self._image_service.download_parallel(
-                        [image_url]
-                    )
-                    if downloaded:
-                        html_image_data.extend(downloaded)
-                except Exception as exc:
-                    logger.warning(
-                        "[html-card] failed to download rendered image: %s", exc
-                    )
-
-        if not html_image_data:
-            yield event.plain_result("HTML 卡片渲染失败")
-            return
-
-        # 发送渲染后的 HTML 卡片图片
-        found_message = (
-            cfg.format_found_message(len(html_image_data))
-            if cfg.msg_found_enabled
-            else None
-        )
-
-        if send_mode == "forward":
+        if actual_send_mode == "forward":
             nodes = []
-            for img_data in html_image_data:
+            for img_data in images:
                 node = Comp.Node(
                     uin=event.get_self_id(),
                     name="色图",
@@ -435,9 +306,7 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
                     )
                     if cfg.msg_found_enabled:
                         yield event.plain_result(
-                            cfg.format_found_message(
-                                len(html_image_data), cfg.auto_revoke_delay
-                            )
+                            cfg.format_found_message(len(images), cfg.auto_revoke_delay)
                         )
                     return
 
@@ -446,7 +315,7 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
             yield event.chain_result([Comp.Nodes(nodes)])
         else:
             if auto_revoke:
-                chain = [Comp.Image.fromBytes(img) for img in html_image_data]
+                chain = [Comp.Image.fromBytes(img) for img in images]
                 message_id = await self._send_with_revoke_support(
                     event,
                     chain,
@@ -459,15 +328,13 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
                     )
                     if cfg.msg_found_enabled:
                         yield event.plain_result(
-                            cfg.format_found_message(
-                                len(html_image_data), cfg.auto_revoke_delay
-                            )
+                            cfg.format_found_message(len(images), cfg.auto_revoke_delay)
                         )
                     return
 
             if found_message:
                 yield event.plain_result(found_message)
-            for img_data in html_image_data:
+            for img_data in images:
                 yield event.chain_result([Comp.Image.fromBytes(img_data)])
 
     async def handle_llm_tool(

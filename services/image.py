@@ -36,18 +36,14 @@ class ImageService:
         cache: UrlImageDiskCache | None = None,
         concurrent_limit: int = 10,
         timeout_seconds: int = 30,
-        tcp_connector_limit: int = 100,
-        tcp_connector_limit_per_host: int = 30,
-        enable_http2: bool = True,
+        tcp_connector_limit: int = 50,
+        tcp_connector_limit_per_host: int = 20,
     ):
         self._cache = cache
-        # 增加并发限制，提高下载速度
         self._download_semaphore = asyncio.Semaphore(max(1, concurrent_limit))
         self._timeout_seconds = max(10, timeout_seconds)
-        # 增加连接池限制以提高高并发下载性能
-        self._tcp_connector_limit = max(50, tcp_connector_limit)
-        self._tcp_connector_limit_per_host = max(20, tcp_connector_limit_per_host)
-        self._enable_http2 = enable_http2
+        self._tcp_connector_limit = max(10, tcp_connector_limit)
+        self._tcp_connector_limit_per_host = max(5, tcp_connector_limit_per_host)
 
     async def download_single(
         self, session: aiohttp.ClientSession, url: str
@@ -120,26 +116,16 @@ class ImageService:
         return data
 
     async def download_parallel(self, urls: list[str]) -> list[bytes]:
-        """并发下载多张图片，优化版本。"""
+        """并发下载多张图片。"""
         if not urls:
             return []
 
-        # 使用更激进的超时设置
-        timeout = aiohttp.ClientTimeout(
-            total=self._timeout_seconds,
-            connect=5,  # 减少连接超时时间
-            sock_read=10,  # 减少读取超时时间
-        )
-
-        # 优化 TCP 连接器配置
+        timeout = aiohttp.ClientTimeout(total=self._timeout_seconds, connect=10)
         connector = aiohttp.TCPConnector(
             limit=self._tcp_connector_limit,
             limit_per_host=self._tcp_connector_limit_per_host,
             enable_cleanup_closed=True,
             force_close=False,
-            ttl_dns_cache=300,  # DNS 缓存 5 分钟
-            use_dns_cache=True,
-            family=0,  # 允许 IPv4 和 IPv6
         )
 
         try:
@@ -148,7 +134,6 @@ class ImageService:
                 connector=connector,
                 headers=DEFAULT_HEADERS,
             ) as session:
-                # 使用 asyncio.wait 配合 return_when=ALL_COMPLETED 可能会更快
                 tasks = [self.download_single(session, url) for url in urls]
                 results = await asyncio.gather(*tasks, return_exceptions=True)
         except Exception as exc:
