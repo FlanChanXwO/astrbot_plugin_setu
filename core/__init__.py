@@ -30,7 +30,7 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
         self.data_dir = data_dir
         self._revoke_manager = RevokeManager(data_dir)
         self._session_config = SessionConfigManager(data_dir)
-        self._docx_service = DocxService(data_dir)
+        self._docx_service = DocxService()
         self._revoke_tasks: set[asyncio.Task] = set()
         self._cache: UrlImageDiskCache | None = None
         self._image_service: ImageService | None = None

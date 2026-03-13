@@ -24,6 +24,25 @@ class LlmHandlers:
         """获取核心实例。"""
         return self.plugin._core
 
+    def _check_admin(self, event: AstrMessageEvent) -> bool:
+        """检查用户是否为管理员。"""
+        try:
+            if hasattr(event, "is_admin") and callable(getattr(event, "is_admin")):
+                if event.is_admin():
+                    return True
+            if hasattr(event, "is_super_user") and callable(getattr(event, "is_super_user")):
+                if event.is_super_user():
+                    return True
+            if hasattr(event, "message_obj"):
+                msg_obj = event.message_obj
+                if hasattr(msg_obj, "sender") and hasattr(msg_obj.sender, "role"):
+                    role = msg_obj.sender.role
+                    if role in ("admin", "owner"):
+                        return True
+        except AttributeError:
+            pass
+        return False
+
     async def _llm_get_setu_handler(
         self,
         event: AstrMessageEvent,
@@ -130,7 +149,7 @@ class LlmHandlers:
             )
 
         # 检查权限（管理员或超级管理员）
-        if not self.plugin._check_admin(event):
+        if not self._check_admin(event):
             return mcp.types.CallToolResult(
                 content=[
                     mcp.types.TextContent(
@@ -217,7 +236,7 @@ class LlmHandlers:
                 ]
             )
 
-        if not self.plugin._check_admin(event):
+        if not self._check_admin(event):
             return mcp.types.CallToolResult(
                 content=[
                     mcp.types.TextContent(
@@ -290,7 +309,7 @@ class LlmHandlers:
                 ]
             )
 
-        if not self.plugin._check_admin(event):
+        if not self._check_admin(event):
             return mcp.types.CallToolResult(
                 content=[
                     mcp.types.TextContent(
