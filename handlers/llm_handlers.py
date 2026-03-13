@@ -7,6 +7,8 @@ import mcp.types
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
 
+from .command_handlers import CommandHandler
+
 
 class LlmHandlers:
     """LLM 工具处理器集合。"""
@@ -18,11 +20,19 @@ class LlmHandlers:
             plugin: SetuPlugin 实例
         """
         self.plugin = plugin
+        self._cmd_handler: CommandHandler | None = None
 
     @property
     def core(self):
         """获取核心实例。"""
         return self.plugin._core
+
+    @property
+    def cmd_handler(self) -> CommandHandler:
+        """获取命令处理器（惰性初始化）。"""
+        if self._cmd_handler is None:
+            self._cmd_handler = CommandHandler(self.core, self.core.config)
+        return self._cmd_handler
 
     def _check_admin(self, event: AstrMessageEvent) -> bool:
         """检查用户是否为管理员。"""
@@ -66,6 +76,49 @@ class LlmHandlers:
                 count = count.get("value", 1)
             if isinstance(tags, dict):
                 tags = tags.get("value", [])
+
+            # 构建 tags 字符串，确保所有元素为字符串
+            if isinstance(tags, list):
+                tags_str = " ".join(str(tag) for tag in tags)
+            else:
+                tags_str = str(tags or "")
+
+            # 跟踪发送结果
+            sent_count = 0
+            has_error = False
+
+            async for result in self.cmd_handler.handle_setu_command(
+                event, count=str(count), tags=tags_str
+            ):
+                if result is not None:
+                    try:
+                        await self.plugin.context.send_message(
+                            event.unified_msg_origin, result
+                        )
+                        sent_count += 1
+                    except Exception as exc:
+                        has_error = True
+                        logger.warning("[llm_tool] Failed to send: %s", exc)
+
+            # 根据实际结果返回不同消息
+            if sent_count == 0:
+                if has_error:
+                    msg = "图片发送失败"
+                else:
+                    msg = "没有获取到图片或发送被阻止"
+            else:
+                msg = f"已成功发送 {sent_count} 张图片"
+
+            return mcp.types.CallToolResult(
+                content=[mcp.types.TextContent(type="text", text=msg)]
+            )
+        except (TypeError, ValueError, RuntimeError) as e:
+            logger.exception("LLM 工具获取色图失败")
+            return mcp.types.CallToolResult(
+                content=[
+                    mcp.types.TextContent(type="text", text=f"获取图片失败：{str(e)}")
+                ]
+            )
 
             # 调用命令处理器，走与普通命令相同的逻辑
             from .command_handlers import CommandHandler
