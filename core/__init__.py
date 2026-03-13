@@ -13,8 +13,8 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
 
 from ..config import SetuConfig
-from ..services import DocxService, HtmlCardRenderer, ImageService, UrlImageDiskCache
 from ..providers import get_provider
+from ..services import DocxService, HtmlCardRenderer, ImageService, UrlImageDiskCache
 from ..session_config import SessionConfigManager
 from .revoke_manager import RevokeManager
 from .revoke_tasks import RevokeTaskMixin
@@ -55,7 +55,7 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
                     max_items=self._config.cache_max_items,
                 )
                 if self._config.cache_cleanup_on_start:
-                    self._cache.cleanup_expired()
+                    await self._cache.cleanup_expired()
             self._image_service = ImageService(
                 self._cache,
                 concurrent_limit=self._config.download_concurrent_limit,
@@ -469,34 +469,3 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
                 yield event.plain_result(found_message)
             for img_data in html_image_data:
                 yield event.chain_result([Comp.Image.fromBytes(img_data)])
-
-    async def handle_llm_tool(
-        self, event: AstrMessageEvent, count: int, tags: list[str] | str | None
-    ) -> tuple[bool, str]:
-        """处理 LLM 工具调用。"""
-        cfg = self._config
-        if self.is_group_blocked(event):
-            return False, "该群聊已禁用此功能。"
-
-        try:
-            num = max(1, min(int(count), cfg.max_count))
-        except (ValueError, TypeError):
-            num = 1
-
-        if isinstance(tags, list):
-            parsed_tags = []
-            for tag in tags:
-                parsed_tags.extend(cfg.resolve_tags(str(tag).strip()))
-        else:
-            parsed_tags = cfg.resolve_tags(str(tags or ""))
-
-        effective_content_mode = await self.get_effective_content_mode(event)
-        is_r18 = self.determine_r18(effective_content_mode)
-        downloaded = await self.fetch_and_download_images(num, parsed_tags, is_r18)
-
-        if not downloaded:
-            return False, "未能获取到图片或图片下载失败。"
-
-        async for _ in self.send_images(event, downloaded, is_r18, parsed_tags):
-            pass
-        return True, f"已成功发送 {len(downloaded)} 张图片"
