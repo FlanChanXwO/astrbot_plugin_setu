@@ -42,25 +42,60 @@ class SetuPlugin(Star):
 
         # 注册 LLM 工具
         tools = [
-            ("get_setu_image", self._llm_handlers._llm_get_setu_handler, [
-                {"name": "count", "type": "integer", "description": "Number of images."},
-                {"name": "tags", "type": "array", "items": {"type": "string"}},
-            ], "Fetch random anime images."),
-            ("get_setu_content_mode", self._llm_handlers._llm_get_content_mode_handler, [], "Get content mode."),
-            ("set_setu_content_mode", self._llm_handlers._llm_set_content_mode_handler, [
-                {"name": "mode", "type": "string", "enum": ["sfw", "r18", "mix", "clear"]},
-            ], "Set content mode."),
-            ("set_setu_r18_docx_mode", self._llm_handlers._llm_set_r18_docx_mode_handler, [
-                {"name": "enabled", "type": "boolean"},
-            ], "Set R18 Docx mode."),
-            ("set_setu_auto_revoke", self._llm_handlers._llm_set_auto_revoke_handler, [
-                {"name": "enabled", "type": "boolean"},
-            ], "Set auto-revoke."),
+            (
+                "get_setu_image",
+                self._llm_handlers._llm_get_setu_handler,
+                [
+                    {
+                        "name": "count",
+                        "type": "integer",
+                        "description": "Number of images.",
+                    },
+                    {"name": "tags", "type": "array", "items": {"type": "string"}},
+                ],
+                "Fetch random anime images.",
+            ),
+            (
+                "get_setu_content_mode",
+                self._llm_handlers._llm_get_content_mode_handler,
+                [],
+                "Get content mode.",
+            ),
+            (
+                "set_setu_content_mode",
+                self._llm_handlers._llm_set_content_mode_handler,
+                [
+                    {
+                        "name": "mode",
+                        "type": "string",
+                        "enum": ["sfw", "r18", "mix", "clear"],
+                    },
+                ],
+                "Set content mode.",
+            ),
+            (
+                "set_setu_r18_docx_mode",
+                self._llm_handlers._llm_set_r18_docx_mode_handler,
+                [
+                    {"name": "enabled", "type": "boolean"},
+                ],
+                "Set R18 Docx mode.",
+            ),
+            (
+                "set_setu_auto_revoke",
+                self._llm_handlers._llm_set_auto_revoke_handler,
+                [
+                    {"name": "enabled", "type": "boolean"},
+                ],
+                "Set auto-revoke.",
+            ),
         ]
 
         for name, handler, args, desc in tools:
             try:
-                llm_tools.add_func(name=name, func_args=args, desc=desc, handler=handler)
+                llm_tools.add_func(
+                    name=name, func_args=args, desc=desc, handler=handler
+                )
                 tool = llm_tools.get_func(name)
                 if tool:
                     tool.handler_module_path = __name__
@@ -71,8 +106,13 @@ class SetuPlugin(Star):
         """卸载插件。"""
         if self._core:
             self._core.terminate()
-        for name in ["get_setu_image", "get_setu_content_mode", "set_setu_content_mode",
-                     "set_setu_r18_docx_mode", "set_setu_auto_revoke"]:
+        for name in [
+            "get_setu_image",
+            "get_setu_content_mode",
+            "set_setu_content_mode",
+            "set_setu_r18_docx_mode",
+            "set_setu_auto_revoke",
+        ]:
             try:
                 llm_tools.remove_func(name)
             except (AttributeError, RuntimeError):
@@ -89,7 +129,9 @@ class SetuPlugin(Star):
     async def setu_command(self, event, count: str = "1", *, tags: str = ""):
         """处理 /setu 命令。"""
         if self._cmd_handler:
-            async for result in self._cmd_handler.handle_setu_command(event, count, tags=tags):
+            async for result in self._cmd_handler.handle_setu_command(
+                event, count, tags=tags
+            ):
                 yield result
 
     @Star.filter.command("setu_mode")

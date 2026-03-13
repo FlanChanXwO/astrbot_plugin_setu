@@ -20,6 +20,7 @@ class DocxService:
         """检查 python-docx 是否已安装。"""
         try:
             import importlib.util
+
             return importlib.util.find_spec("docx") is not None
         except ImportError:
             logger.error("python-docx 未安装，请运行: pip install python-docx")

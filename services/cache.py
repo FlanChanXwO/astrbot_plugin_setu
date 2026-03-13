@@ -61,7 +61,9 @@ class UrlImageDiskCache:
             try:
                 data = cached_path.read_bytes()
             except OSError as exc:
-                logger.exception("[setu.cache] failed to read cache file key=%s: %s", key, exc)
+                logger.exception(
+                    "[setu.cache] failed to read cache file key=%s: %s", key, exc
+                )
                 self._remove_entry_locked(key, delete_file=True)
                 await self._save_index_locked()
                 return None
@@ -84,7 +86,9 @@ class UrlImageDiskCache:
             try:
                 file_path.write_bytes(data)
             except OSError as exc:
-                logger.exception("[setu.cache] failed to write cache file=%s: %s", file_path, exc)
+                logger.exception(
+                    "[setu.cache] failed to write cache file=%s: %s", file_path, exc
+                )
                 return
 
             entries = self._index.setdefault("entries", {})
@@ -100,7 +104,9 @@ class UrlImageDiskCache:
             self._index.setdefault("meta", {})["last_prune_removed"] = removed
             self._index["meta"]["last_update_at"] = now
             await self._save_index_locked()
-            logger.debug("[setu.cache] put key=%s size=%d removed=%d", key, len(data), removed)
+            logger.debug(
+                "[setu.cache] put key=%s size=%d removed=%d", key, len(data), removed
+            )
 
     async def cleanup_expired(self) -> int:
         """清理过期缓存。"""
@@ -144,7 +150,9 @@ class UrlImageDiskCache:
             )
             tmp_path.replace(self.index_path)
         except Exception as exc:
-            logger.exception("[setu.cache] failed to save index %s: %s", self.index_path, exc)
+            logger.exception(
+                "[setu.cache] failed to save index %s: %s", self.index_path, exc
+            )
             try:
                 if tmp_path.exists():
                     tmp_path.unlink()
@@ -156,7 +164,9 @@ class UrlImageDiskCache:
         entries = self._index.setdefault("entries", {})
         removed = 0
 
-        expired_keys = [k for k, v in entries.items() if int(v.get("expires_at", 0)) <= now]
+        expired_keys = [
+            k for k, v in entries.items() if int(v.get("expires_at", 0)) <= now
+        ]
         for key in expired_keys:
             self._remove_entry_locked(key, delete_file=True)
             removed += 1
@@ -164,7 +174,9 @@ class UrlImageDiskCache:
         if len(entries) > self.max_items:
             sorted_items = sorted(
                 entries.items(),
-                key=lambda item: int(item[1].get("last_hit", item[1].get("created_at", 0))),
+                key=lambda item: int(
+                    item[1].get("last_hit", item[1].get("created_at", 0))
+                ),
             )
             overflow = len(entries) - self.max_items
             for key, _ in sorted_items[:overflow]:
@@ -183,7 +195,9 @@ class UrlImageDiskCache:
             if cached_path.is_file():
                 cached_path.unlink()
         except Exception as exc:
-            logger.warning("[setu.cache] failed to remove cache file path=%s: %s", cached_path, exc)
+            logger.warning(
+                "[setu.cache] failed to remove cache file path=%s: %s", cached_path, exc
+            )
 
     @staticmethod
     def _url_key(url: str) -> str:

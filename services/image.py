@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import aiohttp
@@ -46,7 +45,9 @@ class ImageService:
         self._tcp_connector_limit = max(10, tcp_connector_limit)
         self._tcp_connector_limit_per_host = max(5, tcp_connector_limit_per_host)
 
-    async def download_single(self, session: aiohttp.ClientSession, url: str) -> bytes | None:
+    async def download_single(
+        self, session: aiohttp.ClientSession, url: str
+    ) -> bytes | None:
         """下载单张图片。"""
         if not url:
             return None
@@ -66,7 +67,9 @@ class ImageService:
                         logger.warning("image 404: %s", url)
                         return None
                     if not resp.ok:
-                        logger.warning("image download failed (%d): %s", resp.status, url)
+                        logger.warning(
+                            "image download failed (%d): %s", resp.status, url
+                        )
                         return None
 
                     content_length = resp.headers.get("Content-Length")
@@ -76,7 +79,9 @@ class ImageService:
                             if total_size > MAX_DOWNLOAD_SIZE_BYTES:
                                 logger.warning(
                                     "image too large (%d > %d): %s",
-                                    total_size, MAX_DOWNLOAD_SIZE_BYTES, url
+                                    total_size,
+                                    MAX_DOWNLOAD_SIZE_BYTES,
+                                    url,
                                 )
                                 return None
                         except (ValueError, TypeError):
@@ -89,7 +94,9 @@ class ImageService:
                         if total_read > MAX_DOWNLOAD_SIZE_BYTES:
                             logger.warning(
                                 "image download exceeds size limit (%d > %d): %s",
-                                total_read, MAX_DOWNLOAD_SIZE_BYTES, url
+                                total_read,
+                                MAX_DOWNLOAD_SIZE_BYTES,
+                                url,
                             )
                             return None
                         chunks.append(chunk)
@@ -143,7 +150,12 @@ class ImageService:
                 logger.warning("download task failed: %s", result)
         return downloaded
 
-    async def send_images(self, event: AstrMessageEvent, images: list[bytes], found_message: str | None = None):
+    async def send_images(
+        self,
+        event: AstrMessageEvent,
+        images: list[bytes],
+        found_message: str | None = None,
+    ):
         """将所有图片一次性发送，失败时尝试混淆重发。"""
         try:
             message_chain = [Plain(found_message)] if found_message else []
@@ -165,7 +177,9 @@ class ImageService:
             logger.exception("send_images obfuscated retry failed: %s", exc)
             yield event.plain_result("图片发送失败，可能被平台审核拦截。")
 
-    async def send_forward(self, event: AstrMessageEvent, images: list[bytes], bot_name: str = "Bot"):
+    async def send_forward(
+        self, event: AstrMessageEvent, images: list[bytes], bot_name: str = "Bot"
+    ):
         """以合并转发节点方式发送图片。"""
         logger.info("[forward] building nodes total=%d", len(images))
         nodes = []

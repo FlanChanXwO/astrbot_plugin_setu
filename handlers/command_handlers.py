@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
@@ -29,7 +29,9 @@ class CommandHandler:
             if hasattr(event, "is_admin") and callable(getattr(event, "is_admin")):
                 if event.is_admin():
                     return True
-            if hasattr(event, "is_super_user") and callable(getattr(event, "is_super_user")):
+            if hasattr(event, "is_super_user") and callable(
+                getattr(event, "is_super_user")
+            ):
                 if event.is_super_user():
                     return True
             if hasattr(event, "message_obj"):
@@ -82,8 +84,7 @@ class CommandHandler:
             logger.debug("num = %d invoke params = %s , r18 = %s", num, tags, is_r18)
 
             downloaded = await asyncio.wait_for(
-                self._core.fetch_and_download_images(num, tags, is_r18),
-                timeout=60.0
+                self._core.fetch_and_download_images(num, tags, is_r18), timeout=60.0
             )
             if not downloaded:
                 yield event.plain_result("获取图片失败，请稍后再试。")
@@ -98,7 +99,9 @@ class CommandHandler:
             logger.exception("get_random_picture failed")
             yield event.plain_result("获取图片失败，请稍后再试。")
 
-    async def handle_setu_command(self, event: AstrMessageEvent, count: str = "1", *, tags: str = ""):
+    async def handle_setu_command(
+        self, event: AstrMessageEvent, count: str = "1", *, tags: str = ""
+    ):
         """处理 /setu 命令。"""
         if not self._core:
             yield event.plain_result("插件尚未就绪，请稍后再试。")
@@ -135,13 +138,15 @@ class CommandHandler:
 
             downloaded = await asyncio.wait_for(
                 self._core.fetch_and_download_images(num, parsed_tags, is_r18),
-                timeout=60.0
+                timeout=60.0,
             )
             if not downloaded:
                 yield event.plain_result("获取图片失败，请稍后再试。")
                 return
 
-            async for result in self._core.send_images(event, downloaded, is_r18, parsed_tags):
+            async for result in self._core.send_images(
+                event, downloaded, is_r18, parsed_tags
+            ):
                 yield result
         except asyncio.TimeoutError:
             logger.warning("setu command timeout (>60s)")
@@ -177,13 +182,19 @@ class CommandHandler:
         is_group = bool(event.get_group_id())
 
         if mode == "clear":
-            success = await self._core.session_config.clear_session_content_mode(session_id, is_group)
+            success = await self._core.session_config.clear_session_content_mode(
+                session_id, is_group
+            )
             if success:
-                yield event.plain_result("✅ 已清除当前会话的内容模式设置，将使用全局配置。")
+                yield event.plain_result(
+                    "✅ 已清除当前会话的内容模式设置，将使用全局配置。"
+                )
             else:
                 yield event.plain_result("ℹ️ 当前会话没有设置覆盖，已在使用全局配置。")
         else:
-            success = await self._core.session_config.set_session_content_mode(session_id, is_group, mode)
+            success = await self._core.session_config.set_session_content_mode(
+                session_id, is_group, mode
+            )
             if success:
                 session_type = "群聊" if is_group else "私聊"
                 yield event.plain_result(
@@ -198,14 +209,20 @@ class CommandHandler:
         session_id = event.get_session_id()
         is_group = bool(event.get_group_id())
 
-        current_mode = await self._core.session_config.get_session_content_mode(session_id, is_group)
+        current_mode = await self._core.session_config.get_session_content_mode(
+            session_id, is_group
+        )
         global_mode = self._core.config.content_mode
 
-        session_docx = await self._core.session_config.get_session_r18_docx_mode(session_id, is_group)
+        session_docx = await self._core.session_config.get_session_r18_docx_mode(
+            session_id, is_group
+        )
         global_docx = self._core.config.r18_docx_mode
         effective_docx = await self._core.get_effective_r18_docx_mode(event)
 
-        session_revoke = await self._core.session_config.get_session_auto_revoke_r18(session_id, is_group)
+        session_revoke = await self._core.session_config.get_session_auto_revoke_r18(
+            session_id, is_group
+        )
         global_revoke = self._core.config.auto_revoke_r18
         delay = self._core.config.auto_revoke_delay
         effective_revoke = await self._core.get_effective_auto_revoke_r18(event)

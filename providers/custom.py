@@ -157,7 +157,9 @@ class CustomApiProvider(SetuImageProvider):
                 else:
                     try:
                         arr_idx = int(idx_str)
-                        current = current[arr_idx] if 0 <= arr_idx < len(current) else None
+                        current = (
+                            current[arr_idx] if 0 <= arr_idx < len(current) else None
+                        )
                     except (ValueError, IndexError):
                         return None
             else:

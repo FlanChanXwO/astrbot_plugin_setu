@@ -14,18 +14,35 @@ class HtmlCardRenderer:
     """Wrap image(s) into compact HTML cards then render with AstrBot html_render."""
 
     BG_COLORS = [
-        "#f0f2f5", "#f5f0f0", "#f0f5f2", "#f2f0f5", "#faf8f5",
-        "#f5f8fa", "#f8f5fa", "#f5faf8", "#fff5f0", "#f0fff5",
-        "#f5f0ff", "#fffff0",
+        "#f0f2f5",
+        "#f5f0f0",
+        "#f0f5f2",
+        "#f2f0f5",
+        "#faf8f5",
+        "#f5f8fa",
+        "#f8f5fa",
+        "#f5faf8",
+        "#fff5f0",
+        "#f0fff5",
+        "#f5f0ff",
+        "#fffff0",
     ]
     BORDER_COLORS = [
-        "#e0e2e5", "#e5e0e0", "#e0e5e2", "#e2e0e5",
-        "#d0d2d5", "#d5d0d0", "#d0d5d2", "#d2d0d5",
+        "#e0e2e5",
+        "#e5e0e0",
+        "#e0e5e2",
+        "#e2e0e5",
+        "#d0d2d5",
+        "#d5d0d0",
+        "#d0d5d2",
+        "#d2d0d5",
     ]
     ROTATION_RANGE = (-2.0, 2.0)
 
     def __init__(self, template_path: Path | None = None):
-        self.template_path = template_path or Path(__file__).parent.parent / "templates" / "main.html"
+        self.template_path = (
+            template_path or Path(__file__).parent.parent / "templates" / "main.html"
+        )
         self._template: str | None = None
 
     def _load_template(self) -> str:
@@ -33,7 +50,9 @@ class HtmlCardRenderer:
             self._template = self.template_path.read_text(encoding="utf-8")
         return self._template
 
-    def _generate_random_styles(self, style_options: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _generate_random_styles(
+        self, style_options: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         style_options = style_options or {}
         card_padding = int(style_options.get("card_padding", 6))
         card_gap = int(style_options.get("card_gap", 6))
@@ -50,7 +69,9 @@ class HtmlCardRenderer:
             "page_padding": 4,
         }
 
-    def _build_html(self, images_b64: list[str], style_options: dict[str, Any] | None = None) -> str:
+    def _build_html(
+        self, images_b64: list[str], style_options: dict[str, Any] | None = None
+    ) -> str:
         template = self._load_template()
         styles = self._generate_random_styles(style_options)
 
@@ -89,7 +110,9 @@ class HtmlCardRenderer:
         )
         return html
 
-    async def render_single_image(self, context, image: bytes, style_options: dict[str, Any] | None = None) -> str | None:
+    async def render_single_image(
+        self, context, image: bytes, style_options: dict[str, Any] | None = None
+    ) -> str | None:
         """渲染单张图片。"""
         if not image or not context:
             return None
@@ -104,7 +127,13 @@ class HtmlCardRenderer:
             logger.exception("html single-card render failed")
             return None
 
-    async def render_images(self, context, images: list[bytes], options: dict[str, Any] | None = None, style_options: dict[str, Any] | None = None) -> str | None:
+    async def render_images(
+        self,
+        context,
+        images: list[bytes],
+        options: dict[str, Any] | None = None,
+        style_options: dict[str, Any] | None = None,
+    ) -> str | None:
         """渲染多张图片。"""
         if not images or not context:
             return None

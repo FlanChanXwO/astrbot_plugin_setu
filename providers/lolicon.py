@@ -73,7 +73,9 @@ class LoliconProvider(SetuImageProvider):
 
         # 构建带多个 'tag' 参数的 URL（使用 URL 编码防止特殊字符问题）
         tag_params = "&".join(f"tag={quote(t, safe='')}" for t in tags) if tags else ""
-        base_params = "&".join(f"{k}={quote(str(v), safe='')}" for k, v in params.items())
+        base_params = "&".join(
+            f"{k}={quote(str(v), safe='')}" for k, v in params.items()
+        )
         url = f"{self.API_URL}?{base_params}"
         if tag_params:
             url += f"&{tag_params}"

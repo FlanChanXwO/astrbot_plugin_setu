@@ -6,7 +6,6 @@ import asyncio
 import time
 from typing import TYPE_CHECKING, Any
 
-import astrbot.api.message_components as Comp
 from astrbot.api import logger
 
 if TYPE_CHECKING:
@@ -60,7 +59,9 @@ class RevokeTaskMixin:
             logger.info("[revoke] Successfully revoked message %s", message_id)
         else:
             await self._revoke_manager.mark_revoked(message_id)
-            logger.warning("[revoke] Failed to revoke message %s, marked as revoked", message_id)
+            logger.warning(
+                "[revoke] Failed to revoke message %s, marked as revoked", message_id
+            )
 
     async def _schedule_revoke(
         self, event: AstrMessageEvent, message_id: str | int, delay: int
@@ -102,16 +103,20 @@ class RevokeTaskMixin:
                 revoke_time = entry.get("revoke_time", 0)
                 if revoke_time <= now:
                     await self._revoke_manager.mark_revoked(message_id)
-                    logger.debug("[revoke] Expired entry marked as revoked: %s", message_id)
+                    logger.debug(
+                        "[revoke] Expired entry marked as revoked: %s", message_id
+                    )
                 else:
                     delay = revoke_time - now
                     task = asyncio.create_task(
                         self._delayed_revoke(
-                            message_id, delay,
+                            message_id,
+                            delay,
                             entry.get("platform", ""),
                             entry.get("session_id", ""),
                             entry.get("is_group", False),
-                            None, None
+                            None,
+                            None,
                         )
                     )
                     self._revoke_tasks.add(task)

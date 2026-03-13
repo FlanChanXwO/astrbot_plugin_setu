@@ -64,7 +64,9 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
                 tcp_connector_limit_per_host=self._config.tcp_connector_limit_per_host,
             )
         except (OSError, RuntimeError, ValueError):
-            logger.exception("SetuCore initialize failed, fallback to no-cache ImageService")
+            logger.exception(
+                "SetuCore initialize failed, fallback to no-cache ImageService"
+            )
             self._cache = None
             self._image_service = ImageService(
                 None,
@@ -97,7 +99,9 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
             cfg.api_type,
             custom_config=cfg.custom_api if cfg.api_type == "custom" else None,
             parser_config=cfg.api_response_parser if cfg.api_type == "custom" else None,
-            custom_api_configs=cfg.custom_api_configs if cfg.api_type in ("custom", "all") else None,
+            custom_api_configs=cfg.custom_api_configs
+            if cfg.api_type in ("custom", "all")
+            else None,
             multi_api_strategy=cfg.multi_api_strategy,
             lolicon_config=lolicon_config,
         )
@@ -106,7 +110,9 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
         """获取生效的内容模式（优先会话配置）。"""
         session_id = event.get_session_id()
         is_group = bool(event.get_group_id())
-        session_mode = await self._session_config.get_session_content_mode(session_id, is_group)
+        session_mode = await self._session_config.get_session_content_mode(
+            session_id, is_group
+        )
         if session_mode:
             return session_mode
         return self._config.content_mode
@@ -115,7 +121,9 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
         """获取生效的 R18 Docx 模式设置。"""
         session_id = event.get_session_id()
         is_group = bool(event.get_group_id())
-        session_mode = await self._session_config.get_session_r18_docx_mode(session_id, is_group)
+        session_mode = await self._session_config.get_session_r18_docx_mode(
+            session_id, is_group
+        )
         if session_mode is not None:
             return session_mode
         return self._config.r18_docx_mode
@@ -124,7 +132,9 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
         """获取生效的自动撤回 R18 设置。"""
         session_id = event.get_session_id()
         is_group = bool(event.get_group_id())
-        session_mode = await self._session_config.get_session_auto_revoke_r18(session_id, is_group)
+        session_mode = await self._session_config.get_session_auto_revoke_r18(
+            session_id, is_group
+        )
         if session_mode is not None:
             return session_mode
         return self._config.auto_revoke_r18
@@ -212,7 +222,9 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
                     num=missing, tags=tags, r18=is_r18, exclude_ai=exclude_ai
                 )
                 if extra_urls:
-                    extra_downloaded = await self._image_service.download_parallel(extra_urls)
+                    extra_downloaded = await self._image_service.download_parallel(
+                        extra_urls
+                    )
                     downloaded.extend(extra_downloaded)
                     if len(extra_urls) < missing:
                         break
@@ -224,7 +236,11 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
         return downloaded
 
     async def send_images(
-        self, event: AstrMessageEvent, images: list[bytes], is_r18: bool, tags: list[str] | None = None
+        self,
+        event: AstrMessageEvent,
+        images: list[bytes],
+        is_r18: bool,
+        tags: list[str] | None = None,
     ) -> AsyncGenerator[Any, None]:
         """发送图片（简化版核心逻辑）。"""
         if not images:
@@ -244,34 +260,54 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
             docx_path = self._docx_service.create_docx_with_images(images, tags=tags)
             if docx_path:
                 if auto_revoke:
-                    message_id = await self._send_file_with_revoke(event, str(docx_path), docx_path.name)
+                    message_id = await self._send_file_with_revoke(
+                        event, str(docx_path), docx_path.name
+                    )
                     if message_id:
-                        await self._schedule_revoke(event, message_id, cfg.auto_revoke_delay)
+                        await self._schedule_revoke(
+                            event, message_id, cfg.auto_revoke_delay
+                        )
                         if cfg.msg_found_enabled:
-                            yield event.plain_result(cfg.format_found_message(len(images), cfg.auto_revoke_delay))
+                            yield event.plain_result(
+                                cfg.format_found_message(
+                                    len(images), cfg.auto_revoke_delay
+                                )
+                            )
                         return
                 if cfg.msg_found_enabled:
                     yield event.plain_result(cfg.format_found_message(len(images)))
-                yield event.chain_result([Comp.File(file=str(docx_path), name=docx_path.name)])
+                yield event.chain_result(
+                    [Comp.File(file=str(docx_path), name=docx_path.name)]
+                )
                 return
             yield event.plain_result("R18 Docx 封装失败，请稍后再试或联系管理员。")
             return
 
         # 普通发送逻辑
-        found_message = cfg.format_found_message(len(images)) if cfg.msg_found_enabled else None
+        found_message = (
+            cfg.format_found_message(len(images)) if cfg.msg_found_enabled else None
+        )
 
         if actual_send_mode == "forward":
             nodes = []
             for img_data in images:
-                node = Comp.Node(uin=event.get_self_id(), name="色图", content=[Comp.Image.fromBytes(img_data)])
+                node = Comp.Node(
+                    uin=event.get_self_id(),
+                    name="色图",
+                    content=[Comp.Image.fromBytes(img_data)],
+                )
                 nodes.append(node)
 
             if auto_revoke:
                 message_id = await self._send_nodes_with_revoke(event, nodes)
                 if message_id:
-                    await self._schedule_revoke(event, message_id, cfg.auto_revoke_delay)
+                    await self._schedule_revoke(
+                        event, message_id, cfg.auto_revoke_delay
+                    )
                     if cfg.msg_found_enabled:
-                        yield event.plain_result(cfg.format_found_message(len(images), cfg.auto_revoke_delay))
+                        yield event.plain_result(
+                            cfg.format_found_message(len(images), cfg.auto_revoke_delay)
+                        )
                     return
 
             if found_message:
@@ -281,13 +317,19 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
             if auto_revoke:
                 chain = [Comp.Image.fromBytes(img) for img in images]
                 message_id = await self._send_with_revoke_support(
-                    event, chain, bool(event.get_group_id()),
-                    event.get_group_id() or event.get_sender_id()
+                    event,
+                    chain,
+                    bool(event.get_group_id()),
+                    event.get_group_id() or event.get_sender_id(),
                 )
                 if message_id:
-                    await self._schedule_revoke(event, message_id, cfg.auto_revoke_delay)
+                    await self._schedule_revoke(
+                        event, message_id, cfg.auto_revoke_delay
+                    )
                     if cfg.msg_found_enabled:
-                        yield event.plain_result(cfg.format_found_message(len(images), cfg.auto_revoke_delay))
+                        yield event.plain_result(
+                            cfg.format_found_message(len(images), cfg.auto_revoke_delay)
+                        )
                     return
 
             if found_message:

@@ -82,7 +82,9 @@ class MessagesConfigMixin:
             )
         )
 
-    def format_found_message(self: "ConfigBase", count: int, revoke_delay: int | None = None) -> str:
+    def format_found_message(
+        self: "ConfigBase", count: int, revoke_delay: int | None = None
+    ) -> str:
         """格式化找到图片的消息。
 
         将 msg_found_text 中的 {count} 和 {revoke_delay} 占位符替换为实际值。

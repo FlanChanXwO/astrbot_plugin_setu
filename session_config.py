@@ -251,9 +251,13 @@ class SessionConfigManager:
         返回:
             设置成功返回 True，否则返回 False
         """
-        return await self.set_config(session_id, is_group, "r18_docx_mode", bool(enabled))
+        return await self.set_config(
+            session_id, is_group, "r18_docx_mode", bool(enabled)
+        )
 
-    async def clear_session_r18_docx_mode(self, session_id: str, is_group: bool) -> bool:
+    async def clear_session_r18_docx_mode(
+        self, session_id: str, is_group: bool
+    ) -> bool:
         """清除会话的 R18 Docx 模式设置。
 
         参数:
@@ -292,9 +296,13 @@ class SessionConfigManager:
         返回:
             设置成功返回 True，否则返回 False
         """
-        return await self.set_config(session_id, is_group, "auto_revoke_r18", bool(enabled))
+        return await self.set_config(
+            session_id, is_group, "auto_revoke_r18", bool(enabled)
+        )
 
-    async def clear_session_auto_revoke_r18(self, session_id: str, is_group: bool) -> bool:
+    async def clear_session_auto_revoke_r18(
+        self, session_id: str, is_group: bool
+    ) -> bool:
         """清除会话的自动撤回 R18 设置。
 
         参数:

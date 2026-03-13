@@ -98,18 +98,27 @@ class SendWithRevokeMixin:
             file_data = path_obj.read_bytes()
             file_b64 = base64.b64encode(file_data).decode()
 
-            messages = [{"type": "file", "data": {"file": f"base64://{file_b64}", "name": file_name}}]
+            messages = [
+                {
+                    "type": "file",
+                    "data": {"file": f"base64://{file_b64}", "name": file_name},
+                }
+            ]
 
             if is_group:
                 result = await bot.call_action(
                     "send_group_msg",
-                    group_id=int(session_id) if str(session_id).isdigit() else session_id,
+                    group_id=int(session_id)
+                    if str(session_id).isdigit()
+                    else session_id,
                     message=messages,
                 )
             else:
                 result = await bot.call_action(
                     "send_private_msg",
-                    user_id=int(session_id) if str(session_id).isdigit() else session_id,
+                    user_id=int(session_id)
+                    if str(session_id).isdigit()
+                    else session_id,
                     message=messages,
                 )
 
@@ -143,13 +152,17 @@ class SendWithRevokeMixin:
             if is_group:
                 result = await bot.call_action(
                     "send_group_forward_msg",
-                    group_id=int(session_id) if str(session_id).isdigit() else session_id,
+                    group_id=int(session_id)
+                    if str(session_id).isdigit()
+                    else session_id,
                     messages=messages,
                 )
             else:
                 result = await bot.call_action(
                     "send_private_forward_msg",
-                    user_id=int(session_id) if str(session_id).isdigit() else session_id,
+                    user_id=int(session_id)
+                    if str(session_id).isdigit()
+                    else session_id,
                     messages=messages,
                 )
 

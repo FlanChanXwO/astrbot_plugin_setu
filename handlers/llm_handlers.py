@@ -30,7 +30,9 @@ class LlmHandlers:
             if hasattr(event, "is_admin") and callable(getattr(event, "is_admin")):
                 if event.is_admin():
                     return True
-            if hasattr(event, "is_super_user") and callable(getattr(event, "is_super_user")):
+            if hasattr(event, "is_super_user") and callable(
+                getattr(event, "is_super_user")
+            ):
                 if event.is_super_user():
                     return True
             if hasattr(event, "message_obj"):
@@ -129,7 +131,9 @@ class LlmHandlers:
             logger.exception("LLM 工具查看内容分级失败")
             return mcp.types.CallToolResult(
                 content=[
-                    mcp.types.TextContent(type="text", text=f"查看内容分级失败：{str(e)}")
+                    mcp.types.TextContent(
+                        type="text", text=f"查看内容分级失败：{str(e)}"
+                    )
                 ]
             )
 
@@ -153,7 +157,8 @@ class LlmHandlers:
             return mcp.types.CallToolResult(
                 content=[
                     mcp.types.TextContent(
-                        type="text", text="❌ 权限不足：设置内容分级需要管理员或超级管理员权限。"
+                        type="text",
+                        text="❌ 权限不足：设置内容分级需要管理员或超级管理员权限。",
                     )
                 ]
             )
@@ -166,7 +171,8 @@ class LlmHandlers:
                 return mcp.types.CallToolResult(
                     content=[
                         mcp.types.TextContent(
-                            type="text", text="❌ 请指定要设置的内容分级：sfw（全年龄）、r18（成人）、mix（混合）或 clear（清除设置）。"
+                            type="text",
+                            text="❌ 请指定要设置的内容分级：sfw（全年龄）、r18（成人）、mix（混合）或 clear（清除设置）。",
                         )
                     ]
                 )
@@ -177,7 +183,7 @@ class LlmHandlers:
                     content=[
                         mcp.types.TextContent(
                             type="text",
-                            text=f"❌ 无效的模式 '{mode}'。\n可用模式：sfw（全年龄）、r18（成人）、mix（混合）、clear（清除设置）"
+                            text=f"❌ 无效的模式 '{mode}'。\n可用模式：sfw（全年龄）、r18（成人）、mix（混合）、clear（清除设置）",
                         )
                     ]
                 )
@@ -217,7 +223,9 @@ class LlmHandlers:
             logger.exception("LLM 工具设置内容分级失败")
             return mcp.types.CallToolResult(
                 content=[
-                    mcp.types.TextContent(type="text", text=f"设置内容分级失败：{str(e)}")
+                    mcp.types.TextContent(
+                        type="text", text=f"设置内容分级失败：{str(e)}"
+                    )
                 ]
             )
 
@@ -240,7 +248,8 @@ class LlmHandlers:
             return mcp.types.CallToolResult(
                 content=[
                     mcp.types.TextContent(
-                        type="text", text="❌ 权限不足：设置 R18 Docx 模式需要管理员或超级管理员权限。"
+                        type="text",
+                        text="❌ 权限不足：设置 R18 Docx 模式需要管理员或超级管理员权限。",
                     )
                 ]
             )
@@ -290,7 +299,9 @@ class LlmHandlers:
             logger.exception("LLM 工具设置 R18 Docx 模式失败")
             return mcp.types.CallToolResult(
                 content=[
-                    mcp.types.TextContent(type="text", text=f"设置 R18 Docx 模式失败：{str(e)}")
+                    mcp.types.TextContent(
+                        type="text", text=f"设置 R18 Docx 模式失败：{str(e)}"
+                    )
                 ]
             )
 
@@ -313,7 +324,8 @@ class LlmHandlers:
             return mcp.types.CallToolResult(
                 content=[
                     mcp.types.TextContent(
-                        type="text", text="❌ 权限不足：设置自动撤回需要管理员或超级管理员权限。"
+                        type="text",
+                        text="❌ 权限不足：设置自动撤回需要管理员或超级管理员权限。",
                     )
                 ]
             )
@@ -364,6 +376,8 @@ class LlmHandlers:
             logger.exception("LLM 工具设置自动撤回失败")
             return mcp.types.CallToolResult(
                 content=[
-                    mcp.types.TextContent(type="text", text=f"设置自动撤回失败：{str(e)}")
+                    mcp.types.TextContent(
+                        type="text", text=f"设置自动撤回失败：{str(e)}"
+                    )
                 ]
             )
