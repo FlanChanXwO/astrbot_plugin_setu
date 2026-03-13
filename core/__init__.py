@@ -447,4 +447,3 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
                 yield event.plain_result(found_message)
             for img_data in html_image_data:
                 yield event.chain_result([Comp.Image.fromBytes(img_data)])
-

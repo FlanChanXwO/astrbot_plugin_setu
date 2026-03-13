@@ -122,6 +122,7 @@ class LlmHandlers:
 
             # 调用命令处理器，走与普通命令相同的逻辑
             from .command_handlers import CommandHandler
+
             cmd_handler = CommandHandler(self.core, self.core.config)
 
             # 构建 tags 字符串
