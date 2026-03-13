@@ -41,7 +41,7 @@ class HtmlCardRenderer:
 
     def __init__(self, template_path: Path | None = None):
         self.template_path = (
-            template_path or Path(__file__).parent / "templates" / "main.html"
+            template_path or Path(__file__).parent.parent / "templates" / "main.html"
         )
         self._template: str | None = None
 
@@ -88,14 +88,12 @@ class HtmlCardRenderer:
                 f"border:1px solid {styles['border_color']};"
                 "display:inline-block;"
             )
-            cards_html.append(
-                f"""
+            cards_html.append(f"""
         <div class="image-card" style="{card_style}">
             <div class="grid-overlay"></div>
             <img src="data:image/png;base64,{img_b64}" class="safe-img" alt="img{index + 1}" loading="eager">
         </div>
-                """
-            )
+            """)
 
         body_style = (
             "margin:0;"
@@ -115,21 +113,15 @@ class HtmlCardRenderer:
     async def render_single_image(
         self, context, image: bytes, style_options: dict[str, Any] | None = None
     ) -> str | None:
+        """渲染单张图片。"""
         if not image or not context:
             return None
         try:
             img_b64 = base64.b64encode(image).decode("ascii")
             html_content = self._build_html([img_b64], style_options=style_options)
-            render_options = {
-                "full_page": True,
-                "type": "png",
-                "scale": "device",
-            }
+            render_options = {"full_page": True, "type": "png", "scale": "device"}
             return await context.html_render(
-                tmpl=html_content,
-                data={},
-                return_url=True,
-                options=render_options,
+                tmpl=html_content, data={}, return_url=True, options=render_options
             )
         except (ValueError, RuntimeError, OSError):
             logger.exception("html single-card render failed")
@@ -142,6 +134,7 @@ class HtmlCardRenderer:
         options: dict[str, Any] | None = None,
         style_options: dict[str, Any] | None = None,
     ) -> str | None:
+        """渲染多张图片。"""
         if not images or not context:
             return None
         try:
@@ -151,16 +144,14 @@ class HtmlCardRenderer:
             if options:
                 render_options.update(options)
             return await context.html_render(
-                tmpl=html_content,
-                data={},
-                return_url=True,
-                options=render_options,
+                tmpl=html_content, data={}, return_url=True, options=render_options
             )
         except (ValueError, RuntimeError, OSError):
             logger.exception("html card render failed")
             return None
 
     def render_to_html_file(self, images: list[bytes], output_path: Path) -> bool:
+        """渲染为 HTML 文件（调试用）。"""
         try:
             images_b64 = [base64.b64encode(img).decode("ascii") for img in images]
             output_path.write_text(self._build_html(images_b64), encoding="utf-8")

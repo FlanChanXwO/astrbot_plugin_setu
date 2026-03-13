@@ -278,7 +278,7 @@
           "text": {
             "type": "string",
             "description": "提示文本",
-            "hint": "成功找到图片时显示的文本，{count} 会被替换为实际数量。",
+            "hint": "成功找到图片时显示的文本，{count} 会被替换为实际数量，{revoke_delay} 会被替换为自动撤回延迟（仅在R18自动撤回时生效）。",
             "default": "找到 {count} 张符合要求的图片~"
           }
         }
