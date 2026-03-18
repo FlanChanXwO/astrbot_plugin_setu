@@ -16,7 +16,7 @@ class DeliveryConfigMixin:
     _read: Any
 
     @property
-    def r18_docx_mode(self: "ConfigBase") -> bool:
+    def r18_docx_mode(self: ConfigBase) -> bool:
         """R18 Docx 打包模式。
 
         返回:
@@ -28,7 +28,7 @@ class DeliveryConfigMixin:
         )
 
     @property
-    def send_mode(self: "ConfigBase") -> str:
+    def send_mode(self: ConfigBase) -> str:
         """图片发送模式。
 
         返回:
@@ -40,7 +40,7 @@ class DeliveryConfigMixin:
         return mode if mode in ("image", "forward", "auto") else "image"
 
     @property
-    def auto_handle_send_failure(self: "ConfigBase") -> bool:
+    def auto_handle_send_failure(self: ConfigBase) -> bool:
         """自动处理发送失败。
 
         返回:
@@ -56,7 +56,7 @@ class DeliveryConfigMixin:
         )
 
     @property
-    def auto_revoke_r18(self: "ConfigBase") -> bool:
+    def auto_revoke_r18(self: ConfigBase) -> bool:
         """自动撤回 R18 内容。
 
         返回:
@@ -72,7 +72,7 @@ class DeliveryConfigMixin:
         )
 
     @property
-    def auto_revoke_delay(self: "ConfigBase") -> int:
+    def auto_revoke_delay(self: ConfigBase) -> int:
         """自动撤回延迟时间（秒）。
 
         返回:
@@ -88,7 +88,7 @@ class DeliveryConfigMixin:
         )
 
     @property
-    def max_count(self: "ConfigBase") -> int:
+    def max_count(self: ConfigBase) -> int:
         """每次请求最大图片数。
 
         返回:

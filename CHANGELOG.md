@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.0.7] - 2026-03-18
+- **完全迁移到 httpx**：移除 aiohttp 依赖，统一使用 httpx 进行所有 HTTP 请求
+- 图片下载使用流式传输（streaming）替代直接读取 content，强制 50MB 大小限制
+- 分段下载添加范围验证，检查返回数据大小与预期是否匹配
+- 修复 HTML 卡片渲染中的同步 I/O 阻塞问题，使用 `asyncio.to_thread` 读取文件
+- 移除配置项：`use_httpx`、`tcp_connector_limit`、`tcp_connector_limit_per_host`
+- 移除依赖：`aiohttp`、`aiofiles`
+- 重写图片发送逻辑：使用 `context.send_message` 直接发送代替 `yield`，可正确捕获发送异常
+- HTML卡片降级优化：发送失败时正确重用已下载的图片数据，渲染方法改为返回字节数据而非文件路径
+- 新增分段下载（Range Download）功能：将大图片分多段并行下载，显著提升高带宽环境下的下载速度
+- 新增性能配置面板：支持配置分段下载、并发限制、超时等参数
+- 优化用户错误提示：区分"未找到符合要求的图片"和"网络/服务异常"两种场景
+- 修复 DocxService 初始化错误：移除多余的 `initialize()` 调用
+
 ## [1.0.6] - 2026-03-13
 - 修复了命令注册的BUG
 
