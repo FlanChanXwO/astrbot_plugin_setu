@@ -91,9 +91,7 @@ class ImageService:
             await self._httpx_client.aclose()
             self._httpx_client = None
 
-    async def _download_with_httpx(
-        self, url: str, retry: int = 1
-    ) -> bytes | None:
+    async def _download_with_httpx(self, url: str, retry: int = 1) -> bytes | None:
         """使用 httpx 下载单张图片，使用流式下载并强制大小限制。"""
         client = await self._get_httpx_client()
         headers = self._get_headers_for_url(url)
@@ -106,7 +104,11 @@ class ImageService:
                             logger.warning("image 404: %s", url)
                             return None
                         if response.status_code in (403, 401):
-                            logger.warning("image access denied (%d): %s", response.status_code, url)
+                            logger.warning(
+                                "image access denied (%d): %s",
+                                response.status_code,
+                                url,
+                            )
                             return None
                         if response.status_code == 429:
                             logger.warning("rate limited: %s", url)
@@ -115,7 +117,11 @@ class ImageService:
                                 continue
                             return None
                         if response.status_code < 200 or response.status_code >= 300:
-                            logger.warning("image download failed (%d): %s", response.status_code, url)
+                            logger.warning(
+                                "image download failed (%d): %s",
+                                response.status_code,
+                                url,
+                            )
                             if attempt < retry:
                                 await asyncio.sleep(0.5)
                                 continue
@@ -127,7 +133,12 @@ class ImageService:
                             try:
                                 total_size = int(content_length)
                                 if total_size > MAX_DOWNLOAD_SIZE_BYTES:
-                                    logger.warning("image too large (%d > %d): %s", total_size, MAX_DOWNLOAD_SIZE_BYTES, url)
+                                    logger.warning(
+                                        "image too large (%d > %d): %s",
+                                        total_size,
+                                        MAX_DOWNLOAD_SIZE_BYTES,
+                                        url,
+                                    )
                                     return None
                             except (ValueError, TypeError):
                                 pass
@@ -138,7 +149,9 @@ class ImageService:
                         async for chunk in response.aiter_bytes(CHUNK_SIZE):
                             total_read += len(chunk)
                             if total_read > MAX_DOWNLOAD_SIZE_BYTES:
-                                logger.warning("image download exceeds size limit: %s", url)
+                                logger.warning(
+                                    "image download exceeds size limit: %s", url
+                                )
                                 return None
                             chunks.append(chunk)
 
@@ -150,19 +163,38 @@ class ImageService:
                         return data
 
             except httpx.TimeoutException as exc:
-                logger.warning("httpx timeout (attempt %d/%d) url=%s: %s", attempt + 1, retry + 1, url, exc)
+                logger.warning(
+                    "httpx timeout (attempt %d/%d) url=%s: %s",
+                    attempt + 1,
+                    retry + 1,
+                    url,
+                    exc,
+                )
                 if attempt < retry:
                     await asyncio.sleep(0.5)
                     continue
                 return None
             except httpx.ConnectError as exc:
-                logger.warning("httpx connection error (attempt %d/%d) url=%s: %s", attempt + 1, retry + 1, url, exc)
+                logger.warning(
+                    "httpx connection error (attempt %d/%d) url=%s: %s",
+                    attempt + 1,
+                    retry + 1,
+                    url,
+                    exc,
+                )
                 if attempt < retry:
                     await asyncio.sleep(0.5)
                     continue
                 return None
             except Exception as exc:
-                logger.warning("httpx download error (attempt %d/%d) url=%s: %s", attempt + 1, retry + 1, url, exc, exc_info=True)
+                logger.warning(
+                    "httpx download error (attempt %d/%d) url=%s: %s",
+                    attempt + 1,
+                    retry + 1,
+                    url,
+                    exc,
+                    exc_info=True,
+                )
                 if attempt < retry:
                     await asyncio.sleep(0.5)
                     continue
@@ -177,7 +209,9 @@ class ImageService:
 
         try:
             async with self._download_semaphore:
-                response = await client.head(url, headers=headers, follow_redirects=True)
+                response = await client.head(
+                    url, headers=headers, follow_redirects=True
+                )
                 if response.status_code >= 200 and response.status_code < 300:
                     content_length = response.headers.get("content-length")
                     if content_length:
@@ -200,7 +234,9 @@ class ImageService:
             async with self._download_semaphore:
                 async with client.stream("GET", url, headers=headers) as response:
                     if response.status_code not in (200, 206):
-                        logger.warning("range download failed (%d): %s", response.status_code, url)
+                        logger.warning(
+                            "range download failed (%d): %s", response.status_code, url
+                        )
                         return None
 
                     # Stream the response and validate size
@@ -226,7 +262,10 @@ class ImageService:
 
                     actual_length = len(data)
                     # Allow some tolerance for servers that return slightly different sizes
-                    if actual_length != expected_length and abs(actual_length - expected_length) > 1:
+                    if (
+                        actual_length != expected_length
+                        and abs(actual_length - expected_length) > 1
+                    ):
                         logger.warning(
                             "range download size mismatch for %s: expected %d bytes, got %d",
                             url,
@@ -254,12 +293,19 @@ class ImageService:
             return await self._download_with_httpx(url, retry)
 
         if total_size > MAX_DOWNLOAD_SIZE_BYTES:
-            logger.warning("image too large (%d > %d): %s", total_size, MAX_DOWNLOAD_SIZE_BYTES, url)
+            logger.warning(
+                "image too large (%d > %d): %s",
+                total_size,
+                MAX_DOWNLOAD_SIZE_BYTES,
+                url,
+            )
             return None
 
         if total_size < self._range_threshold:
             # 图片太小，不需要分段
-            logger.debug("Image too small (%d bytes), using normal download: %s", total_size, url)
+            logger.debug(
+                "Image too small (%d bytes), using normal download: %s", total_size, url
+            )
             return await self._download_with_httpx(url, retry)
 
         # 计算每段大小
@@ -282,21 +328,26 @@ class ImageService:
 
         # 检查是否有失败的段
         if any(r is None for r in results):
-            logger.warning("Some range segments failed for %s, retrying normal download", url)
+            logger.warning(
+                "Some range segments failed for %s, retrying normal download", url
+            )
             return await self._download_with_httpx(url, retry)
 
         # 合并所有段
         data = b"".join(results)
 
         if len(data) != total_size:
-            logger.warning("Range download size mismatch (%d vs %d) for %s", len(data), total_size, url)
+            logger.warning(
+                "Range download size mismatch (%d vs %d) for %s",
+                len(data),
+                total_size,
+                url,
+            )
             return await self._download_with_httpx(url, retry)
 
         return data
 
-    async def download_single(
-        self, url: str, retry: int = 1
-    ) -> bytes | None:
+    async def download_single(self, url: str, retry: int = 1) -> bytes | None:
         """下载单张图片，带缓存和重试机制。"""
         if not url:
             return None
@@ -342,7 +393,11 @@ class ImageService:
             if isinstance(result, bytes) and result:
                 downloaded.append(result)
             elif isinstance(result, Exception):
-                logger.warning("download task failed for %s: %s", urls[i] if i < len(urls) else "unknown", result)
+                logger.warning(
+                    "download task failed for %s: %s",
+                    urls[i] if i < len(urls) else "unknown",
+                    result,
+                )
 
         return downloaded
 
