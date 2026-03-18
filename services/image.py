@@ -113,9 +113,7 @@ class ImageService:
             await self._aiohttp_connector.close()
             self._aiohttp_connector = None
 
-    async def _download_with_httpx(
-        self, url: str, retry: int = 1
-    ) -> bytes | None:
+    async def _download_with_httpx(self, url: str, retry: int = 1) -> bytes | None:
         """使用 httpx 下载单张图片。"""
         client = await self._get_httpx_client()
         headers = self._get_headers_for_url(url)
@@ -129,7 +127,9 @@ class ImageService:
                         logger.warning("image 404: %s", url)
                         return None
                     if response.status_code in (403, 401):
-                        logger.warning("image access denied (%d): %s", response.status_code, url)
+                        logger.warning(
+                            "image access denied (%d): %s", response.status_code, url
+                        )
                         return None
                     if response.status_code == 429:
                         logger.warning("rate limited: %s", url)
@@ -138,7 +138,9 @@ class ImageService:
                             continue
                         return None
                     if not response.is_success:
-                        logger.warning("image download failed (%d): %s", response.status_code, url)
+                        logger.warning(
+                            "image download failed (%d): %s", response.status_code, url
+                        )
                         if attempt < retry:
                             await asyncio.sleep(0.5)
                             continue
@@ -149,7 +151,12 @@ class ImageService:
                         try:
                             total_size = int(content_length)
                             if total_size > MAX_DOWNLOAD_SIZE_BYTES:
-                                logger.warning("image too large (%d > %d): %s", total_size, MAX_DOWNLOAD_SIZE_BYTES, url)
+                                logger.warning(
+                                    "image too large (%d > %d): %s",
+                                    total_size,
+                                    MAX_DOWNLOAD_SIZE_BYTES,
+                                    url,
+                                )
                                 return None
                         except (ValueError, TypeError):
                             pass
@@ -162,19 +169,38 @@ class ImageService:
                     return data
 
             except httpx.TimeoutException as exc:
-                logger.warning("httpx timeout (attempt %d/%d) url=%s: %s", attempt + 1, retry + 1, url, exc)
+                logger.warning(
+                    "httpx timeout (attempt %d/%d) url=%s: %s",
+                    attempt + 1,
+                    retry + 1,
+                    url,
+                    exc,
+                )
                 if attempt < retry:
                     await asyncio.sleep(0.5)
                     continue
                 return None
             except httpx.ConnectError as exc:
-                logger.warning("httpx connection error (attempt %d/%d) url=%s: %s", attempt + 1, retry + 1, url, exc)
+                logger.warning(
+                    "httpx connection error (attempt %d/%d) url=%s: %s",
+                    attempt + 1,
+                    retry + 1,
+                    url,
+                    exc,
+                )
                 if attempt < retry:
                     await asyncio.sleep(0.5)
                     continue
                 return None
             except Exception as exc:
-                logger.warning("httpx download error (attempt %d/%d) url=%s: %s", attempt + 1, retry + 1, url, exc, exc_info=True)
+                logger.warning(
+                    "httpx download error (attempt %d/%d) url=%s: %s",
+                    attempt + 1,
+                    retry + 1,
+                    url,
+                    exc,
+                    exc_info=True,
+                )
                 if attempt < retry:
                     await asyncio.sleep(0.5)
                     continue
@@ -182,9 +208,7 @@ class ImageService:
 
         return None
 
-    async def _download_with_aiohttp(
-        self, url: str, retry: int = 1
-    ) -> bytes | None:
+    async def _download_with_aiohttp(self, url: str, retry: int = 1) -> bytes | None:
         """使用 aiohttp 下载单张图片（备用）。"""
         connector = await self._get_aiohttp_connector()
         headers = self._get_headers_for_url(url)
@@ -208,7 +232,9 @@ class ImageService:
                                 logger.warning("image 404: %s", url)
                                 return None
                             if resp.status in (403, 401):
-                                logger.warning("image access denied (%d): %s", resp.status, url)
+                                logger.warning(
+                                    "image access denied (%d): %s", resp.status, url
+                                )
                                 return None
                             if resp.status == 429:
                                 logger.warning("rate limited: %s", url)
@@ -217,7 +243,9 @@ class ImageService:
                                     continue
                                 return None
                             if not resp.ok:
-                                logger.warning("image download failed (%d): %s", resp.status, url)
+                                logger.warning(
+                                    "image download failed (%d): %s", resp.status, url
+                                )
                                 if attempt < retry:
                                     await asyncio.sleep(0.5)
                                     continue
@@ -228,7 +256,12 @@ class ImageService:
                                 try:
                                     total_size = int(content_length)
                                     if total_size > MAX_DOWNLOAD_SIZE_BYTES:
-                                        logger.warning("image too large (%d > %d): %s", total_size, MAX_DOWNLOAD_SIZE_BYTES, url)
+                                        logger.warning(
+                                            "image too large (%d > %d): %s",
+                                            total_size,
+                                            MAX_DOWNLOAD_SIZE_BYTES,
+                                            url,
+                                        )
                                         return None
                                 except (ValueError, TypeError):
                                     pass
@@ -238,7 +271,9 @@ class ImageService:
                             async for chunk in resp.content.iter_chunked(65536):
                                 total_read += len(chunk)
                                 if total_read > MAX_DOWNLOAD_SIZE_BYTES:
-                                    logger.warning("image download exceeds size limit: %s", url)
+                                    logger.warning(
+                                        "image download exceeds size limit: %s", url
+                                    )
                                     return None
                                 chunks.append(chunk)
 
@@ -250,19 +285,38 @@ class ImageService:
                             return data
 
             except asyncio.TimeoutError as exc:
-                logger.warning("aiohttp timeout (attempt %d/%d) url=%s: %s", attempt + 1, retry + 1, url, exc)
+                logger.warning(
+                    "aiohttp timeout (attempt %d/%d) url=%s: %s",
+                    attempt + 1,
+                    retry + 1,
+                    url,
+                    exc,
+                )
                 if attempt < retry:
                     await asyncio.sleep(0.5)
                     continue
                 return None
             except aiohttp.ClientConnectorError as exc:
-                logger.warning("aiohttp connection error (attempt %d/%d) url=%s: %s", attempt + 1, retry + 1, url, exc)
+                logger.warning(
+                    "aiohttp connection error (attempt %d/%d) url=%s: %s",
+                    attempt + 1,
+                    retry + 1,
+                    url,
+                    exc,
+                )
                 if attempt < retry:
                     await asyncio.sleep(0.5)
                     continue
                 return None
             except Exception as exc:
-                logger.warning("aiohttp download error (attempt %d/%d) url=%s: %s", attempt + 1, retry + 1, url, exc, exc_info=True)
+                logger.warning(
+                    "aiohttp download error (attempt %d/%d) url=%s: %s",
+                    attempt + 1,
+                    retry + 1,
+                    url,
+                    exc,
+                    exc_info=True,
+                )
                 if attempt < retry:
                     await asyncio.sleep(0.5)
                     continue
@@ -280,7 +334,9 @@ class ImageService:
 
         try:
             async with self._download_semaphore:
-                response = await client.head(url, headers=headers, follow_redirects=True)
+                response = await client.head(
+                    url, headers=headers, follow_redirects=True
+                )
                 if response.is_success:
                     content_length = response.headers.get("content-length")
                     if content_length:
@@ -303,7 +359,9 @@ class ImageService:
                 response = await client.get(url, headers=headers)
 
                 if response.status_code not in (200, 206):
-                    logger.warning("range download failed (%d): %s", response.status_code, url)
+                    logger.warning(
+                        "range download failed (%d): %s", response.status_code, url
+                    )
                     return None
 
                 data = response.content
@@ -327,7 +385,9 @@ class ImageService:
 
         if total_size < self._range_threshold:
             # 图片太小，不需要分段
-            logger.debug("Image too small (%d bytes), using normal download: %s", total_size, url)
+            logger.debug(
+                "Image too small (%d bytes), using normal download: %s", total_size, url
+            )
             return await self._download_with_httpx(url, retry)
 
         # 计算每段大小
@@ -350,21 +410,26 @@ class ImageService:
 
         # 检查是否有失败的段
         if any(r is None for r in results):
-            logger.warning("Some range segments failed for %s, retrying normal download", url)
+            logger.warning(
+                "Some range segments failed for %s, retrying normal download", url
+            )
             return await self._download_with_httpx(url, retry)
 
         # 合并所有段
         data = b"".join(results)
 
         if len(data) != total_size:
-            logger.warning("Range download size mismatch (%d vs %d) for %s", len(data), total_size, url)
+            logger.warning(
+                "Range download size mismatch (%d vs %d) for %s",
+                len(data),
+                total_size,
+                url,
+            )
             return await self._download_with_httpx(url, retry)
 
         return data
 
-    async def download_single(
-        self, url: str, retry: int = 1
-    ) -> bytes | None:
+    async def download_single(self, url: str, retry: int = 1) -> bytes | None:
         """下载单张图片，带缓存和重试机制。"""
         if not url:
             return None
@@ -413,7 +478,11 @@ class ImageService:
             if isinstance(result, bytes) and result:
                 downloaded.append(result)
             elif isinstance(result, Exception):
-                logger.warning("download task failed for %s: %s", urls[i] if i < len(urls) else "unknown", result)
+                logger.warning(
+                    "download task failed for %s: %s",
+                    urls[i] if i < len(urls) else "unknown",
+                    result,
+                )
 
         return downloaded
 

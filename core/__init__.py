@@ -238,29 +238,21 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
             round_num += 1
         return downloaded
 
-    async def _direct_send(
-        self, event: AstrMessageEvent, chain: list
-    ) -> bool:
+    async def _direct_send(self, event: AstrMessageEvent, chain: list) -> bool:
         """通过 context.send_message 直接发送消息，返回是否成功。"""
         try:
             result = event.chain_result(chain)
-            await self.plugin.context.send_message(
-                event.unified_msg_origin, result
-            )
+            await self.plugin.context.send_message(event.unified_msg_origin, result)
             return True
         except Exception as exc:
             logger.warning("direct send failed: %s", exc)
             return False
 
-    async def _direct_send_plain(
-        self, event: AstrMessageEvent, text: str
-    ) -> bool:
+    async def _direct_send_plain(self, event: AstrMessageEvent, text: str) -> bool:
         """直接发送纯文本消息，返回是否成功。"""
         try:
             result = event.plain_result(text)
-            await self.plugin.context.send_message(
-                event.unified_msg_origin, result
-            )
+            await self.plugin.context.send_message(event.unified_msg_origin, result)
             return True
         except Exception as exc:
             logger.warning("direct send plain failed: %s", exc)
@@ -345,9 +337,7 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
             else:
                 if found_message:
                     await self._direct_send_plain(event, found_message)
-                send_success = await self._direct_send(
-                    event, [Comp.Nodes(nodes)]
-                )
+                send_success = await self._direct_send(event, [Comp.Nodes(nodes)])
         else:
             if auto_revoke:
                 chain = [Comp.Image.fromBytes(img) for img in images]
@@ -439,11 +429,15 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
             if auto_revoke:
                 message_id = await self._send_nodes_with_revoke(event, nodes)
                 if message_id:
-                    await self._schedule_revoke(event, message_id, cfg.auto_revoke_delay)
+                    await self._schedule_revoke(
+                        event, message_id, cfg.auto_revoke_delay
+                    )
                     if cfg.msg_found_enabled:
                         await self._direct_send_plain(
                             event,
-                            cfg.format_found_message(len(html_image_data), cfg.auto_revoke_delay),
+                            cfg.format_found_message(
+                                len(html_image_data), cfg.auto_revoke_delay
+                            ),
                         )
                     return True
                 return False
@@ -453,15 +447,21 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
             if auto_revoke:
                 chain = [Comp.Image.fromBytes(img) for img in html_image_data]
                 message_id = await self._send_with_revoke_support(
-                    event, chain, bool(event.get_group_id()),
-                    event.get_group_id() or event.get_sender_id()
+                    event,
+                    chain,
+                    bool(event.get_group_id()),
+                    event.get_group_id() or event.get_sender_id(),
                 )
                 if message_id:
-                    await self._schedule_revoke(event, message_id, cfg.auto_revoke_delay)
+                    await self._schedule_revoke(
+                        event, message_id, cfg.auto_revoke_delay
+                    )
                     if cfg.msg_found_enabled:
                         await self._direct_send_plain(
                             event,
-                            cfg.format_found_message(len(html_image_data), cfg.auto_revoke_delay),
+                            cfg.format_found_message(
+                                len(html_image_data), cfg.auto_revoke_delay
+                            ),
                         )
                     return True
                 return False
