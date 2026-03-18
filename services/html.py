@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import random
 from pathlib import Path
@@ -120,12 +121,12 @@ class HtmlCardRenderer:
             img_b64 = base64.b64encode(image).decode("ascii")
             html_content = self._build_html([img_b64], style_options=style_options)
             render_options = {"full_page": True, "type": "png", "scale": "device"}
-            # 使用 return_url=False 获取文件路径，然后读取字节数据
+            # 使用 return_url=False 获取文件路径，然后在线程池中读取字节数据，避免阻塞事件循环
             file_path = await context.html_render(
                 tmpl=html_content, data={}, return_url=False, options=render_options
             )
             if file_path:
-                return Path(file_path).read_bytes()
+                return await asyncio.to_thread(Path(file_path).read_bytes)
             return None
         except (ValueError, RuntimeError, OSError):
             logger.exception("html single-card render failed")
@@ -147,11 +148,12 @@ class HtmlCardRenderer:
             render_options = {"full_page": True, "type": "png", "scale": "device"}
             if options:
                 render_options.update(options)
+            # 使用 return_url=False 获取文件路径，然后在线程池中读取字节数据，避免阻塞事件循环
             file_path = await context.html_render(
                 tmpl=html_content, data={}, return_url=False, options=render_options
             )
             if file_path:
-                return Path(file_path).read_bytes()
+                return await asyncio.to_thread(Path(file_path).read_bytes)
             return None
         except (ValueError, RuntimeError, OSError):
             logger.exception("html card render failed")

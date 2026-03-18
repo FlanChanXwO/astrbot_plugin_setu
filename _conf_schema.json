@@ -381,12 +381,6 @@
     "type": "object",
     "hint": "下载速度和并发设置",
     "items": {
-      "use_httpx": {
-        "type": "bool",
-        "description": "使用 httpx 客户端",
-        "hint": "使用 httpx 替代 aiohttp，支持更好的 HTTP/2 和 range 下载。",
-        "default": true
-      },
       "enable_range_download": {
         "type": "bool",
         "description": "启用分段下载",
@@ -426,18 +420,6 @@
         "description": "下载超时时间(秒)",
         "hint": "单个图片下载的最大超时时间。默认 30 秒，网络慢可适当增加。",
         "default": 30
-      },
-      "tcp_connector_limit": {
-        "type": "int",
-        "description": "TCP总连接数限制",
-        "hint": "aiohttp TCP连接器的总连接数限制。一般不需要修改。",
-        "default": 50
-      },
-      "tcp_connector_limit_per_host": {
-        "type": "int",
-        "description": "每主机连接数限制",
-        "hint": "aiohttp TCP连接器每个主机的连接数限制。一般不需要修改。",
-        "default": 20
       }
     }
   }

@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
-import aiohttp
 import httpx
 
 from astrbot.api import logger
@@ -28,6 +27,7 @@ DEFAULT_HEADERS = {
 }
 
 MAX_DOWNLOAD_SIZE_BYTES = 50 * 1024 * 1024
+CHUNK_SIZE = 65536
 
 
 class ImageService:
@@ -40,7 +40,6 @@ class ImageService:
         timeout_seconds: int = 30,
         tcp_connector_limit: int = 100,
         tcp_connector_limit_per_host: int = 30,
-        use_httpx: bool = True,
         enable_range_download: bool = False,
         range_segments: int = 3,
         range_threshold: int = 512,  # KB
@@ -50,15 +49,12 @@ class ImageService:
         self._timeout_seconds = max(10, timeout_seconds)
         self._tcp_connector_limit = max(50, tcp_connector_limit)
         self._tcp_connector_limit_per_host = max(20, tcp_connector_limit_per_host)
-        self._use_httpx = use_httpx
         self._enable_range_download = enable_range_download
         self._range_segments = max(2, min(8, range_segments))
         self._range_threshold = range_threshold * 1024  # Convert to bytes
 
         # httpx client (will be initialized lazily)
         self._httpx_client: httpx.AsyncClient | None = None
-        # aiohttp connector (will be initialized lazily)
-        self._aiohttp_connector: aiohttp.TCPConnector | None = None
 
     def _get_headers_for_url(self, url: str) -> dict[str, str]:
         """根据 URL 获取合适的 headers。"""
@@ -89,77 +85,69 @@ class ImageService:
             )
         return self._httpx_client
 
-    async def _get_aiohttp_connector(self) -> aiohttp.TCPConnector:
-        """获取或创建 aiohttp 连接器。"""
-        if self._aiohttp_connector is None:
-            self._aiohttp_connector = aiohttp.TCPConnector(
-                limit=self._tcp_connector_limit,
-                limit_per_host=self._tcp_connector_limit_per_host,
-                enable_cleanup_closed=True,
-                force_close=False,
-                ttl_dns_cache=300,
-                use_dns_cache=True,
-                family=0,
-                ssl=False,
-            )
-        return self._aiohttp_connector
-
     async def close(self):
         """关闭所有客户端连接。"""
         if self._httpx_client:
             await self._httpx_client.aclose()
             self._httpx_client = None
-        if self._aiohttp_connector:
-            await self._aiohttp_connector.close()
-            self._aiohttp_connector = None
 
     async def _download_with_httpx(
         self, url: str, retry: int = 1
     ) -> bytes | None:
-        """使用 httpx 下载单张图片。"""
+        """使用 httpx 下载单张图片，使用流式下载并强制大小限制。"""
         client = await self._get_httpx_client()
         headers = self._get_headers_for_url(url)
 
         for attempt in range(retry + 1):
             try:
                 async with self._download_semaphore:
-                    response = await client.get(url, headers=headers)
+                    async with client.stream("GET", url, headers=headers) as response:
+                        if response.status_code == 404:
+                            logger.warning("image 404: %s", url)
+                            return None
+                        if response.status_code in (403, 401):
+                            logger.warning("image access denied (%d): %s", response.status_code, url)
+                            return None
+                        if response.status_code == 429:
+                            logger.warning("rate limited: %s", url)
+                            if attempt < retry:
+                                await asyncio.sleep(1)
+                                continue
+                            return None
+                        if response.status_code < 200 or response.status_code >= 300:
+                            logger.warning("image download failed (%d): %s", response.status_code, url)
+                            if attempt < retry:
+                                await asyncio.sleep(0.5)
+                                continue
+                            return None
 
-                    if response.status_code == 404:
-                        logger.warning("image 404: %s", url)
-                        return None
-                    if response.status_code in (403, 401):
-                        logger.warning("image access denied (%d): %s", response.status_code, url)
-                        return None
-                    if response.status_code == 429:
-                        logger.warning("rate limited: %s", url)
-                        if attempt < retry:
-                            await asyncio.sleep(1)
-                            continue
-                        return None
-                    if not response.is_success:
-                        logger.warning("image download failed (%d): %s", response.status_code, url)
-                        if attempt < retry:
-                            await asyncio.sleep(0.5)
-                            continue
-                        return None
+                        # Check Content-Length header if available
+                        content_length = response.headers.get("content-length")
+                        if content_length:
+                            try:
+                                total_size = int(content_length)
+                                if total_size > MAX_DOWNLOAD_SIZE_BYTES:
+                                    logger.warning("image too large (%d > %d): %s", total_size, MAX_DOWNLOAD_SIZE_BYTES, url)
+                                    return None
+                            except (ValueError, TypeError):
+                                pass
 
-                    content_length = response.headers.get("content-length")
-                    if content_length:
-                        try:
-                            total_size = int(content_length)
-                            if total_size > MAX_DOWNLOAD_SIZE_BYTES:
-                                logger.warning("image too large (%d > %d): %s", total_size, MAX_DOWNLOAD_SIZE_BYTES, url)
+                        # Stream download with size enforcement
+                        chunks: list[bytes] = []
+                        total_read = 0
+                        async for chunk in response.aiter_bytes(CHUNK_SIZE):
+                            total_read += len(chunk)
+                            if total_read > MAX_DOWNLOAD_SIZE_BYTES:
+                                logger.warning("image download exceeds size limit: %s", url)
                                 return None
-                        except (ValueError, TypeError):
-                            pass
+                            chunks.append(chunk)
 
-                    data = response.content
-                    if not data:
-                        logger.warning("image download empty: %s", url)
-                        return None
+                        data = b"".join(chunks) if chunks else b""
+                        if not data:
+                            logger.warning("image download empty: %s", url)
+                            return None
 
-                    return data
+                        return data
 
             except httpx.TimeoutException as exc:
                 logger.warning("httpx timeout (attempt %d/%d) url=%s: %s", attempt + 1, retry + 1, url, exc)
@@ -182,106 +170,15 @@ class ImageService:
 
         return None
 
-    async def _download_with_aiohttp(
-        self, url: str, retry: int = 1
-    ) -> bytes | None:
-        """使用 aiohttp 下载单张图片（备用）。"""
-        connector = await self._get_aiohttp_connector()
-        headers = self._get_headers_for_url(url)
-        timeout = aiohttp.ClientTimeout(
-            total=self._timeout_seconds,
-            connect=10,
-            sock_read=20,
-        )
-
-        for attempt in range(retry + 1):
-            try:
-                async with self._download_semaphore:
-                    async with aiohttp.ClientSession(
-                        connector=connector,
-                        timeout=timeout,
-                        headers=DEFAULT_HEADERS,
-                        raise_for_status=False,
-                    ) as session:
-                        async with session.get(url, headers=headers) as resp:
-                            if resp.status == 404:
-                                logger.warning("image 404: %s", url)
-                                return None
-                            if resp.status in (403, 401):
-                                logger.warning("image access denied (%d): %s", resp.status, url)
-                                return None
-                            if resp.status == 429:
-                                logger.warning("rate limited: %s", url)
-                                if attempt < retry:
-                                    await asyncio.sleep(1)
-                                    continue
-                                return None
-                            if not resp.ok:
-                                logger.warning("image download failed (%d): %s", resp.status, url)
-                                if attempt < retry:
-                                    await asyncio.sleep(0.5)
-                                    continue
-                                return None
-
-                            content_length = resp.headers.get("Content-Length")
-                            if content_length:
-                                try:
-                                    total_size = int(content_length)
-                                    if total_size > MAX_DOWNLOAD_SIZE_BYTES:
-                                        logger.warning("image too large (%d > %d): %s", total_size, MAX_DOWNLOAD_SIZE_BYTES, url)
-                                        return None
-                                except (ValueError, TypeError):
-                                    pass
-
-                            chunks: list[bytes] = []
-                            total_read = 0
-                            async for chunk in resp.content.iter_chunked(65536):
-                                total_read += len(chunk)
-                                if total_read > MAX_DOWNLOAD_SIZE_BYTES:
-                                    logger.warning("image download exceeds size limit: %s", url)
-                                    return None
-                                chunks.append(chunk)
-
-                            data = b"".join(chunks) if chunks else b""
-                            if not data:
-                                logger.warning("image download empty: %s", url)
-                                return None
-
-                            return data
-
-            except asyncio.TimeoutError as exc:
-                logger.warning("aiohttp timeout (attempt %d/%d) url=%s: %s", attempt + 1, retry + 1, url, exc)
-                if attempt < retry:
-                    await asyncio.sleep(0.5)
-                    continue
-                return None
-            except aiohttp.ClientConnectorError as exc:
-                logger.warning("aiohttp connection error (attempt %d/%d) url=%s: %s", attempt + 1, retry + 1, url, exc)
-                if attempt < retry:
-                    await asyncio.sleep(0.5)
-                    continue
-                return None
-            except Exception as exc:
-                logger.warning("aiohttp download error (attempt %d/%d) url=%s: %s", attempt + 1, retry + 1, url, exc, exc_info=True)
-                if attempt < retry:
-                    await asyncio.sleep(0.5)
-                    continue
-                return None
-
-        return None
-
     async def _get_content_length(self, url: str) -> int | None:
         """通过 HEAD 请求获取 Content-Length。"""
-        if not self._use_httpx:
-            return None
-
         client = await self._get_httpx_client()
         headers = self._get_headers_for_url(url)
 
         try:
             async with self._download_semaphore:
                 response = await client.head(url, headers=headers, follow_redirects=True)
-                if response.is_success:
+                if response.status_code >= 200 and response.status_code < 300:
                     content_length = response.headers.get("content-length")
                     if content_length:
                         return int(content_length)
@@ -293,21 +190,52 @@ class ImageService:
     async def _download_range_httpx(
         self, url: str, start: int, end: int
     ) -> bytes | None:
-        """使用 httpx 下载指定 range。"""
+        """使用 httpx 下载指定 range，并验证返回数据大小。"""
         client = await self._get_httpx_client()
         headers = self._get_headers_for_url(url)
         headers["Range"] = f"bytes={start}-{end}"
+        expected_length = end - start + 1
 
         try:
             async with self._download_semaphore:
-                response = await client.get(url, headers=headers)
+                async with client.stream("GET", url, headers=headers) as response:
+                    if response.status_code not in (200, 206):
+                        logger.warning("range download failed (%d): %s", response.status_code, url)
+                        return None
 
-                if response.status_code not in (200, 206):
-                    logger.warning("range download failed (%d): %s", response.status_code, url)
-                    return None
+                    # Stream the response and validate size
+                    chunks: list[bytes] = []
+                    total_read = 0
+                    async for chunk in response.aiter_bytes(CHUNK_SIZE):
+                        total_read += len(chunk)
+                        # Each range segment should not exceed expected length by much
+                        if total_read > expected_length + CHUNK_SIZE:
+                            logger.warning(
+                                "range download exceeded expected size for %s: expected %d, got >%d",
+                                url,
+                                expected_length,
+                                total_read,
+                            )
+                            return None
+                        chunks.append(chunk)
 
-                data = response.content
-                return data if data else None
+                    data = b"".join(chunks) if chunks else b""
+                    if not data:
+                        logger.warning("range download returned empty body: %s", url)
+                        return None
+
+                    actual_length = len(data)
+                    # Allow some tolerance for servers that return slightly different sizes
+                    if actual_length != expected_length and abs(actual_length - expected_length) > 1:
+                        logger.warning(
+                            "range download size mismatch for %s: expected %d bytes, got %d",
+                            url,
+                            expected_length,
+                            actual_length,
+                        )
+                        return None
+
+                    return data
 
         except Exception as exc:
             logger.warning("range download error for %s: %s", url, exc)
@@ -324,6 +252,10 @@ class ImageService:
             # 服务器不支持 HEAD 或没有 Content-Length，使用普通下载
             logger.debug("Content-Length not available, using normal download: %s", url)
             return await self._download_with_httpx(url, retry)
+
+        if total_size > MAX_DOWNLOAD_SIZE_BYTES:
+            logger.warning("image too large (%d > %d): %s", total_size, MAX_DOWNLOAD_SIZE_BYTES, url)
+            return None
 
         if total_size < self._range_threshold:
             # 图片太小，不需要分段
@@ -381,15 +313,12 @@ class ImageService:
         # 选择下载方式
         data: bytes | None = None
 
-        if self._use_httpx and self._enable_range_download:
+        if self._enable_range_download:
             # 使用 httpx + range 下载
             data = await self._download_single_with_range(url, retry)
-        elif self._use_httpx:
+        else:
             # 使用 httpx 普通下载
             data = await self._download_with_httpx(url, retry)
-        else:
-            # 使用 aiohttp
-            data = await self._download_with_aiohttp(url, retry)
 
         # 写入缓存
         if data and self._cache:

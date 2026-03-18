@@ -104,42 +104,6 @@ class SafetyConfigMixin:
         )
 
     @property
-    def tcp_connector_limit(self: ConfigBase) -> int:
-        """TCP连接器总连接数限制。
-
-        返回:
-            aiohttp TCP连接器的总连接数限制
-        """
-        return safe_int(
-            self._read(("performance", "tcp_connector_limit"), default=50),
-            50,
-        )
-
-    @property
-    def tcp_connector_limit_per_host(self: ConfigBase) -> int:
-        """TCP连接器每主机连接数限制。
-
-        返回:
-            aiohttp TCP连接器每个主机的连接数限制
-        """
-        return safe_int(
-            self._read(("performance", "tcp_connector_limit_per_host"), default=20),
-            20,
-        )
-
-    @property
-    def use_httpx(self: ConfigBase) -> bool:
-        """使用 httpx 客户端。
-
-        返回:
-            是否使用 httpx 替代 aiohttp，支持更好的 HTTP/2 和 range 下载
-        """
-        return safe_bool(
-            self._read(("performance", "use_httpx"), default=True),
-            True,
-        )
-
-    @property
     def enable_range_download(self: ConfigBase) -> bool:
         """启用分段下载。
 

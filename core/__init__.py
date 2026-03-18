@@ -59,9 +59,6 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
                 self._cache,
                 concurrent_limit=self._config.download_concurrent_limit,
                 timeout_seconds=self._config.download_timeout_seconds,
-                tcp_connector_limit=self._config.tcp_connector_limit,
-                tcp_connector_limit_per_host=self._config.tcp_connector_limit_per_host,
-                use_httpx=self._config.use_httpx,
                 enable_range_download=self._config.enable_range_download,
                 range_segments=self._config.range_segments,
                 range_threshold=self._config.range_threshold,
@@ -75,8 +72,6 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
                 None,
                 concurrent_limit=self._config.download_concurrent_limit,
                 timeout_seconds=self._config.download_timeout_seconds,
-                tcp_connector_limit=self._config.tcp_connector_limit,
-                tcp_connector_limit_per_host=self._config.tcp_connector_limit_per_host,
             )
 
     def terminate(self) -> None:

@@ -91,7 +91,6 @@
 | `enable_html_card` | 布尔值 | 是否启用 HTML 卡片包装 | `true` |
 | `auto_revoke_r18` | 布尔值 | R18 图片是否自动撤回 | `false` |
 | `r18_docx_mode` | 布尔值 | R18 是否使用 Docx 封装 | `true` |
-| `use_httpx` | 布尔值 | 使用 httpx 客户端（支持 HTTP/2） | `true` |
 | `enable_range_download` | 布尔值 | 启用分段下载（高带宽优化） | `false` |
 | `download_concurrent_limit` | 整数 | 并发下载限制 | `10` |
 
@@ -108,7 +107,6 @@
   "auto_revoke_r18": true,
   "r18_docx_mode": false,
   "exclude_ai": false,
-  "use_httpx": true,
   "enable_range_download": false,
   "range_segments": 3,
   "range_download_threshold": 512,
@@ -156,7 +154,6 @@
 - **多 API 策略**：支持 `all` 模式自动切换多 API，提升获取成功率。
 - **标签与过滤**：支持多标签、中文标签、AI 过滤（`exclude_ai`），可灵活组合搜索条件。
 - **性能优化**：
-  - `use_httpx`: 使用 httpx 替代 aiohttp，支持 HTTP/2 和更好的连接管理
   - `enable_range_download`: 启用分段下载，将大图片分多段并行下载，适合高带宽服务器
   - `range_segments`: 分段数（推荐 2-4）
   - `range_download_threshold`: 分段下载阈值（KB），大于此值才启用分段
