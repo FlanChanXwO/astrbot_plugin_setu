@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from .helpers import safe_bool, safe_int
+from .helpers import safe_int
 
 if TYPE_CHECKING:
     from .base import ConfigBase
@@ -16,6 +16,24 @@ class HtmlCardConfigMixin:
     _read: Any
 
     @property
+    def html_card_strategy(self: ConfigBase) -> str:
+        """HTML 卡片策略。
+
+        返回:
+            返回策略：never（从不）、fallback（失败时降级）、always（总是）
+        """
+        strategy = self._read(
+            ("html_card", "strategy"), "html_card_strategy", default="fallback"
+        )
+        if strategy in ("never", "fallback", "always"):
+            return strategy
+        # 兼容旧版 enabled 配置
+        old_enabled = self._read(("html_card", "enabled"), default=None)
+        if old_enabled is True:
+            return "fallback"
+        return "never"
+
+    @property
     def html_card_mode(self: ConfigBase) -> str:
         """HTML 卡片模式。
 
@@ -24,18 +42,6 @@ class HtmlCardConfigMixin:
         """
         mode = self._read(("html_card", "mode"), "html_card_mode", default="single")
         return mode if mode in ("single", "multiple") else "single"
-
-    @property
-    def enable_html_card(self: ConfigBase) -> bool:
-        """是否启用 HTML 卡片包装。
-
-        返回:
-            是否将图片包装为 HTML 卡片以绕过审核
-        """
-        return safe_bool(
-            self._read(("html_card", "enabled"), "enable_html_card", default=False),
-            False,
-        )
 
     @property
     def html_card_padding(self: ConfigBase) -> int:

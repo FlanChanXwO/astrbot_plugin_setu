@@ -94,6 +94,7 @@ class CommandHandler:
                 return
 
             async for result in self._core.send_images(event, downloaded, is_r18, tags):
+                # 传递所有结果，包括内部标记对象
                 yield result
         except asyncio.TimeoutError:
             logger.warning("get_random_picture timeout (>60s)")
@@ -153,6 +154,7 @@ class CommandHandler:
             async for result in self._core.send_images(
                 event, downloaded, is_r18, parsed_tags
             ):
+                # 传递所有结果，包括内部标记对象
                 yield result
         except asyncio.TimeoutError:
             logger.warning("setu command timeout (>60s)")

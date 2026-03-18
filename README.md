@@ -88,7 +88,7 @@
 | `content_mode` | 字符串 | 内容模式（sfw/r18/mix） | `sfw` |
 | `max_count` | 整数 | 单次最大图片数 | `10` |
 | `cache_enabled` | 布尔值 | 是否启用图片磁盘缓存 | `true` |
-| `enable_html_card` | 布尔值 | 是否启用 HTML 卡片包装 | `true` |
+| `html_card_strategy` | 字符串 | HTML 卡片策略（never/fallback/always） | `fallback` |
 | `auto_revoke_r18` | 布尔值 | R18 图片是否自动撤回 | `false` |
 | `r18_docx_mode` | 布尔值 | R18 是否使用 Docx 封装 | `true` |
 | `enable_range_download` | 布尔值 | 启用分段下载（高带宽优化） | `false` |
@@ -103,7 +103,7 @@
   "content_mode": "mix",
   "max_count": 5,
   "cache_enabled": true,
-  "enable_html_card": true,
+  "html_card_strategy": "fallback",
   "auto_revoke_r18": true,
   "r18_docx_mode": false,
   "exclude_ai": false,
@@ -148,6 +148,10 @@
 
 - **自定义 API**：可在配置中设置 `api_type` 为 `custom`，并填写自定义 API 地址和解析规则，实现对接任意第三方色图接口, 注意标签和分级筛选目前还是实验性阶段。
 - **图片混淆**：如遇平台审核拦截，插件会自动尝试对图片进行字节级混淆重发，无需额外配置。
+- **HTML 卡片策略**：`html_card_strategy` 提供三种模式：
+  - `never`：从不使用 HTML 卡片，直接发送原图
+  - `fallback`（默认）：发送失败时自动降级为 HTML 卡片
+  - `always`：总是使用 HTML 卡片包装发送
 - **自动撤回**：可通过 `auto_revoke_r18` 配置项开启 R18 图片的自动撤回，并可设置撤回延迟时间。
 - **Docx 封装**：开启 `r18_docx_mode` 后，R18 图片将以 Word 文档形式发送，进一步规避平台审核。
 - **磁盘缓存**：通过 `cache_enabled` 启用图片磁盘缓存，提升多次请求同一图片的响应速度。
