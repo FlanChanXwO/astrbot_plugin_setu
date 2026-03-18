@@ -157,7 +157,9 @@ class SendWithRevokeMixin:
 
             dict_time = time.monotonic()
             logger.debug(
-                "[forward] Converted %d nodes to dict in %.3fs", len(nodes), dict_time - start_time
+                "[forward] Converted %d nodes to dict in %.3fs",
+                len(nodes),
+                dict_time - start_time,
             )
 
             if is_group:
@@ -182,10 +184,11 @@ class SendWithRevokeMixin:
             # 检查 API 返回结果
             if isinstance(result, dict):
                 # 检查是否有错误返回
-                if result.get("status") == "failed" or result.get("retcode") not in (0, None):
-                    logger.warning(
-                        "[forward] API returned failure: %s", result
-                    )
+                if result.get("status") == "failed" or result.get("retcode") not in (
+                    0,
+                    None,
+                ):
+                    logger.warning("[forward] API returned failure: %s", result)
                     return None
 
             logger.info(
@@ -261,10 +264,11 @@ class SendWithRevokeMixin:
             # 检查结果，某些平台会返回错误或特定状态表示不支持
             if isinstance(result, dict):
                 # 检查是否有错误返回
-                if result.get("status") == "failed" or result.get("retcode") not in (0, None):
-                    logger.warning(
-                        "[forward] API returned failure: %s", result
-                    )
+                if result.get("status") == "failed" or result.get("retcode") not in (
+                    0,
+                    None,
+                ):
+                    logger.warning("[forward] API returned failure: %s", result)
                     return False
                 # 检查 message_id 是否存在（某些平台可能不支持）
                 data = result.get("data", result)
