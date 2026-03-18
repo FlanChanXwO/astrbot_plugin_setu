@@ -379,7 +379,7 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
         # 检测平台是否支持合并转发
         forward_supported = self._is_forward_supported(event)
         if actual_send_mode == "forward" and not forward_supported:
-            logger.info(
+            logger.debug(
                 "[send] Platform %s does not support forward messages, "
                 "falling back to normal image send",
                 getattr(event.platform, "name", "unknown")
@@ -458,11 +458,11 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
 
         # 如果普通发送失败，尝试 HTML 卡片降级（使用已下载的图片）
         if not send_success and use_html_fallback:
-            logger.info("Image send failed, attempting HTML card fallback")
+            logger.debug("Image send failed, attempting HTML card fallback")
             send_success = await self._try_html_card_fallback(
                 event, images, actual_send_mode, auto_revoke
             )
-            logger.info("HTML card fallback result: %s", send_success)
+            logger.debug("HTML card fallback result: %s", send_success)
 
         if not send_success:
             if use_html_fallback:
@@ -475,7 +475,7 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
                 )
         else:
             # 发送成功，yield 一个标记供调用者识别
-            logger.info("Images sent successfully: count=%d", len(images))
+            logger.debug("Images sent successfully: count=%d", len(images))
             yield {"send_success": True, "image_count": len(images)}
 
     async def _try_html_card_fallback(
@@ -516,7 +516,7 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
             logger.warning("HTML card rendering produced no images")
             return False
 
-        logger.info("[html_fallback] Successfully rendered %d HTML cards", len(html_image_data))
+        logger.debug("[html_fallback] Successfully rendered %d HTML cards", len(html_image_data))
 
         # 发送渲染后的 HTML 卡片图片
         if send_mode == "forward" and self._is_forward_supported(event):
@@ -548,7 +548,7 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
             send_success = await self._send_nodes_direct(event, nodes)
             # 如果合并转发失败，降级为普通发送
             if not send_success:
-                logger.info(
+                logger.debug(
                     "[forward] HTML card forward send failed, falling back to normal send"
                 )
                 chain = [Comp.Image.fromBytes(img) for img in html_image_data]

@@ -13,7 +13,10 @@
   - 修改命令处理器**不过滤**内部成功标记，确保能传递给 LLM handler
   - LLM handler 现在能正确识别成功发送的图片数量，返回正确的工具结果
   - **修复关键 bug**：移除 LLM handler 中的 `sent_count += 1`，避免错误消息被计入发送成功的图片数量
-- **改进发送失败检测**：
+- **代码审查改进**（v1.0.8 补充修复）：
+  - 修复 `_decode_unicode_escapes`：使用正则表达式只替换 `\uXXXX` 格式，避免 `unicode_escape` 过度解码其他转义序列（如 `\n`, `\t` 等）
+  - 重构 `_send_nodes_with_revoke` 和 `_send_nodes_direct`：提取共享辅助函数 `_send_forward_messages` 和 `_check_forward_result`，减少代码重复
+  - 降低日志级别：将部分 `info`/`warning` 日志降级为 `debug`，减少生产环境日志噪音
   - `_direct_send` 现在只对 OneBot v11 (`aiocqhttp`) 平台严格检查 `send_message` 返回值
   - 对于 Telegram 等其他平台，`send_message` 返回 `None` 不再视为失败（这些平台可能发送成功但返回 None）
   - 添加 `TimeoutError` 捕获，处理 Telegram 等平台的网络超时问题

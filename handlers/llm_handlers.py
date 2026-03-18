@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import codecs
 import json
+import re
 
 import mcp.types
 
@@ -13,16 +13,25 @@ from astrbot.api.event import AstrMessageEvent
 from .command_handlers import CommandHandler
 
 
+# 匹配 \uXXXX 格式的 Unicode 转义序列
+_UNICODE_ESCAPE_PATTERN = re.compile(r"\\u([0-9a-fA-F]{4})")
+
+
 def _decode_unicode_escapes(text: str) -> str:
-    """解码字符串中的 Unicode 转义序列（如 \\u74f7\\u7b25\\u6728\\u684c -> 碧蓝档案）。"""
+    """解码字符串中的 Unicode 转义序列（如 \\u74f7\\u7b25\\u6728\\u684c -> 碧蓝档案）。
+
+    只处理 \\uXXXX 格式的 Unicode 转义，避免过度解码其他转义序列（如 \\n, \\t 等）。
+    """
     if not text or "\\u" not in text:
         return text
     try:
         # 先尝试使用 json.loads 解码（处理带引号的 JSON 字符串）
         if text.startswith('"') and text.endswith('"'):
             return json.loads(text)
-        # 否则使用 unicode_escape 解码
-        return codecs.decode(text, "unicode_escape")
+        # 使用正则表达式只替换 \\uXXXX 格式的转义序列
+        return _UNICODE_ESCAPE_PATTERN.sub(
+            lambda m: chr(int(m.group(1), 16)), text
+        )
     except (ValueError, UnicodeDecodeError):
         return text
 
