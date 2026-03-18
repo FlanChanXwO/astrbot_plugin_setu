@@ -144,6 +144,8 @@ class UrlImageDiskCache:
         """保存缓存索引（加锁）。"""
         tmp_path = self.index_path.with_suffix(".json.tmp")
         try:
+            # 确保目录存在
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
             tmp_path.write_text(
                 json.dumps(self._index, ensure_ascii=False, indent=2),
                 encoding="utf-8",
