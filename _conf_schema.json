@@ -109,11 +109,16 @@
     "type": "object",
     "hint": "将图片包装为防审查卡片。",
     "items": {
-      "enabled": {
-        "type": "bool",
-        "description": "启用 HTML 卡片",
-        "hint": "发送前将原图包装为 HTML 卡片。",
-        "default": false
+      "strategy": {
+        "type": "string",
+        "description": "HTML 卡片策略",
+        "hint": "never=从不使用，fallback=发送失败时降级使用，always=总是使用。",
+        "default": "fallback",
+        "options": [
+          "never",
+          "fallback",
+          "always"
+        ]
       },
       "mode": {
         "type": "string",

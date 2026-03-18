@@ -1,6 +1,34 @@
 # Changelog
 
+## [1.0.8] - 2026-03-19
+- **修复合并转发在不受支持平台的问题**（如 Telegram）：
+  - 添加 `_is_forward_supported()` 方法，使用 `event.platform.name` 智能检测平台是否支持合并转发
+  - 仅对 OneBot v11 (`aiocqhttp`) 平台启用合并转发功能
+  - 对于不支持的平台（如 Telegram），自动降级为普通图片发送，避免无效尝试
+  - 改进 `_send_nodes_direct` 和 `_send_nodes_with_revoke` 的错误检测，正确识别平台不支持的情况
+  - 在 HTML 卡片降级中也应用相同的降级逻辑
+  - 添加更详细的日志输出，帮助诊断发送问题
+- **修复 LLM 工具发送状态检测问题**：
+  - `send_images` 现在在发送成功时 yield 一个内部成功标记 `{"send_success": True, "image_count": n}`
+  - 修改命令处理器**不过滤**内部成功标记，确保能传递给 LLM handler
+  - LLM handler 现在能正确识别成功发送的图片数量，返回正确的工具结果
+  - **修复关键 bug**：移除 LLM handler 中的 `sent_count += 1`，避免错误消息被计入发送成功的图片数量
+- **改进发送失败检测**：
+  - `_direct_send` 现在只对 OneBot v11 (`aiocqhttp`) 平台严格检查 `send_message` 返回值
+  - 对于 Telegram 等其他平台，`send_message` 返回 `None` 不再视为失败（这些平台可能发送成功但返回 None）
+  - 添加 `TimeoutError` 捕获，处理 Telegram 等平台的网络超时问题
+  - 避免在 Telegram 等平台上不必要地触发 HTML 卡片降级
+  - 添加详细的 HTML 卡片渲染和发送日志，便于诊断问题
+
 ## [1.0.7] - 2026-03-18
+- **HTML 卡片策略重构**：将 `enable_html_card` (布尔值) 改为 `html_card_strategy` (下拉框)，提供三种选项：
+  - `never`：从不使用 HTML 卡片
+  - `fallback`（默认）：发送失败时降级为 HTML 卡片
+  - `always`：总是使用 HTML 卡片包装发送
+- **优化合并转发性能**：
+  - 使用 `asyncio.gather` 并行转换 nodes 到 dict，减少序列化等待时间
+  - 非自动撤回模式下使用直接 API 调用，绕过 AstrBot 内部消息处理
+  - 添加详细性能日志，便于诊断发送慢的问题
 - **完全迁移到 httpx**：移除 aiohttp 依赖，统一使用 httpx 进行所有 HTTP 请求
 - 图片下载使用流式传输（streaming）替代直接读取 content，强制 50MB 大小限制
 - 分段下载添加范围验证，检查返回数据大小与预期是否匹配
@@ -13,6 +41,7 @@
 - 新增性能配置面板：支持配置分段下载、并发限制、超时等参数
 - 优化用户错误提示：区分"未找到符合要求的图片"和"网络/服务异常"两种场景
 - 修复 DocxService 初始化错误：移除多余的 `initialize()` 调用
+- **修复 LLM 工具标签 Unicode 转义问题**：中文标签（如 `碧蓝档案萝莉`）不再被错误转义为 `\u74f7\u7b25\u6728\u684c`
 
 ## [1.0.6] - 2026-03-13
 - 修复了命令注册的BUG

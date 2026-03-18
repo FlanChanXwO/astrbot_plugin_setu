@@ -2,12 +2,29 @@
 
 from __future__ import annotations
 
+import codecs
+import json
+
 import mcp.types
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
 
 from .command_handlers import CommandHandler
+
+
+def _decode_unicode_escapes(text: str) -> str:
+    """解码字符串中的 Unicode 转义序列（如 \\u74f7\\u7b25\\u6728\\u684c -> 碧蓝档案）。"""
+    if not text or "\\u" not in text:
+        return text
+    try:
+        # 先尝试使用 json.loads 解码（处理带引号的 JSON 字符串）
+        if text.startswith('"') and text.endswith('"'):
+            return json.loads(text)
+        # 否则使用 unicode_escape 解码
+        return codecs.decode(text, "unicode_escape")
+    except (ValueError, UnicodeDecodeError):
+        return text
 
 
 class LlmHandlers:
@@ -77,11 +94,12 @@ class LlmHandlers:
             if isinstance(tags, dict):
                 tags = tags.get("value", [])
 
-            # 构建 tags 字符串，确保所有元素为字符串
+            # 构建 tags 字符串，确保所有元素为字符串，并解码 Unicode 转义
             if isinstance(tags, list):
-                tags_str = " ".join(str(tag) for tag in tags)
+                decoded_tags = [_decode_unicode_escapes(str(tag)) for tag in tags]
+                tags_str = " ".join(decoded_tags)
             else:
-                tags_str = str(tags or "")
+                tags_str = _decode_unicode_escapes(str(tags or ""))
 
             # 跟踪发送结果
             sent_count = 0
@@ -91,11 +109,16 @@ class LlmHandlers:
                 event, count=str(count), tags=tags_str
             ):
                 if result is not None:
+                    # 检查内部成功标记
+                    if isinstance(result, dict) and result.get("send_success"):
+                        sent_count = result.get("image_count", 0)
+                        continue
                     try:
                         await self.plugin.context.send_message(
                             event.unified_msg_origin, result
                         )
-                        sent_count += 1
+                        # 注意：这里不递增 sent_count，因为 result 可能是错误消息
+                        # 只有成功标记中的 image_count 才是实际发送的图片数
                     except Exception as exc:
                         has_error = True
                         logger.warning("[llm_tool] Failed to send: %s", exc)

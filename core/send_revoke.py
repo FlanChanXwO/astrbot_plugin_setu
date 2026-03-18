@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -136,19 +137,28 @@ class SendWithRevokeMixin:
     async def _send_nodes_with_revoke(
         self, event: AstrMessageEvent, nodes: list[Comp.Node]
     ) -> str | None:
-        """发送合并转发消息并返回 message_id。"""
+        """发送合并转发消息并返回 message_id。优化版本：并行转换 node 到 dict。"""
+        import time
+
+        start_time = time.monotonic()
+
         try:
             bot = self._get_bot_api(event)
             if not bot:
+                logger.warning("[forward] No bot API available for revoke support")
                 return None
 
             is_group = bool(event.get_group_id())
             session_id = event.get_group_id() or event.get_sender_id()
 
-            messages = []
-            for node in nodes:
-                node_dict = await node.to_dict()
-                messages.append(node_dict)
+            # 并行转换所有 nodes 到 dict，提高效率
+            tasks = [node.to_dict() for node in nodes]
+            messages = await asyncio.gather(*tasks)
+
+            dict_time = time.monotonic()
+            logger.debug(
+                "[forward] Converted %d nodes to dict in %.3fs", len(nodes), dict_time - start_time
+            )
 
             if is_group:
                 result = await bot.call_action(
@@ -167,6 +177,25 @@ class SendWithRevokeMixin:
                     messages=messages,
                 )
 
+            end_time = time.monotonic()
+
+            # 检查 API 返回结果
+            if isinstance(result, dict):
+                # 检查是否有错误返回
+                if result.get("status") == "failed" or result.get("retcode") not in (0, None):
+                    logger.warning(
+                        "[forward] API returned failure: %s", result
+                    )
+                    return None
+
+            logger.info(
+                "[forward] Sent %d nodes in %.3fs (dict: %.3fs, api: %.3fs)",
+                len(nodes),
+                end_time - start_time,
+                dict_time - start_time,
+                end_time - dict_time,
+            )
+
             if isinstance(result, dict):
                 data = result.get("data", result)
                 message_id = data.get("message_id") if isinstance(data, dict) else None
@@ -176,3 +205,83 @@ class SendWithRevokeMixin:
         except (OSError, RuntimeError):
             logger.exception("[revoke] Failed to send nodes with revoke support")
             return None
+
+    async def _send_nodes_direct(
+        self, event: AstrMessageEvent, nodes: list[Comp.Node]
+    ) -> bool:
+        """直接发送合并转发消息（无撤回支持），优化版本。
+
+        注意：合并转发消息仅在 OneBot v11 等特定平台受支持。
+        对于不支持的平台，会返回 False，调用方应降级为普通发送。
+        """
+        import time
+
+        start_time = time.monotonic()
+
+        try:
+            bot = self._get_bot_api(event)
+            if not bot:
+                logger.warning("[forward] No bot API available")
+                return False
+
+            is_group = bool(event.get_group_id())
+            session_id = event.get_group_id() or event.get_sender_id()
+
+            # 并行转换所有 nodes 到 dict
+            tasks = [node.to_dict() for node in nodes]
+            messages = await asyncio.gather(*tasks)
+
+            dict_time = time.monotonic()
+            logger.debug(
+                "[forward] Converted %d nodes to dict in %.3fs",
+                len(nodes),
+                dict_time - start_time,
+            )
+
+            # 调用发送 API
+            if is_group:
+                result = await bot.call_action(
+                    "send_group_forward_msg",
+                    group_id=int(session_id)
+                    if str(session_id).isdigit()
+                    else session_id,
+                    messages=messages,
+                )
+            else:
+                result = await bot.call_action(
+                    "send_private_forward_msg",
+                    user_id=int(session_id)
+                    if str(session_id).isdigit()
+                    else session_id,
+                    messages=messages,
+                )
+
+            end_time = time.monotonic()
+
+            # 检查结果，某些平台会返回错误或特定状态表示不支持
+            if isinstance(result, dict):
+                # 检查是否有错误返回
+                if result.get("status") == "failed" or result.get("retcode") not in (0, None):
+                    logger.warning(
+                        "[forward] API returned failure: %s", result
+                    )
+                    return False
+                # 检查 message_id 是否存在（某些平台可能不支持）
+                data = result.get("data", result)
+                if not data or (isinstance(data, dict) and not data.get("message_id")):
+                    logger.warning(
+                        "[forward] API returned no message_id, platform may not support forward messages"
+                    )
+                    return False
+
+            logger.info(
+                "[forward] Sent %d nodes in %.3fs (dict: %.3fs, api: %.3fs)",
+                len(nodes),
+                end_time - start_time,
+                dict_time - start_time,
+                end_time - dict_time,
+            )
+            return True
+        except Exception as exc:
+            logger.exception("[forward] Failed to send nodes direct: %s", exc)
+            return False
