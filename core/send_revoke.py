@@ -47,9 +47,7 @@ class SendWithRevokeMixin:
                 )
             return await bot.call_action(
                 "send_private_forward_msg",
-                user_id=int(session_id)
-                if str(session_id).isdigit()
-                else session_id,
+                user_id=int(session_id) if str(session_id).isdigit() else session_id,
                 messages=messages,
             )
         except Exception:

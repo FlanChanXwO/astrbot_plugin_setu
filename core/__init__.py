@@ -42,7 +42,10 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
         await self._session_config.initialize()
         await self._restore_pending_revokes()
 
-        if self._config.html_card_strategy in ("fallback", "always") or self._config.auto_handle_send_failure:
+        if (
+            self._config.html_card_strategy in ("fallback", "always")
+            or self._config.auto_handle_send_failure
+        ):
             self._ensure_html_renderer()
 
         try:
@@ -253,11 +256,12 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
 
             # 检查图片大小，Telegram 等平台有 10MB 或 20MB 限制
             for comp in chain:
-                if hasattr(comp, 'file') and isinstance(comp.file, bytes):
+                if hasattr(comp, "file") and isinstance(comp.file, bytes):
                     size_mb = len(comp.file) / (1024 * 1024)
                     if size_mb > 10:  # Telegram 通常限制 10-20MB
                         logger.warning(
-                            "[send] Image size %.2f MB may exceed platform limit", size_mb
+                            "[send] Image size %.2f MB may exceed platform limit",
+                            size_mb,
                         )
 
             send_result = await self.plugin.context.send_message(
@@ -275,7 +279,7 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
                 logger.warning(
                     "[send] send_message returned None on %s, "
                     "platform may not support this message type",
-                    platform_name
+                    platform_name,
                 )
                 return False
 
@@ -285,7 +289,7 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
         except TimeoutError:
             logger.warning(
                 "[send] Direct send timed out on %s",
-                getattr(event.platform, "name", "unknown")
+                getattr(event.platform, "name", "unknown"),
             )
             return False
         except Exception as exc:
@@ -368,9 +372,7 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
                 event, images, actual_send_mode, auto_revoke
             )
             if not send_success:
-                yield event.plain_result(
-                    "HTML 卡片发送失败，请检查网络或联系管理员。"
-                )
+                yield event.plain_result("HTML 卡片发送失败，请检查网络或联系管理员。")
             return
 
         # 尝试普通发送（使用直接发送以捕获异常）
@@ -382,7 +384,7 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
             logger.debug(
                 "[send] Platform %s does not support forward messages, "
                 "falling back to normal image send",
-                getattr(event.platform, "name", "unknown")
+                getattr(event.platform, "name", "unknown"),
             )
             actual_send_mode = "image"
 
@@ -421,7 +423,8 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
                 send_start = time.monotonic()
                 send_success = await self._send_nodes_direct(event, nodes)
                 logger.debug(
-                    "[forward] Send nodes completed in %.3fs", time.monotonic() - send_start
+                    "[forward] Send nodes completed in %.3fs",
+                    time.monotonic() - send_start,
                 )
                 # 如果合并转发失败（平台不支持），降级为普通图片发送
                 if not send_success:
@@ -508,7 +511,9 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
             )
             if rendered:
                 html_image_data.append(rendered)
-                logger.debug("[html_fallback] Image %d rendered, size=%d", i + 1, len(rendered))
+                logger.debug(
+                    "[html_fallback] Image %d rendered, size=%d", i + 1, len(rendered)
+                )
             else:
                 logger.warning("[html_fallback] Failed to render image %d", i + 1)
 
@@ -516,7 +521,9 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
             logger.warning("HTML card rendering produced no images")
             return False
 
-        logger.debug("[html_fallback] Successfully rendered %d HTML cards", len(html_image_data))
+        logger.debug(
+            "[html_fallback] Successfully rendered %d HTML cards", len(html_image_data)
+        )
 
         # 发送渲染后的 HTML 卡片图片
         if send_mode == "forward" and self._is_forward_supported(event):
@@ -579,7 +586,10 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
 
             # 所有 HTML 卡片图片放在一条消息链中发送
             chain = [Comp.Image.fromBytes(img) for img in html_image_data]
-            logger.debug("[html_fallback] Sending %d HTML card images via direct send", len(chain))
+            logger.debug(
+                "[html_fallback] Sending %d HTML card images via direct send",
+                len(chain),
+            )
             result = await self._direct_send(event, chain)
             logger.info("[html_fallback] Direct send result: %s", result)
             return result

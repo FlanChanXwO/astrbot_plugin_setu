@@ -29,9 +29,7 @@ def _decode_unicode_escapes(text: str) -> str:
         if text.startswith('"') and text.endswith('"'):
             return json.loads(text)
         # 使用正则表达式只替换 \\uXXXX 格式的转义序列
-        return _UNICODE_ESCAPE_PATTERN.sub(
-            lambda m: chr(int(m.group(1), 16)), text
-        )
+        return _UNICODE_ESCAPE_PATTERN.sub(lambda m: chr(int(m.group(1), 16)), text)
     except (ValueError, UnicodeDecodeError):
         return text
 
