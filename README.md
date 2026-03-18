@@ -10,7 +10,7 @@
 
 **一个支持多平台、可自定义、带防审核机制的随机色图插件，支持多 API、HTML 卡片包装、LLM 工具调用。**
 
-[![License: APGL](https://img.shields.io/badge/License-APGL-blue.svg)](https://opensource.org/licenses/MIT)
+[![License: APGL](https://img.shields.io/badge/License-APGL-blue.svg)](https://opensource.org/licenses/agpl-3.0)
 ![Python Version](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![AstrBot](https://img.shields.io/badge/AstrBot-%E2%89%A54.10.4-green)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey)
@@ -49,13 +49,13 @@
 
 ## ✨ 功能特性
 
-- 🎨 **多 API 支持** - Lolicon、Yande.re、自定义 API 等
+- 🎨 **多 API 支持** - Lolicon、SexNyan、自定义 API 等
 - 🖼️ **HTML 卡片包装** - 防止平台审核，支持自定义样式
 - 🤖 **LLM 工具调用** - 可通过大模型自动获取色图
 - 🏷️ **标签搜索** - 支持多标签、中文标签、模糊匹配
 - 🔄 **多种发送模式** - 直接发送、合并转发、文件封装
 - 🛡️ **防审核机制** - 图片混淆、延迟撤回、Docx 封装
-- ⚡ **性能优化** - 并发下载、磁盘缓存、自动补图
+- ⚡ **性能优化** - 并发下载、磁盘缓存、自动补图、httpx、分段下载
 - 🌐 **多平台适配** - 兼容 AstrBot 支持的所有平台
 
 ---
@@ -83,14 +83,17 @@
 
 | 配置项 | 类型 | 说明 | 默认值 |
 |--------|------|------|--------|
-| `api_type` | 字符串 | API 类型（lolicon/yande/custom/all） | `lolicon` |
+| `api_type` | 字符串 | API 类型（lolicon/sexnyan/custom/all） | `lolicon` |
 | `send_mode` | 字符串 | 发送模式（auto/image/forward） | `auto` |
 | `content_mode` | 字符串 | 内容模式（sfw/r18/mix） | `sfw` |
 | `max_count` | 整数 | 单次最大图片数 | `10` |
 | `cache_enabled` | 布尔值 | 是否启用图片磁盘缓存 | `true` |
 | `enable_html_card` | 布尔值 | 是否启用 HTML 卡片包装 | `true` |
-| `auto_revoke_r18` | 布尔值 | R18 图片是否自动撤回 | `true` |
-| `r18_docx_mode` | 布尔值 | R18 是否使用 Docx 封装 | `false` |
+| `auto_revoke_r18` | 布尔值 | R18 图片是否自动撤回 | `false` |
+| `r18_docx_mode` | 布尔值 | R18 是否使用 Docx 封装 | `true` |
+| `use_httpx` | 布尔值 | 使用 httpx 客户端（支持 HTTP/2） | `true` |
+| `enable_range_download` | 布尔值 | 启用分段下载（高带宽优化） | `false` |
+| `download_concurrent_limit` | 整数 | 并发下载限制 | `10` |
 
 ### 配置示例
 
@@ -104,7 +107,13 @@
   "enable_html_card": true,
   "auto_revoke_r18": true,
   "r18_docx_mode": false,
-  "exclude_ai": false
+  "exclude_ai": false,
+  "use_httpx": true,
+  "enable_range_download": false,
+  "range_segments": 3,
+  "range_download_threshold": 512,
+  "download_concurrent_limit": 10,
+  "download_timeout_seconds": 30
 }
 ```
 
@@ -146,6 +155,13 @@
 - **磁盘缓存**：通过 `cache_enabled` 启用图片磁盘缓存，提升多次请求同一图片的响应速度。
 - **多 API 策略**：支持 `all` 模式自动切换多 API，提升获取成功率。
 - **标签与过滤**：支持多标签、中文标签、AI 过滤（`exclude_ai`），可灵活组合搜索条件。
+- **性能优化**：
+  - `use_httpx`: 使用 httpx 替代 aiohttp，支持 HTTP/2 和更好的连接管理
+  - `enable_range_download`: 启用分段下载，将大图片分多段并行下载，适合高带宽服务器
+  - `range_segments`: 分段数（推荐 2-4）
+  - `range_download_threshold`: 分段下载阈值（KB），大于此值才启用分段
+  - `download_concurrent_limit`: 并发下载限制，高带宽服务器可适当提高
+  - `download_timeout_seconds`: 下载超时时间（秒）
 
 更多详细配置和玩法请参考上方“配置项”表格及实际管理面板说明。
 
