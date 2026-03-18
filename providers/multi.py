@@ -15,7 +15,7 @@ class MultiApiProvider:
     """多 API 提供商，支持轮询、随机和故障转移策略。"""
 
     def __init__(
-        self, providers: list["SetuImageProvider"], strategy: str = "round_robin"
+        self, providers: list[SetuImageProvider], strategy: str = "round_robin"
     ):
         """初始化多 API 提供商。
 
@@ -28,7 +28,7 @@ class MultiApiProvider:
         self._current_index = 0
         self._last_working_index = 0
 
-    def _get_next_provider(self) -> "SetuImageProvider":
+    def _get_next_provider(self) -> SetuImageProvider:
         """根据策略获取下一个提供商。"""
         if self.strategy == "random":
             return random.choice(self.providers)

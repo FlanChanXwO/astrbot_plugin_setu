@@ -9,33 +9,56 @@
         "description": "API 提供者类型",
         "hint": "all 同时使用内置 API。",
         "default": "lolicon",
-        "options": ["lolicon", "sexnyan", "custom", "all"]
+        "options": [
+          "lolicon",
+          "sexnyan",
+          "custom",
+          "all"
+        ]
       },
       "multi_api_strategy": {
         "type": "string",
         "description": "多 API 策略",
         "hint": "当 api_type 为 all/custom 时生效。",
         "default": "round_robin",
-        "options": ["round_robin", "random", "failover"]
+        "options": [
+          "round_robin",
+          "random",
+          "failover"
+        ]
       },
       "content_mode": {
         "type": "string",
         "description": "内容模式",
         "hint": "全年龄/成人/混合",
         "default": "sfw",
-        "options": ["sfw", "r18", "mix"]
+        "options": [
+          "sfw",
+          "r18",
+          "mix"
+        ]
       },
       "max_count": {
         "type": "int",
         "description": "每次请求最大图片数",
         "hint": "单次命令的上限。",
-        "default": 10
+        "default": 10,
+        "slider": {
+          "min": 1,
+          "max": 10,
+          "step": 1
+        }
       },
       "max_replenish_rounds": {
         "type": "int",
         "description": "最大补充轮次",
         "hint": "部分图片下载失败时的重试轮次。",
-        "default": 3
+        "default": 3,
+        "slider": {
+          "min": 1,
+          "max": 3,
+          "step": 1
+        }
       }
     }
   },
@@ -49,7 +72,11 @@
         "description": "发送模式",
         "hint": "auto 在图片数量>1时使用转发。",
         "default": "image",
-        "options": ["image", "forward", "auto"]
+        "options": [
+          "image",
+          "forward",
+          "auto"
+        ]
       },
       "r18_docx_mode": {
         "type": "bool",
@@ -93,19 +120,32 @@
         "description": "卡片模式",
         "hint": "single=所有图片放入一张卡片，multiple=每张图片一张卡片。",
         "default": "single",
-        "options": ["single", "multiple"]
+        "options": [
+          "single",
+          "multiple"
+        ]
       },
       "card_padding": {
         "type": "int",
         "description": "卡片内边距",
         "hint": "值越小卡片越紧凑。",
-        "default": 6
+        "default": 6,
+        "slider": {
+          "min": 6,
+          "max": 30,
+          "step": 1
+        }
       },
       "card_gap": {
         "type": "int",
         "description": "卡片间距",
         "hint": "卡片之间的垂直间距。",
-        "default": 6
+        "default": 6,
+        "slider": {
+          "min": 6,
+          "max": 30,
+          "step": 1
+        }
       }
     }
   },
@@ -154,7 +194,13 @@
             "type": "string",
             "description": "图片尺寸",
             "default": "original",
-            "options": ["original", "regular", "small", "thumb", "mini"]
+            "options": [
+              "original",
+              "regular",
+              "small",
+              "thumb",
+              "mini"
+            ]
           },
           "proxy": {
             "type": "string",
@@ -166,7 +212,12 @@
             "type": "string",
             "description": "宽高比过滤",
             "default": "",
-            "options": ["", "horizontal", "vertical", "square"]
+            "options": [
+              "",
+              "horizontal",
+              "vertical",
+              "square"
+            ]
           },
           "uid": {
             "type": "list",
@@ -214,7 +265,10 @@
                 "type": "string",
                 "description": "HTTP 方法",
                 "default": "GET",
-                "options": ["GET", "POST"]
+                "options": [
+                  "GET",
+                  "POST"
+                ]
               },
               "timeout": {
                 "type": "int",
@@ -226,7 +280,10 @@
                 "description": "解析器类型",
                 "hint": "auto/json",
                 "default": "auto",
-                "options": ["auto", "json"]
+                "options": [
+                  "auto",
+                  "json"
+                ]
               },
               "json_path": {
                 "type": "string",
@@ -324,6 +381,40 @@
     "type": "object",
     "hint": "下载速度和并发设置",
     "items": {
+      "use_httpx": {
+        "type": "bool",
+        "description": "使用 httpx 客户端",
+        "hint": "使用 httpx 替代 aiohttp，支持更好的 HTTP/2 和 range 下载。",
+        "default": true
+      },
+      "enable_range_download": {
+        "type": "bool",
+        "description": "启用分段下载",
+        "hint": "将单张大图分成多段并行下载，可显著提升大图片下载速度。推荐在高带宽环境启用。",
+        "default": false
+      },
+      "range_segments": {
+        "type": "int",
+        "description": "分段数",
+        "hint": "单张图片的分段下载数。2-4 段通常效果最佳，太多反而可能降低速度。",
+        "default": 3,
+        "slider": {
+          "min": 2,
+          "max": 6,
+          "step": 1
+        }
+      },
+      "range_download_threshold": {
+        "type": "int",
+        "description": "分段下载阈值(KB)",
+        "hint": "图片大于此值才启用分段下载。太小的图片分段反而慢。",
+        "default": 512,
+        "slider": {
+          "min": 256,
+          "max": 2048,
+          "step": 128
+        }
+      },
       "download_concurrent_limit": {
         "type": "int",
         "description": "并发下载限制",

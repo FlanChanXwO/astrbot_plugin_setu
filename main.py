@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from astrbot.api.star import Context, Star, StarTools, register
+from astrbot.api.event import filter
+from astrbot.api.star import Context, Star, StarTools
 from astrbot.core import AstrBotConfig
 from astrbot.core.provider.register import llm_tools
 
@@ -18,7 +19,6 @@ from .core import SetuCore
 from .handlers import CommandHandler, LlmHandlers
 
 
-@register("astrbot_plugin_setu", "WineFox Migrate", "瑟瑟功能插件", "2.1.0")
 class SetuPlugin(Star):
     """色图插件主类。"""
 
@@ -118,14 +118,14 @@ class SetuPlugin(Star):
             except (AttributeError, RuntimeError):
                 pass
 
-    @Star.filter.regex(COMMAND_PATTERN)
+    @filter.regex(COMMAND_PATTERN)
     async def get_random_picture(self, event):
         """处理色图请求命令。"""
         if self._cmd_handler:
             async for result in self._cmd_handler.handle_random_picture(event):
                 yield result
 
-    @Star.filter.command("setu")
+    @filter.command("setu")
     async def setu_command(self, event, count: str = "1", *, tags: str = ""):
         """处理 /setu 命令。"""
         if self._cmd_handler:
@@ -134,7 +134,7 @@ class SetuPlugin(Star):
             ):
                 yield result
 
-    @Star.filter.command("setu_mode")
+    @filter.command("setu_mode")
     async def setu_mode_command(self, event, mode: str = ""):
         """处理 /setu_mode 命令。"""
         if self._cmd_handler:

@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 class CommandHandler:
     """命令处理器。"""
 
-    def __init__(self, core: "SetuCore", config: SetuConfig):
+    def __init__(self, core: SetuCore, config: SetuConfig):
         self._core = core
         self._config = config
 
@@ -87,17 +87,20 @@ class CommandHandler:
                 self._core.fetch_and_download_images(num, tags, is_r18), timeout=60.0
             )
             if not downloaded:
-                yield event.plain_result("获取图片失败，请稍后再试。")
+                tags_info = f"标签: {', '.join(tags)}" if tags else ""
+                yield event.plain_result(
+                    f"未找到{tags_info}符合要求的图片，请尝试其他标签或检查标签拼写~"
+                )
                 return
 
             async for result in self._core.send_images(event, downloaded, is_r18, tags):
                 yield result
         except asyncio.TimeoutError:
             logger.warning("get_random_picture timeout (>60s)")
-            yield event.plain_result("获取图片超时，请稍后再试。")
+            yield event.plain_result("获取图片超时，网络可能不稳定，请稍后再试。")
         except (OSError, RuntimeError, ValueError):
             logger.exception("get_random_picture failed")
-            yield event.plain_result("获取图片失败，请稍后再试。")
+            yield event.plain_result("获取图片失败，网络或服务异常，请稍后再试。")
 
     async def handle_setu_command(
         self, event: AstrMessageEvent, count: str = "1", *, tags: str = ""
@@ -141,7 +144,10 @@ class CommandHandler:
                 timeout=60.0,
             )
             if not downloaded:
-                yield event.plain_result("获取图片失败，请稍后再试。")
+                tags_info = f"标签: {', '.join(parsed_tags)}" if parsed_tags else ""
+                yield event.plain_result(
+                    f"未找到{tags_info}符合要求的图片，请尝试其他标签或检查标签拼写~"
+                )
                 return
 
             async for result in self._core.send_images(
@@ -150,10 +156,10 @@ class CommandHandler:
                 yield result
         except asyncio.TimeoutError:
             logger.warning("setu command timeout (>60s)")
-            yield event.plain_result("获取图片超时，请稍后再试。")
+            yield event.plain_result("获取图片超时，网络可能不稳定，请稍后再试。")
         except (OSError, RuntimeError, ValueError):
             logger.exception("setu command failed")
-            yield event.plain_result("获取图片失败，请稍后再试。")
+            yield event.plain_result("获取图片失败，网络或服务异常，请稍后再试。")
 
     async def handle_setu_mode(self, event: AstrMessageEvent, mode: str = ""):
         """处理 /setu_mode 命令。"""

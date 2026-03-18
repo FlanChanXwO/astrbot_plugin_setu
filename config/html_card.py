@@ -16,7 +16,7 @@ class HtmlCardConfigMixin:
     _read: Any
 
     @property
-    def html_card_mode(self: "ConfigBase") -> str:
+    def html_card_mode(self: ConfigBase) -> str:
         """HTML 卡片模式。
 
         返回:
@@ -26,7 +26,7 @@ class HtmlCardConfigMixin:
         return mode if mode in ("single", "multiple") else "single"
 
     @property
-    def enable_html_card(self: "ConfigBase") -> bool:
+    def enable_html_card(self: ConfigBase) -> bool:
         """是否启用 HTML 卡片包装。
 
         返回:
@@ -38,7 +38,7 @@ class HtmlCardConfigMixin:
         )
 
     @property
-    def html_card_padding(self: "ConfigBase") -> int:
+    def html_card_padding(self: ConfigBase) -> int:
         """HTML 卡片内边距。
 
         返回:
@@ -47,7 +47,7 @@ class HtmlCardConfigMixin:
         return safe_int(self._read(("html_card", "card_padding"), default=6), 6)
 
     @property
-    def html_card_gap(self: "ConfigBase") -> int:
+    def html_card_gap(self: ConfigBase) -> int:
         """HTML 卡片间距。
 
         返回:

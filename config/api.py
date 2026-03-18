@@ -16,7 +16,7 @@ class ApiConfigMixin:
     _read: Any
 
     @property
-    def api_type(self: "ConfigBase") -> str:
+    def api_type(self: ConfigBase) -> str:
         """API 提供商类型。
 
         返回:
@@ -32,7 +32,7 @@ class ApiConfigMixin:
         )
 
     @property
-    def multi_api_strategy(self: "ConfigBase") -> str:
+    def multi_api_strategy(self: ConfigBase) -> str:
         """多 API 策略。
 
         返回:
@@ -50,7 +50,7 @@ class ApiConfigMixin:
         )
 
     @property
-    def content_mode(self: "ConfigBase") -> str:
+    def content_mode(self: ConfigBase) -> str:
         """内容模式（分级）。
 
         返回:
@@ -62,7 +62,7 @@ class ApiConfigMixin:
         return mode if mode in ("sfw", "r18", "mix") else "sfw"
 
     @property
-    def exclude_ai(self: "ConfigBase") -> bool:
+    def exclude_ai(self: ConfigBase) -> bool:
         """排除 AI 生成作品（仅 lolicon 生效）。
 
         返回:
@@ -79,7 +79,7 @@ class ApiConfigMixin:
         )
 
     @property
-    def image_size(self: "ConfigBase") -> str:
+    def image_size(self: ConfigBase) -> str:
         """图片尺寸（仅 lolicon 生效）。
 
         返回:
@@ -95,7 +95,7 @@ class ApiConfigMixin:
         )
 
     @property
-    def proxy(self: "ConfigBase") -> str:
+    def proxy(self: ConfigBase) -> str:
         """图片代理主机（仅 lolicon 生效）。
 
         返回:
@@ -106,7 +106,7 @@ class ApiConfigMixin:
         )
 
     @property
-    def aspect_ratio(self: "ConfigBase") -> str:
+    def aspect_ratio(self: ConfigBase) -> str:
         """宽高比过滤（仅 lolicon 生效）。
 
         返回:
@@ -118,7 +118,7 @@ class ApiConfigMixin:
         return ratio if ratio in ("horizontal", "vertical", "square") else ""
 
     @property
-    def uid(self: "ConfigBase") -> list[int]:
+    def uid(self: ConfigBase) -> list[int]:
         """作者 UID 列表（仅 lolicon 生效）。
 
         返回:
@@ -130,7 +130,7 @@ class ApiConfigMixin:
         return []
 
     @property
-    def keyword(self: "ConfigBase") -> str:
+    def keyword(self: ConfigBase) -> str:
         """关键词过滤（仅 lolicon 生效）。
 
         返回:
@@ -139,7 +139,7 @@ class ApiConfigMixin:
         return str(self._read(("api", "lolicon", "keyword"), "keyword", default=""))
 
     @property
-    def max_replenish_rounds(self: "ConfigBase") -> int:
+    def max_replenish_rounds(self: ConfigBase) -> int:
         """最大补充轮次。
 
         返回:
@@ -156,7 +156,7 @@ class ApiConfigMixin:
         )
 
     @property
-    def custom_api_configs(self: "ConfigBase") -> list[dict[str, Any]]:
+    def custom_api_configs(self: ConfigBase) -> list[dict[str, Any]]:
         """自定义 API 配置列表。
 
         返回:
@@ -170,7 +170,7 @@ class ApiConfigMixin:
         return []
 
     def get_custom_api_config(
-        self: "ConfigBase", name: str | None = None
+        self: ConfigBase, name: str | None = None
     ) -> dict[str, Any] | None:
         """获取自定义 API 配置。
 
@@ -192,7 +192,7 @@ class ApiConfigMixin:
         return configs[0]
 
     @property
-    def custom_api(self: "ConfigBase") -> dict[str, Any]:
+    def custom_api(self: ConfigBase) -> dict[str, Any]:
         """自定义 API 基本信息。
 
         返回:
@@ -208,7 +208,7 @@ class ApiConfigMixin:
         return {"url": "", "method": "GET", "timeout": 30}
 
     @property
-    def api_response_parser(self: "ConfigBase") -> dict[str, Any]:
+    def api_response_parser(self: ConfigBase) -> dict[str, Any]:
         """API 响应解析器配置。
 
         返回:

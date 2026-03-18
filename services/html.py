@@ -112,17 +112,21 @@ class HtmlCardRenderer:
 
     async def render_single_image(
         self, context, image: bytes, style_options: dict[str, Any] | None = None
-    ) -> str | None:
-        """渲染单张图片。"""
+    ) -> bytes | None:
+        """渲染单张图片，返回渲染后的图片字节数据。"""
         if not image or not context:
             return None
         try:
             img_b64 = base64.b64encode(image).decode("ascii")
             html_content = self._build_html([img_b64], style_options=style_options)
             render_options = {"full_page": True, "type": "png", "scale": "device"}
-            return await context.html_render(
-                tmpl=html_content, data={}, return_url=True, options=render_options
+            # 使用 return_url=False 获取文件路径，然后读取字节数据
+            file_path = await context.html_render(
+                tmpl=html_content, data={}, return_url=False, options=render_options
             )
+            if file_path:
+                return Path(file_path).read_bytes()
+            return None
         except (ValueError, RuntimeError, OSError):
             logger.exception("html single-card render failed")
             return None
@@ -133,8 +137,8 @@ class HtmlCardRenderer:
         images: list[bytes],
         options: dict[str, Any] | None = None,
         style_options: dict[str, Any] | None = None,
-    ) -> str | None:
-        """渲染多张图片。"""
+    ) -> bytes | None:
+        """渲染多张图片，返回渲染后的图片字节数据。"""
         if not images or not context:
             return None
         try:
@@ -143,9 +147,12 @@ class HtmlCardRenderer:
             render_options = {"full_page": True, "type": "png", "scale": "device"}
             if options:
                 render_options.update(options)
-            return await context.html_render(
-                tmpl=html_content, data={}, return_url=True, options=render_options
+            file_path = await context.html_render(
+                tmpl=html_content, data={}, return_url=False, options=render_options
             )
+            if file_path:
+                return Path(file_path).read_bytes()
+            return None
         except (ValueError, RuntimeError, OSError):
             logger.exception("html card render failed")
             return None

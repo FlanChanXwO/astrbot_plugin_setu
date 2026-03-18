@@ -19,7 +19,7 @@ class SafetyConfigMixin:
     _read: Any
 
     @property
-    def blocked_groups(self: "ConfigBase") -> list[str]:
+    def blocked_groups(self: ConfigBase) -> list[str]:
         """被屏蔽的群聊列表。
 
         返回:
@@ -30,7 +30,7 @@ class SafetyConfigMixin:
             return [str(g).strip() for g in groups if str(g).strip()]
         return []
 
-    def is_group_blocked(self: "ConfigBase", group_id: str | None) -> bool:
+    def is_group_blocked(self: ConfigBase, group_id: str | None) -> bool:
         """检查群聊是否被屏蔽。
 
         参数:
@@ -44,7 +44,7 @@ class SafetyConfigMixin:
         return str(group_id) in self.blocked_groups
 
     @property
-    def cache_enabled(self: "ConfigBase") -> bool:
+    def cache_enabled(self: ConfigBase) -> bool:
         """是否启用图片缓存。
 
         返回:
@@ -53,7 +53,7 @@ class SafetyConfigMixin:
         return safe_bool(self._read(("cache", "enabled"), default=True), True)
 
     @property
-    def cache_ttl_hours(self: "ConfigBase") -> int:
+    def cache_ttl_hours(self: ConfigBase) -> int:
         """缓存 TTL（小时）。
 
         返回:
@@ -62,7 +62,7 @@ class SafetyConfigMixin:
         return safe_int(self._read(("cache", "ttl_hours"), default=2), 2)
 
     @property
-    def cache_max_items(self: "ConfigBase") -> int:
+    def cache_max_items(self: ConfigBase) -> int:
         """最大缓存条目数。
 
         返回:
@@ -71,7 +71,7 @@ class SafetyConfigMixin:
         return safe_int(self._read(("cache", "max_items"), default=1), 1)
 
     @property
-    def cache_cleanup_on_start(self: "ConfigBase") -> bool:
+    def cache_cleanup_on_start(self: ConfigBase) -> bool:
         """启动时清理缓存。
 
         返回:
@@ -80,7 +80,7 @@ class SafetyConfigMixin:
         return safe_bool(self._read(("cache", "cleanup_on_start"), default=True), True)
 
     @property
-    def download_concurrent_limit(self: "ConfigBase") -> int:
+    def download_concurrent_limit(self: ConfigBase) -> int:
         """并发下载限制。
 
         返回:
@@ -92,7 +92,7 @@ class SafetyConfigMixin:
         )
 
     @property
-    def download_timeout_seconds(self: "ConfigBase") -> int:
+    def download_timeout_seconds(self: ConfigBase) -> int:
         """下载超时时间（秒）。
 
         返回:
@@ -104,7 +104,7 @@ class SafetyConfigMixin:
         )
 
     @property
-    def tcp_connector_limit(self: "ConfigBase") -> int:
+    def tcp_connector_limit(self: ConfigBase) -> int:
         """TCP连接器总连接数限制。
 
         返回:
@@ -116,7 +116,7 @@ class SafetyConfigMixin:
         )
 
     @property
-    def tcp_connector_limit_per_host(self: "ConfigBase") -> int:
+    def tcp_connector_limit_per_host(self: ConfigBase) -> int:
         """TCP连接器每主机连接数限制。
 
         返回:
@@ -128,7 +128,55 @@ class SafetyConfigMixin:
         )
 
     @property
-    def tag_alias(self: "ConfigBase") -> dict[str, list[str]]:
+    def use_httpx(self: ConfigBase) -> bool:
+        """使用 httpx 客户端。
+
+        返回:
+            是否使用 httpx 替代 aiohttp，支持更好的 HTTP/2 和 range 下载
+        """
+        return safe_bool(
+            self._read(("performance", "use_httpx"), default=True),
+            True,
+        )
+
+    @property
+    def enable_range_download(self: ConfigBase) -> bool:
+        """启用分段下载。
+
+        返回:
+            是否将单张大图分成多段并行下载
+        """
+        return safe_bool(
+            self._read(("performance", "enable_range_download"), default=False),
+            False,
+        )
+
+    @property
+    def range_segments(self: ConfigBase) -> int:
+        """分段下载的段数。
+
+        返回:
+            单张图片的分段下载数，2-4 段通常效果最佳
+        """
+        return safe_int(
+            self._read(("performance", "range_segments"), default=3),
+            3,
+        )
+
+    @property
+    def range_threshold(self: ConfigBase) -> int:
+        """分段下载阈值(KB)。
+
+        返回:
+            图片大于此值才启用分段下载(单位 KB)
+        """
+        return safe_int(
+            self._read(("performance", "range_download_threshold"), default=512),
+            512,
+        )
+
+    @property
+    def tag_alias(self: ConfigBase) -> dict[str, list[str]]:
         """标签别名映射。
 
         返回:
@@ -161,7 +209,7 @@ class SafetyConfigMixin:
             return DEFAULT_TAG_ALIAS.copy()
         return result
 
-    def resolve_tags(self: "ConfigBase", raw_tag: str) -> list[str]:
+    def resolve_tags(self: ConfigBase, raw_tag: str) -> list[str]:
         """解析并规范化标签字符串。
 
         将逗号或空格分隔的标签字符串解析为列表，并应用别名映射。
@@ -184,7 +232,7 @@ class SafetyConfigMixin:
             result.append(canonical if canonical else tag)
         return result
 
-    def _find_canonical_tag(self: "ConfigBase", tag: str) -> str | None:
+    def _find_canonical_tag(self: ConfigBase, tag: str) -> str | None:
         """查找标签的标准名称。
 
         参数:

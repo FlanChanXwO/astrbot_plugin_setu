@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import astrbot.api.message_components as Comp
@@ -175,6 +176,3 @@ class SendWithRevokeMixin:
         except (OSError, RuntimeError):
             logger.exception("[revoke] Failed to send nodes with revoke support")
             return None
-
-
-from pathlib import Path  # noqa: E402
