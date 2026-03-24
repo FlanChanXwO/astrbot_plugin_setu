@@ -169,6 +169,12 @@ class FortuneLlmHandler:
                 logger.warning("[fortune_llm] Failed to render fortune image")
                 return False
 
+            # 保存到缓存
+            user_id = event.get_sender_id()
+            await self._fortune_core.update_fortune_image_cache(
+                user_id, fortune["date_str"], rendered_image
+            )
+
             # 发送图片
             message_chain = MessageChain([Comp.Image.fromBytes(rendered_image)])
             await self._setu_plugin.context.send_message(
@@ -201,8 +207,23 @@ class FortuneLlmHandler:
                     "message": "无法获取今日运势，请稍后重试。",
                 }
 
-            # 发送运势图片给用户
-            await self._send_fortune_image(event, fortune)
+            # 检查是否已有缓存的渲染图片
+            cached_image = await self._fortune_core.get_cached_image(
+                user_id, fortune["date_str"]
+            )
+
+            if cached_image:
+                # 使用缓存的图片
+                logger.debug("[fortune_llm] Using cached image for %s", user_id)
+                message_chain = MessageChain([Comp.Image.fromBytes(cached_image)])
+                await self._setu_plugin.context.send_message(
+                    event.unified_msg_origin,
+                    message_chain,
+                )
+            else:
+                # 没有缓存，生成新图片
+                logger.debug("[fortune_llm] No cached image, generating new one for %s", user_id)
+                await self._send_fortune_image(event, fortune)
 
             return {
                 "success": True,
