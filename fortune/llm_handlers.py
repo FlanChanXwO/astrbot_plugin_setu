@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import base64
 from typing import TYPE_CHECKING
 
+import astrbot.api.message_components as Comp
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
 
@@ -27,6 +29,7 @@ class FortuneLlmHandler:
         self._core = core
         self._fortune_core = fortune_core
         self._session_config = session_config
+        self._renderer = None
 
     @staticmethod
     async def _check_admin(event: AstrMessageEvent) -> bool:
@@ -57,10 +60,129 @@ class FortuneLlmHandler:
             pass
         return False
 
+    async def _get_image_for_fortune(self, event: AstrMessageEvent) -> bytes | None:
+        """获取今日运势的背景图片。
+
+        使用 Setu 插件的图片供应商，根据配置获取图片。
+        """
+        session_id = event.get_session_id()
+        is_group = bool(event.get_group_id())
+
+        # 获取生效的配置
+
+        config = self._setu_plugin.config
+        fortune_cfg = getattr(config, "fortune", {})
+        global_tags = (
+            fortune_cfg.get("tags", "") if isinstance(fortune_cfg, dict) else ""
+        )
+        global_mode = (
+            fortune_cfg.get("content_mode", "sfw")
+            if isinstance(fortune_cfg, dict)
+            else "sfw"
+        )
+
+        tags_str = await self._session_config.get_effective_tags(
+            session_id, is_group, global_tags
+        )
+        content_mode = await self._session_config.get_effective_content_mode(
+            session_id, is_group, global_mode
+        )
+
+        # 解析标签
+        tags = [t.strip() for t in tags_str.split(",") if t.strip()] if tags_str else []
+
+        # 确定 R18
+        import random
+
+        is_r18 = False
+        if content_mode == "r18":
+            is_r18 = True
+        elif content_mode == "mix":
+            is_r18 = random.random() > 0.5
+
+        logger.debug(
+            "[fortune_llm] Getting image: tags=%s, mode=%s, is_r18=%s",
+            tags,
+            content_mode,
+            is_r18,
+        )
+
+        try:
+            # 使用 SetuCore 的 provider 获取图片
+            provider = self._core._get_provider()
+            if not provider:
+                logger.error("[fortune_llm] No provider available")
+                return None
+
+            # 获取图片
+            downloaded = await self._core.fetch_and_download_images(1, tags, is_r18)
+
+            if downloaded and len(downloaded) > 0:
+                return downloaded[0]
+
+        except Exception as exc:
+            logger.exception("[fortune_llm] Failed to get image: %s", exc)
+
+        return None
+
+    async def _send_fortune_image(
+        self, event: AstrMessageEvent, fortune: dict
+    ) -> bool:
+        """生成并发送运势图片给用户。
+
+        参数:
+            event: 消息事件
+            fortune: 运势数据
+
+        返回:
+            是否成功发送图片
+        """
+        try:
+            # 初始化 renderer
+            if self._renderer is None:
+                from .renderer import FortuneRenderer
+
+                self._renderer = FortuneRenderer()
+
+            # 获取 HTML 渲染器
+            html_renderer = None
+            if hasattr(self._setu_plugin, "html_render"):
+                html_renderer = self._setu_plugin.html_render
+
+            if not html_renderer:
+                logger.warning("[fortune_llm] No HTML renderer available")
+                return False
+
+            # 获取背景图片
+            image_data = await self._get_image_for_fortune(event)
+            image_base64 = ""
+            if image_data:
+                image_base64 = base64.b64encode(image_data).decode("utf-8")
+
+            # 渲染运势图片
+            rendered_image = await self._renderer.render_to_image(
+                fortune=fortune, image_base64=image_base64, html_renderer=html_renderer
+            )
+
+            if not rendered_image:
+                logger.warning("[fortune_llm] Failed to render fortune image")
+                return False
+
+            # 发送图片
+            await self._setu_plugin.context.send_message(
+                event.unified_msg_origin,
+                [Comp.Image.fromBytes(rendered_image)],
+            )
+            return True
+
+        except Exception as exc:
+            logger.exception("[fortune_llm] Failed to send fortune image: %s", exc)
+            return False
+
     async def llm_get_fortune(self, event: AstrMessageEvent, **kwargs) -> dict:
         """LLM 工具：获取今日运势。
 
-        返回用户的今日运势信息。
+        返回用户的今日运势信息，并发送运势图片给用户。
         """
         user_id = event.get_sender_id()
         username = event.get_sender_name() or user_id
@@ -76,6 +198,9 @@ class FortuneLlmHandler:
                     "success": False,
                     "message": "无法获取今日运势，请稍后重试。",
                 }
+
+            # 发送运势图片给用户
+            await self._send_fortune_image(event, fortune)
 
             return {
                 "success": True,
