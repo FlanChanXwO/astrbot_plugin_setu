@@ -631,14 +631,23 @@ class FortuneCore:
             for file_path in self.cache_dir.iterdir():
                 if file_path.is_file() and date_str in file_path.name:
                     # 检查是否属于该群用户
-                    user_id_from_file = file_path.stem.split("_")[0] if "_" in file_path.stem else None
-                    if user_id_from_file and any(row[0] == user_id_from_file for row in rows):
+                    user_id_from_file = (
+                        file_path.stem.split("_")[0] if "_" in file_path.stem else None
+                    )
+                    if user_id_from_file and any(
+                        row[0] == user_id_from_file for row in rows
+                    ):
                         try:
                             file_path.unlink()
                         except OSError:
                             pass
 
-        logger.info("[fortune] Refreshed %d fortunes for group %s on date %s", len(rows), group_id, date_str)
+        logger.info(
+            "[fortune] Refreshed %d fortunes for group %s on date %s",
+            len(rows),
+            group_id,
+            date_str,
+        )
         return len(rows)
 
     async def refresh_all_fortune(self) -> int:

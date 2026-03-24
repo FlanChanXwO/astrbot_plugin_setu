@@ -67,7 +67,9 @@ class FortuneLlmHandler:
         group_id = event.get_group_id()
 
         try:
-            fortune = await self._fortune_core.get_today_fortune(user_id, username, group_id)
+            fortune = await self._fortune_core.get_today_fortune(
+                user_id, username, group_id
+            )
 
             if not fortune:
                 return {

@@ -133,7 +133,9 @@ class FortuneCommandHandler:
         group_id = event.get_group_id()
 
         # 获取今日运势数据
-        fortune = await self._fortune_core.get_today_fortune(user_id, username, group_id)
+        fortune = await self._fortune_core.get_today_fortune(
+            user_id, username, group_id
+        )
         if not fortune:
             yield event.plain_result("运势获取失败，请稍后重试。")
             return
