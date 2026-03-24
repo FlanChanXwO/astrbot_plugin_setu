@@ -41,6 +41,11 @@
         <br/>
         <sub>自定义标签搜索</sub>
       </td>
+      <td align="center">
+        <img src="https://raw.githubusercontent.com/FlanChanXwO/astrbot_plugin_setu/master/assets/jrys_preview.png" width="400" alt="色图卡片预览3"/>
+        <br/>
+        <sub>基于色图驱动的今日运势</sub>
+      </td>
     </tr>
   </table>
 </div>
@@ -171,8 +176,7 @@
 ## 未来更新
 - [ ] 更好的自定义API
 - [ ] 新增一个作者自己的图库内置API，该图库的更新速度会比目前的图库API更快，并且跟随了当前版本潮流！
-- [ ] 一些基于色图的额外插件功能
-
+- [x] 一些基于色图的额外插件功能 (今日运势)
 ---
 
 ## 📄 开源协议
