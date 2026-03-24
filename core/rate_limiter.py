@@ -26,7 +26,8 @@ class SessionRequestLimiter:
         self._locks: dict[str, asyncio.Lock] = {}
         self._global_lock = asyncio.Lock()
 
-    def _get_key(self, session_id: str, user_id: str) -> str:
+    @staticmethod
+    def _get_key(session_id: str, user_id: str) -> str:
         """生成唯一的请求键。"""
         return f"{session_id}:{user_id}"
 

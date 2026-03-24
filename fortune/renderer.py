@@ -73,8 +73,22 @@ class FortuneRenderer:
         self._embedded_fonts_css = "\n".join(css_parts)
         return self._embedded_fonts_css
 
+    @staticmethod
+    def _truncate_username(username: str, max_length: int = 15) -> str:
+        """截断用户名，超过最大长度时用...省略。
+
+        参数:
+            username: 原始用户名
+            max_length: 最大字符数，默认15
+
+        返回:
+            截断后的用户名
+        """
+        if len(username) > max_length:
+            return username[:max_length] + "..."
+        return username
+
     def _get_template(self) -> str:
-        """获取 HTML 模板内容。"""
         try:
             return self.template_path.read_text(encoding="utf-8")
         except OSError as exc:
@@ -104,9 +118,10 @@ class FortuneRenderer:
         template = self._get_template()
 
         # 构建渲染数据（包含内嵌字体 CSS）
+        username = self._truncate_username(fortune.get("username", "用户"))
         data = {
             "fonts_css": self._get_embedded_fonts_css(),
-            "username": fortune.get("username", "用户"),
+            "username": username,
             "date_str": fortune.get("date_str", ""),
             "title": fortune.get("title", "未知"),
             "stars_display": self._format_stars(
@@ -180,9 +195,10 @@ class FortuneRenderer:
             template = self._get_template()
 
             # 准备模板数据（通过 data 参数传递给 Jinja2，包含内嵌字体 CSS）
+            username = self._truncate_username(fortune.get("username", "用户"))
             tmpl_data = {
                 "fonts_css": self._get_embedded_fonts_css(),
-                "username": fortune.get("username", "用户"),
+                "username": username,
                 "date_str": fortune.get("date_str", ""),
                 "title": fortune.get("title", "未知"),
                 "stars_display": self._format_stars(
@@ -212,8 +228,8 @@ class FortuneRenderer:
 
             if isinstance(result, str):
                 # 结果是文件路径
-                from pathlib import Path
                 import asyncio
+                from pathlib import Path
 
                 path = Path(result)
                 if path.exists():

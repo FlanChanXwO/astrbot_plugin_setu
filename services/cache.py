@@ -37,8 +37,63 @@ class UrlImageDiskCache:
             if cleanup_on_start:
                 removed = await self.cleanup_expired()
                 logger.info("[setu.cache] startup cleanup removed=%d", removed)
+            # 检查并清理孤立缓存文件（索引中不存在的 .bin 文件）
+            await self._cleanup_orphaned_files()
         except (OSError, json.JSONDecodeError) as exc:
             logger.exception("[setu.cache] initialize failed: %s", exc)
+
+    async def _cleanup_orphaned_files(self) -> int:
+        """清理孤立缓存文件（索引中不存在的 .bin 文件）。"""
+        removed = 0
+        try:
+            async with self._lock:
+                # 获取索引中记录的文件路径
+                indexed_paths = {
+                    entry.get("path", "")
+                    for entry in self._index.get("entries", {}).values()
+                }
+
+                for file_path in self.cache_dir.iterdir():
+                    if not file_path.is_file():
+                        continue
+                    # 处理旧的 .img 文件（迁移到 .bin）
+                    if file_path.suffix == ".img":
+                        try:
+                            # 尝试迁移：读取旧文件，创建新文件，删除旧文件
+                            new_path = file_path.with_suffix(".bin")
+                            if not new_path.exists():
+                                data = file_path.read_bytes()
+                                new_path.write_bytes(data)
+                                # 更新索引中对应的路径
+                                for entry in self._index.get("entries", {}).values():
+                                    if entry.get("path") == str(file_path):
+                                        entry["path"] = str(new_path)
+                                        break
+                            file_path.unlink()
+                            removed += 1
+                            logger.debug("[setu.cache] migrated .img to .bin: %s", file_path.name)
+                        except OSError as exc:
+                            logger.warning("[setu.cache] failed to migrate .img file: %s", exc)
+                        continue
+                    # 只处理 .bin 文件（新的扩展名）
+                    if file_path.suffix == ".bin":
+                        str_path = str(file_path)
+                        if str_path not in indexed_paths:
+                            try:
+                                file_path.unlink()
+                                removed += 1
+                                logger.debug("[setu.cache] removed orphaned file: %s", file_path.name)
+                            except OSError:
+                                pass
+                # 如果有迁移，保存索引
+                if removed > 0:
+                    await self._save_index_locked()
+        except OSError as exc:
+            logger.warning("[setu.cache] failed to cleanup orphaned files: %s", exc)
+
+        if removed > 0:
+            logger.info("[setu.cache] cleaned up %d orphaned/migrated cache files", removed)
+        return removed
 
     async def get(self, url: str) -> bytes | None:
         """获取缓存图片。"""
@@ -80,7 +135,7 @@ class UrlImageDiskCache:
         key = self._url_key(url)
         now = int(time.time())
         expires_at = now + self.ttl_seconds
-        file_path = self.cache_dir / f"{key}.img"
+        file_path = self.cache_dir / f"{key}.bin"
 
         async with self._lock:
             try:

@@ -40,19 +40,36 @@ class SessionConfigManager:
         参数:
             data_dir: 插件数据目录
         """
-        self.data_dir = data_dir
-        self.config_file = data_dir / "session_config.json"
+        self.data_dir = data_dir / "setu"
+        self.config_file = self.data_dir / "setu_session_config.json"
         self._data: dict[str, Any] = {"sessions": {}, "meta": {}}
         self._lock = asyncio.Lock()
 
     async def initialize(self) -> None:
         """初始化配置，从文件加载现有配置。"""
         self.data_dir.mkdir(parents=True, exist_ok=True)
+        # 检查并迁移旧配置（从 data_dir/session_config.json 到 data_dir/setu/session_config.json）
+        await self._migrate_old_config()
         async with self._lock:
             await self._load()
             self._data.setdefault("sessions", {})
             self._data.setdefault("meta", {"created_at": int(time.time())})
         logger.info("[session_config] SessionConfigManager initialized")
+
+    async def _migrate_old_config(self) -> None:
+        """迁移旧位置的配置文件到新位置。"""
+        old_config_file = self.data_dir.parent / "session_config.json"
+        if old_config_file.exists() and not self.config_file.exists():
+            try:
+                import aiofiles
+                async with aiofiles.open(old_config_file, encoding="utf-8") as f:
+                    content = await f.read()
+                    self._data = json.loads(content)
+                await self._save()
+                old_config_file.unlink()
+                logger.info("[session_config] Migrated old config to new location")
+            except (OSError, json.JSONDecodeError) as exc:
+                logger.warning("[session_config] Failed to migrate old config: %s", exc)
 
     async def _load(self) -> None:
         """从文件加载配置（调用方应确保锁保护）。"""

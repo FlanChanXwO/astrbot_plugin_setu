@@ -23,7 +23,8 @@ class DocxService:
         """
         pass
 
-    def _check_dependency(self) -> bool:
+    @staticmethod
+    def _check_dependency() -> bool:
         """检查 python-docx 是否已安装。"""
         try:
             import importlib.util
@@ -98,7 +99,8 @@ class DocxService:
             logger.error("生成 Docx 文件失败: %s", e)
             return None
 
-    def _sanitize_filename(self, text: str) -> str:
+    @staticmethod
+    def _sanitize_filename(text: str) -> str:
         """清理文件名中的非法字符。"""
         illegal_chars = r'[<>:"/\\|?*\x00-\x1f]'
         sanitized = re.sub(illegal_chars, "", text)

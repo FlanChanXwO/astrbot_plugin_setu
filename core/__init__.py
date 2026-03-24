@@ -151,7 +151,8 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
             return session_mode
         return self._config.auto_revoke_r18
 
-    def determine_r18(self, content_mode: str) -> bool:
+    @staticmethod
+    def determine_r18(content_mode: str) -> bool:
         """根据内容模式确定是否为 R18。"""
         if content_mode == "r18":
             return True
@@ -159,7 +160,8 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
             return random.random() > 0.5
         return False
 
-    def _resolve_send_mode(self, send_mode: str, image_count: int) -> str:
+    @staticmethod
+    def _resolve_send_mode(send_mode: str, image_count: int) -> str:
         if send_mode == "auto":
             return "forward" if image_count > 1 else "image"
         return send_mode
@@ -190,12 +192,10 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
 
         目前支持的平台：OneBot v11 (aiocqhttp)
         """
+        # 获取平台信息（多种方式）
+        platform_name = None
         try:
-            # 获取平台信息（多种方式）
-            platform_name = None
-            platform_obj = None
             platform_type_name = "Unknown"
-
             # 方式1：通过 event.platform.name
             if hasattr(event, "platform") and event.platform:
                 platform_obj = event.platform
@@ -718,8 +718,10 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
             event: 消息事件
             urls: 图片 URL 列表
             is_r18: 是否为 R18 内容
-            tags: 标签列表
+            tags: 标签列表（保留用于接口一致性）
         """
+        # tags 参数保留用于接口一致性，当前实现不使用
+        _ = tags
         if not urls:
             yield event.plain_result("运气不好，没有获取到图片链接...")
             return

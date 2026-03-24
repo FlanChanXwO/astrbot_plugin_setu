@@ -15,15 +15,30 @@ class RevokeManager:
     """管理 revoke.json，用于追踪被撤回的 R18 消息。"""
 
     def __init__(self, data_dir: Path):
-        self.data_dir = data_dir
-        self.revoke_file = data_dir / "revoke.json"
+        self.data_dir = data_dir / "setu"
+        self.revoke_file = self.data_dir / "setu_revoke.json"
         self._lock = asyncio.Lock()
         self._data: dict[str, Any] = {"entries": {}, "meta": {}}
 
     async def initialize(self) -> None:
         """初始化 revoke.json 文件。"""
         self.data_dir.mkdir(parents=True, exist_ok=True)
+        # 检查并迁移旧数据（从 data_dir/revoke.json 到 data_dir/setu/revoke.json）
+        await self._migrate_old_data()
         await self._load()
+
+    async def _migrate_old_data(self) -> None:
+        """迁移旧位置的数据文件到新位置。"""
+        old_revoke_file = self.data_dir.parent / "revoke.json"
+        if old_revoke_file.exists() and not self.revoke_file.exists():
+            try:
+                content = old_revoke_file.read_text(encoding="utf-8")
+                self._data = json.loads(content)
+                await self._save()
+                old_revoke_file.unlink()
+                logger.info("[revoke_manager] Migrated old revoke data to new location")
+            except (OSError, json.JSONDecodeError) as exc:
+                logger.warning("[revoke_manager] Failed to migrate old data: %s", exc)
 
     async def _load(self) -> None:
         """从文件加载撤回数据。"""

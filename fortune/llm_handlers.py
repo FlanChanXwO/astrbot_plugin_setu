@@ -28,7 +28,8 @@ class FortuneLlmHandler:
         self._fortune_core = fortune_core
         self._session_config = session_config
 
-    async def _check_admin(self, event: AstrMessageEvent) -> bool:
+    @staticmethod
+    async def _check_admin(event: AstrMessageEvent) -> bool:
         """检查用户是否为管理员。"""
         try:
             if hasattr(event, "is_admin") and callable(getattr(event, "is_admin")):

@@ -19,7 +19,7 @@ class SafetyConfigMixin:
     _read: Any
 
     @property
-    def blocked_groups(self: ConfigBase) -> list[str]:
+    def blocked_groups(self) -> list[str]:
         """被屏蔽的群聊列表。
 
         返回:
@@ -30,7 +30,7 @@ class SafetyConfigMixin:
             return [str(g).strip() for g in groups if str(g).strip()]
         return []
 
-    def is_group_blocked(self: ConfigBase, group_id: str | None) -> bool:
+    def is_group_blocked(self, group_id: str | None) -> bool:
         """检查群聊是否被屏蔽。
 
         参数:
@@ -44,7 +44,7 @@ class SafetyConfigMixin:
         return str(group_id) in self.blocked_groups
 
     @property
-    def cache_enabled(self: ConfigBase) -> bool:
+    def cache_enabled(self) -> bool:
         """是否启用图片缓存。
 
         返回:
@@ -53,7 +53,7 @@ class SafetyConfigMixin:
         return safe_bool(self._read(("cache", "enabled"), default=True), True)
 
     @property
-    def cache_ttl_hours(self: ConfigBase) -> int:
+    def cache_ttl_hours(self) -> int:
         """缓存 TTL（小时）。
 
         返回:
@@ -62,7 +62,7 @@ class SafetyConfigMixin:
         return safe_int(self._read(("cache", "ttl_hours"), default=2), 2)
 
     @property
-    def cache_max_items(self: ConfigBase) -> int:
+    def cache_max_items(self) -> int:
         """最大缓存条目数。
 
         返回:
@@ -71,7 +71,7 @@ class SafetyConfigMixin:
         return safe_int(self._read(("cache", "max_items"), default=1), 1)
 
     @property
-    def cache_cleanup_on_start(self: ConfigBase) -> bool:
+    def cache_cleanup_on_start(self) -> bool:
         """启动时清理缓存。
 
         返回:
@@ -80,7 +80,7 @@ class SafetyConfigMixin:
         return safe_bool(self._read(("cache", "cleanup_on_start"), default=True), True)
 
     @property
-    def download_concurrent_limit(self: ConfigBase) -> int:
+    def download_concurrent_limit(self) -> int:
         """并发下载限制。
 
         返回:
@@ -92,7 +92,7 @@ class SafetyConfigMixin:
         )
 
     @property
-    def download_timeout_seconds(self: ConfigBase) -> int:
+    def download_timeout_seconds(self) -> int:
         """下载超时时间（秒）。
 
         返回:
@@ -104,7 +104,7 @@ class SafetyConfigMixin:
         )
 
     @property
-    def enable_range_download(self: ConfigBase) -> bool:
+    def enable_range_download(self) -> bool:
         """启用分段下载。
 
         返回:
@@ -116,7 +116,7 @@ class SafetyConfigMixin:
         )
 
     @property
-    def range_segments(self: ConfigBase) -> int:
+    def range_segments(self) -> int:
         """分段下载的段数。
 
         返回:
@@ -128,7 +128,7 @@ class SafetyConfigMixin:
         )
 
     @property
-    def range_threshold(self: ConfigBase) -> int:
+    def range_threshold(self) -> int:
         """分段下载阈值(KB)。
 
         返回:
@@ -140,7 +140,7 @@ class SafetyConfigMixin:
         )
 
     @property
-    def tag_alias(self: ConfigBase) -> dict[str, list[str]]:
+    def tag_alias(self) -> dict[str, list[str]]:
         """标签别名映射。
 
         返回:
@@ -173,7 +173,7 @@ class SafetyConfigMixin:
             return DEFAULT_TAG_ALIAS.copy()
         return result
 
-    def resolve_tags(self: ConfigBase, raw_tag: str) -> list[str]:
+    def resolve_tags(self, raw_tag: str) -> list[str]:
         """解析并规范化标签字符串。
 
         将逗号或空格分隔的标签字符串解析为列表，并应用别名映射。
@@ -196,7 +196,7 @@ class SafetyConfigMixin:
             result.append(canonical if canonical else tag)
         return result
 
-    def _find_canonical_tag(self: ConfigBase, tag: str) -> str | None:
+    def _find_canonical_tag(self, tag: str) -> str | None:
         """查找标签的标准名称。
 
         参数:

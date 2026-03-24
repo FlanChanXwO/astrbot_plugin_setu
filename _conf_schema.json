@@ -177,6 +177,49 @@
       }
     }
   },
+
+  "fortune": {
+    "description": "今日运势",
+    "type": "object",
+    "hint": "基于 Setu 图片源的每日运势功能。",
+    "items": {
+      "enabled": {
+        "type": "bool",
+        "description": "启用今日运势",
+        "hint": "是否启用今日运势功能。",
+        "default": true
+      },
+      "tags": {
+        "type": "string",
+        "description": "默认标签",
+        "hint": "获取今日运势图片时的默认标签，如'少女,可爱'。留空则不使用标签。",
+        "default": ""
+      },
+      "content_mode": {
+        "type": "string",
+        "description": "内容模式",
+        "hint": "今日运势的图片内容分级。",
+        "default": "sfw",
+        "options": [
+          "sfw",
+          "r18",
+          "mix"
+        ]
+      },
+      "allow_user_refresh": {
+        "type": "bool",
+        "description": "允许用户刷新",
+        "hint": "是否允许普通用户自行刷新运势（否则仅管理员可刷新）。",
+        "default": false
+      },
+      "auto_refresh": {
+        "type": "bool",
+        "description": "自动刷新",
+        "hint": "第二天是否自动重新生成运势（否则保留前一天的运势）。",
+        "default": true
+      }
+    }
+  },
   "cache": {
     "description": "图片缓存",
     "type": "object",
@@ -448,84 +491,6 @@
         "description": "下载超时时间(秒)",
         "hint": "单个图片下载的最大超时时间。默认 30 秒，网络慢可适当增加。",
         "default": 30
-      }
-    }
-  },
-  "fortune": {
-    "description": "今日运势",
-    "type": "object",
-    "hint": "基于 Setu 图片源的每日运势功能。",
-    "items": {
-      "enabled": {
-        "type": "bool",
-        "description": "启用今日运势",
-        "hint": "是否启用今日运势功能。",
-        "default": true
-      },
-      "tags": {
-        "type": "string",
-        "description": "默认标签",
-        "hint": "获取今日运势图片时的默认标签，如'少女,可爱'。留空则不使用标签。",
-        "default": ""
-      },
-      "content_mode": {
-        "type": "string",
-        "description": "内容模式",
-        "hint": "今日运势的图片内容分级。",
-        "default": "sfw",
-        "options": [
-          "sfw",
-          "r18",
-          "mix"
-        ]
-      },
-      "allow_user_refresh": {
-        "type": "bool",
-        "description": "允许用户刷新",
-        "hint": "是否允许普通用户自行刷新运势（否则仅管理员可刷新）。",
-        "default": false
-      },
-      "auto_refresh": {
-        "type": "bool",
-        "description": "自动刷新",
-        "hint": "第二天是否自动重新生成运势（否则保留前一天的运势）。",
-        "default": true
-      },
-      "weights": {
-        "type": "list",
-        "description": "星级权重",
-        "hint": "8个等级的概率权重，对应星级0-7。默认: 0.1, 0.15, 0.2, 0.25, 0.15, 0.12, 0.07, 0.005",
-        "default": [0.1, 0.15, 0.2, 0.25, 0.15, 0.12, 0.07, 0.005],
-        "obvious_hint": true
-      },
-      "titles": {
-        "type": "list",
-        "description": "运势标题",
-        "hint": "8个等级的标题，按星级0-7排列。默认: 凶, 末吉, 末小吉, 小吉, 中吉, 吉, 大吉, 超大吉",
-        "default": ["凶", "末吉", "末小吉", "小吉", "中吉", "吉", "大吉", "超大吉"],
-        "obvious_hint": true
-      },
-      "messages": {
-        "type": "list",
-        "description": "运势描述",
-        "hint": "8个等级的描述文案，按星级0-7排列。",
-        "default": [
-          "长夜再暗，火种仍在，转机终会到来。",
-          "微光不灭，步步向前，黎明就在眼前。",
-          "心怀希冀，顺流而行，好事悄然靠近。",
-          "逆境翻篇，机遇迎面，惊喜不期而至。",
-          "小吉随身，难题化易，幸运与你并肩。",
-          "吉星高照，所行皆坦，所愿皆如愿。",
-          "福泽深厚，大吉加身，一路花开有声。",
-          "七星同耀，奇迹频现，今日万事皆成。"
-        ],
-        "obvious_hint": true
-      },
-      "extra_message": {
-        "type": "string",
-        "description": "额外消息",
-        "hint": "显示在运势底部的额外建议消息。",
-        "default": ""
       }
     }
   }

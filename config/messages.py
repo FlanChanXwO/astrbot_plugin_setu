@@ -16,7 +16,7 @@ class MessagesConfigMixin:
     _read: Any
 
     @property
-    def msg_fetching_enabled(self: ConfigBase) -> bool:
+    def msg_fetching_enabled(self) -> bool:
         """是否启用获取中提示。
 
         返回:
@@ -28,7 +28,7 @@ class MessagesConfigMixin:
         )
 
     @property
-    def msg_fetching_text(self: ConfigBase) -> str:
+    def msg_fetching_text(self) -> str:
         """获取中提示文本。
 
         返回:
@@ -42,7 +42,7 @@ class MessagesConfigMixin:
         )
 
     @property
-    def msg_found_enabled(self: ConfigBase) -> bool:
+    def msg_found_enabled(self) -> bool:
         """是否启用找到图片提示。
 
         返回:
@@ -54,7 +54,7 @@ class MessagesConfigMixin:
         )
 
     @property
-    def msg_found_text(self: ConfigBase) -> str:
+    def msg_found_text(self) -> str:
         """找到图片提示文本。
 
         返回:
@@ -68,7 +68,7 @@ class MessagesConfigMixin:
         )
 
     @property
-    def msg_send_failed_text(self: ConfigBase) -> str:
+    def msg_send_failed_text(self) -> str:
         """发送失败提示文本。
 
         返回:
@@ -83,7 +83,7 @@ class MessagesConfigMixin:
         )
 
     def format_found_message(
-        self: ConfigBase, count: int, revoke_delay: int | None = None
+        self, count: int, revoke_delay: int | None = None
     ) -> str:
         """格式化找到图片的消息。
 

@@ -32,7 +32,8 @@ class FortuneCommandHandler:
         self._fortune_renderer = fortune_renderer
         self._session_config = session_config
 
-    def _check_admin(self, event: AstrMessageEvent) -> bool:
+    @staticmethod
+    def _check_admin(event: AstrMessageEvent) -> bool:
         """检查用户是否为管理员。"""
         try:
             if hasattr(event, "is_admin") and callable(getattr(event, "is_admin")):
@@ -145,9 +146,6 @@ class FortuneCommandHandler:
             yield event.chain_result([Comp.Image.fromBytes(cached_image)])
             return
 
-        # 需要获取新图片
-        yield event.plain_result("正在生成今日运势卡片，请稍候...")
-
         try:
             # 获取图片
             image_data = await self._get_image_for_fortune(event)
@@ -248,7 +246,7 @@ class FortuneCommandHandler:
         try:
             # 刷新运势
             await self._fortune_core.refresh_fortune(user_id, username)
-            yield event.plain_result("已刷新你的今日运势，发送 /今日运势 或 /jrys 查看新的运势。")
+            yield event.plain_result("已刷新你的今日运势，发送 今日运势 或 jrys 查看新的运势。")
         except Exception as exc:
             logger.exception("[fortune] Failed to refresh fortune: %s", exc)
             yield event.plain_result("刷新失败，请稍后重试。")
@@ -297,7 +295,7 @@ class FortuneCommandHandler:
         args = args.strip().lower()
         if not args:
             # 显示当前配置
-            await self._show_fortune_config(event)
+            self._show_fortune_config(event)
             return
 
         # 解析命令
