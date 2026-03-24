@@ -101,6 +101,29 @@
         "description": "R18 撤回延迟时间(秒)",
         "hint": "发送 R18 内容后多久自动撤回，默认 30 秒。",
         "default": 30
+      },
+      "url_send_mode": {
+        "type": "bool",
+        "description": "URL 发送模式",
+        "hint": "开启后直接发送图片 URL 而不是下载后发送。可显著降低服务器带宽和内存占用，图片由客户端直接加载。",
+        "default": false
+      },
+      "url_send_verify": {
+        "type": "bool",
+        "description": "验证 URL 有效性",
+        "hint": "发送前检查图片 URL 是否可访问（返回 200）。建议开启以避免发送失效链接。",
+        "default": true
+      },
+      "url_send_timeout": {
+        "type": "int",
+        "description": "URL 验证超时(秒)",
+        "hint": "验证 URL 时的 HTTP 请求超时时间。默认 5 秒。",
+        "default": 5,
+        "slider": {
+          "min": 2,
+          "max": 10,
+          "step": 1
+        }
       }
     }
   },
@@ -151,6 +174,49 @@
           "max": 30,
           "step": 1
         }
+      }
+    }
+  },
+
+  "fortune": {
+    "description": "今日运势",
+    "type": "object",
+    "hint": "基于 Setu 图片源的每日运势功能。",
+    "items": {
+      "enabled": {
+        "type": "bool",
+        "description": "启用今日运势",
+        "hint": "是否启用今日运势功能。",
+        "default": true
+      },
+      "tags": {
+        "type": "string",
+        "description": "默认标签",
+        "hint": "获取今日运势图片时的默认标签，如'少女,可爱'。留空则不使用标签。",
+        "default": ""
+      },
+      "content_mode": {
+        "type": "string",
+        "description": "内容模式",
+        "hint": "今日运势的图片内容分级。",
+        "default": "sfw",
+        "options": [
+          "sfw",
+          "r18",
+          "mix"
+        ]
+      },
+      "allow_user_refresh": {
+        "type": "bool",
+        "description": "允许用户刷新",
+        "hint": "是否允许普通用户自行刷新运势（否则仅管理员可刷新）。",
+        "default": false
+      },
+      "auto_refresh": {
+        "type": "bool",
+        "description": "自动刷新",
+        "hint": "第二天是否自动重新生成运势（否则保留前一天的运势）。",
+        "default": true
       }
     }
   },

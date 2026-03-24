@@ -16,7 +16,8 @@ if TYPE_CHECKING:
 class SendWithRevokeMixin:
     """支持撤回的消息发送混入类。"""
 
-    def _get_bot_api(self, event: AstrMessageEvent) -> Any | None:
+    @staticmethod
+    def _get_bot_api(event: AstrMessageEvent) -> Any | None:
         """从事件中获取底层 bot API 客户端。"""
         return getattr(event, "bot", None)
 
@@ -54,7 +55,8 @@ class SendWithRevokeMixin:
             logger.exception("[forward] Failed to send forward messages")
             return None
 
-    def _check_forward_result(self, result: dict | None) -> tuple[bool, str | None]:
+    @staticmethod
+    def _check_forward_result(result: dict | None) -> tuple[bool, str | None]:
         """检查合并转发 API 返回结果。
 
         返回: (是否成功, message_id 或 None)
@@ -205,7 +207,7 @@ class SendWithRevokeMixin:
 
         # 并行转换所有 nodes 到 dict，提高效率
         tasks = [node.to_dict() for node in nodes]
-        messages = await asyncio.gather(*tasks)
+        messages = list(await asyncio.gather(*tasks))
 
         dict_time = time.monotonic()
         logger.debug(
@@ -251,7 +253,7 @@ class SendWithRevokeMixin:
 
         # 并行转换所有 nodes 到 dict
         tasks = [node.to_dict() for node in nodes]
-        messages = await asyncio.gather(*tasks)
+        messages = list(await asyncio.gather(*tasks))
 
         dict_time = time.monotonic()
         logger.debug(

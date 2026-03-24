@@ -401,8 +401,8 @@ class ImageService:
 
         return downloaded
 
+    @staticmethod
     async def send_images(
-        self,
         event: AstrMessageEvent,
         images: list[bytes],
         found_message: str | None = None,
@@ -428,8 +428,9 @@ class ImageService:
             logger.exception("send_images obfuscated retry failed: %s", exc)
             yield event.plain_result("图片发送失败，可能被平台审核拦截。")
 
+    @staticmethod
     async def send_forward(
-        self, event: AstrMessageEvent, images: list[bytes], bot_name: str = "Bot"
+        event: AstrMessageEvent, images: list[bytes], bot_name: str = "Bot"
     ):
         """以合并转发节点方式发送图片。"""
         logger.info("[forward] building nodes total=%d", len(images))

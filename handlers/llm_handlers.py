@@ -12,7 +12,6 @@ from astrbot.api.event import AstrMessageEvent
 
 from .command_handlers import CommandHandler
 
-
 # 匹配 \uXXXX 格式的 Unicode 转义序列
 _UNICODE_ESCAPE_PATTERN = re.compile(r"\\u([0-9a-fA-F]{4})")
 

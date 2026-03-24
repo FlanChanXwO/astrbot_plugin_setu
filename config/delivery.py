@@ -98,3 +98,54 @@ class DeliveryConfigMixin:
             self._read(("general", "max_count"), "max_count", "maxCount", default=10),
             10,
         )
+
+    @property
+    def url_send_mode(self: ConfigBase) -> bool:
+        """URL 发送模式。
+
+        返回:
+            是否直接发送图片 URL 而不是下载后发送
+            开启后插件不会下载图片，而是直接发送图片链接
+            可以降低服务器带宽和内存占用
+        """
+        return safe_bool(
+            self._read(
+                ("delivery", "url_send_mode"),
+                "url_send_mode",
+                default=False,
+            ),
+            False,
+        )
+
+    @property
+    def url_send_verify(self: ConfigBase) -> bool:
+        """URL 发送前验证链接有效性。
+
+        返回:
+            是否在发送前验证 URL 是否可访问（返回 200）
+            仅当 url_send_mode 为 True 时生效
+        """
+        return safe_bool(
+            self._read(
+                ("delivery", "url_send_verify"),
+                "url_send_verify",
+                default=True,
+            ),
+            True,
+        )
+
+    @property
+    def url_send_timeout(self: ConfigBase) -> int:
+        """URL 验证超时时间（秒）。
+
+        返回:
+            验证 URL 时的 HTTP 请求超时时间
+        """
+        return safe_int(
+            self._read(
+                ("delivery", "url_send_timeout"),
+                "url_send_timeout",
+                default=5,
+            ),
+            5,
+        )

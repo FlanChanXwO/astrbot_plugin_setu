@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import aiohttp
+import httpx
 
 from astrbot.api import logger
 
@@ -229,25 +229,21 @@ class CustomApiProvider(SetuImageProvider):
             logger.error("自定义 API URL 未配置")
             return []
 
-        timeout = aiohttp.ClientTimeout(
-            total=self.api_config.get("timeout", HTTP_TIMEOUT_SECONDS)
-        )
+        timeout = self.api_config.get("timeout", HTTP_TIMEOUT_SECONDS)
         headers = self.api_config.get("headers", {})
 
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            try:
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
                 if body:
-                    async with session.post(url, json=body, headers=headers) as resp:
-                        resp.raise_for_status()
-                        data = await resp.json(content_type=None)
+                    resp = await client.post(url, json=body, headers=headers)
                 else:
-                    async with session.get(url, headers=headers) as resp:
-                        resp.raise_for_status()
-                        data = await resp.json(content_type=None)
+                    resp = await client.get(url, headers=headers)
+                resp.raise_for_status()
+                data = resp.json()
 
                 urls = self._parse_response(data)
                 return urls[:num]  # 限制数量
 
-            except Exception as e:
-                logger.error("自定义 API 请求失败: %s", e)
-                return []
+        except Exception as e:
+            logger.error("自定义 API 请求失败: %s", e)
+            return []

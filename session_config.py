@@ -11,8 +11,6 @@ import time
 from pathlib import Path
 from typing import Any
 
-import aiofiles
-
 from astrbot.api import logger
 
 
@@ -40,19 +38,36 @@ class SessionConfigManager:
         参数:
             data_dir: 插件数据目录
         """
-        self.data_dir = data_dir
-        self.config_file = data_dir / "session_config.json"
+        self.data_dir = data_dir / "setu"
+        self.config_file = self.data_dir / "setu_session_config.json"
         self._data: dict[str, Any] = {"sessions": {}, "meta": {}}
         self._lock = asyncio.Lock()
 
     async def initialize(self) -> None:
         """初始化配置，从文件加载现有配置。"""
         self.data_dir.mkdir(parents=True, exist_ok=True)
+        # 检查并迁移旧配置（从 data_dir/session_config.json 到 data_dir/setu/session_config.json）
+        await self._migrate_old_config()
         async with self._lock:
             await self._load()
             self._data.setdefault("sessions", {})
             self._data.setdefault("meta", {"created_at": int(time.time())})
         logger.info("[session_config] SessionConfigManager initialized")
+
+    async def _migrate_old_config(self) -> None:
+        """迁移旧位置的配置文件到新位置。"""
+        old_config_file = self.data_dir.parent / "session_config.json"
+        if old_config_file.exists() and not self.config_file.exists():
+            try:
+                content = await asyncio.to_thread(
+                    old_config_file.read_text, encoding="utf-8"
+                )
+                self._data = json.loads(content)
+                await self._save()
+                await asyncio.to_thread(old_config_file.unlink)
+                logger.info("[session_config] Migrated old config to new location")
+            except (OSError, json.JSONDecodeError) as exc:
+                logger.warning("[session_config] Failed to migrate old config: %s", exc)
 
     async def _load(self) -> None:
         """从文件加载配置（调用方应确保锁保护）。"""
@@ -62,13 +77,14 @@ class SessionConfigManager:
             return
 
         try:
-            async with aiofiles.open(self.config_file, encoding="utf-8") as f:
-                content = await f.read()
-                loaded = json.loads(content)
-                self._data = {
-                    "sessions": loaded.get("sessions", {}),
-                    "meta": loaded.get("meta", {}),
-                }
+            content = await asyncio.to_thread(
+                self.config_file.read_text, encoding="utf-8"
+            )
+            loaded = json.loads(content)
+            self._data = {
+                "sessions": loaded.get("sessions", {}),
+                "meta": loaded.get("meta", {}),
+            }
         except (OSError, json.JSONDecodeError):
             logger.exception(
                 "[session_config] Failed to load session config, creating new"
@@ -80,9 +96,9 @@ class SessionConfigManager:
         """保存配置到文件（应在锁保护下调用）。"""
         try:
             tmp_path = self.config_file.with_suffix(".tmp")
-            async with aiofiles.open(tmp_path, "w", encoding="utf-8") as f:
-                await f.write(json.dumps(self._data, ensure_ascii=False, indent=2))
-            tmp_path.replace(self.config_file)
+            content = json.dumps(self._data, ensure_ascii=False, indent=2)
+            await asyncio.to_thread(tmp_path.write_text, content, encoding="utf-8")
+            await asyncio.to_thread(tmp_path.replace, self.config_file)
         except OSError:
             logger.exception("[session_config] Failed to save session config")
 

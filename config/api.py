@@ -169,9 +169,7 @@ class ApiConfigMixin:
             return configs
         return []
 
-    def get_custom_api_config(
-        self: ConfigBase, name: str | None = None
-    ) -> dict[str, Any] | None:
+    def get_custom_api_config(self, name: str | None = None) -> dict[str, Any] | None:
         """获取自定义 API 配置。
 
         参数:
@@ -192,7 +190,7 @@ class ApiConfigMixin:
         return configs[0]
 
     @property
-    def custom_api(self: ConfigBase) -> dict[str, Any]:
+    def custom_api(self) -> dict[str, Any]:
         """自定义 API 基本信息。
 
         返回:
@@ -208,7 +206,7 @@ class ApiConfigMixin:
         return {"url": "", "method": "GET", "timeout": 30}
 
     @property
-    def api_response_parser(self: ConfigBase) -> dict[str, Any]:
+    def api_response_parser(self) -> dict[str, Any]:
         """API 响应解析器配置。
 
         返回:
