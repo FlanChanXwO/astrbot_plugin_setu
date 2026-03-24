@@ -62,6 +62,7 @@ class SessionConfigManager:
         if old_config_file.exists() and not self.config_file.exists():
             try:
                 import aiofiles
+
                 async with aiofiles.open(old_config_file, encoding="utf-8") as f:
                     content = await f.read()
                     self._data = json.loads(content)

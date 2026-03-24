@@ -109,7 +109,9 @@ class FortuneLlmHandler:
                 "message": "刷新运势时出错，请稍后重试。",
             }
 
-    async def llm_refresh_group_fortune(self, event: AstrMessageEvent, **kwargs) -> dict:
+    async def llm_refresh_group_fortune(
+        self, event: AstrMessageEvent, **kwargs
+    ) -> dict:
         """LLM 工具：刷新群组今日运势。
 
         刷新当前群组所有成员的今日运势（仅管理员）。
@@ -183,8 +185,16 @@ class FortuneLlmHandler:
 
         config = self._setu_plugin.config
         fortune_cfg = getattr(config, "fortune", {})
-        global_tags = fortune_cfg.get("tags", "未设置") if isinstance(fortune_cfg, dict) else "未设置"
-        global_mode = fortune_cfg.get("content_mode", "sfw") if isinstance(fortune_cfg, dict) else "sfw"
+        global_tags = (
+            fortune_cfg.get("tags", "未设置")
+            if isinstance(fortune_cfg, dict)
+            else "未设置"
+        )
+        global_mode = (
+            fortune_cfg.get("content_mode", "sfw")
+            if isinstance(fortune_cfg, dict)
+            else "sfw"
+        )
 
         effective_tags = session_tags if session_tags is not None else global_tags
         effective_mode = session_mode if session_mode else global_mode

@@ -103,7 +103,10 @@ class CommandHandler:
                 provider = self._core._get_provider()
                 if provider:
                     img_urls = await provider.fetch_image_urls(
-                        num=num, tags=tags, r18=is_r18, exclude_ai=self._config.exclude_ai
+                        num=num,
+                        tags=tags,
+                        r18=is_r18,
+                        exclude_ai=self._config.exclude_ai,
                     )
                     async for result in self._core.send_images_by_url(
                         event, img_urls, is_r18, tags
@@ -114,7 +117,8 @@ class CommandHandler:
             else:
                 # 正常模式：下载后发送
                 downloaded = await asyncio.wait_for(
-                    self._core.fetch_and_download_images(num, tags, is_r18), timeout=60.0
+                    self._core.fetch_and_download_images(num, tags, is_r18),
+                    timeout=60.0,
                 )
                 if not downloaded:
                     tags_info = f"标签: {', '.join(tags)}" if tags else ""
@@ -123,7 +127,9 @@ class CommandHandler:
                     )
                     return
 
-                async for result in self._core.send_images(event, downloaded, is_r18, tags):
+                async for result in self._core.send_images(
+                    event, downloaded, is_r18, tags
+                ):
                     yield result
         except asyncio.TimeoutError:
             logger.warning("get_random_picture timeout (>60s)")
@@ -146,7 +152,9 @@ class CommandHandler:
             return
 
         try:
-            async for result in self._handle_setu_command_internal(event, count, tags=tags):
+            async for result in self._handle_setu_command_internal(
+                event, count, tags=tags
+            ):
                 yield result
         finally:
             await self._core.rate_limiter.release(event)
@@ -189,7 +197,10 @@ class CommandHandler:
                 provider = self._core._get_provider()
                 if provider:
                     img_urls = await provider.fetch_image_urls(
-                        num=num, tags=parsed_tags, r18=is_r18, exclude_ai=self._config.exclude_ai
+                        num=num,
+                        tags=parsed_tags,
+                        r18=is_r18,
+                        exclude_ai=self._config.exclude_ai,
                     )
                     async for result in self._core.send_images_by_url(
                         event, img_urls, is_r18, parsed_tags

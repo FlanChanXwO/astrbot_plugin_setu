@@ -230,7 +230,14 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
             )
 
             # 支持的平台列表（检查名称）
-            supported_platforms = ("aiocqhttp", "onebot11", "onebot", "go-cqhttp", "napcat", "llonebot")
+            supported_platforms = (
+                "aiocqhttp",
+                "onebot11",
+                "onebot",
+                "go-cqhttp",
+                "napcat",
+                "llonebot",
+            )
             if platform_name:
                 platform_name_lower = platform_name.lower()
                 for p in supported_platforms:
@@ -240,10 +247,11 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
 
             # 检查 platform 对象类型名
             if platform_type_name and any(
-                p in platform_type_name.lower()
-                for p in ("cqhttp", "onebot", "gocq")
+                p in platform_type_name.lower() for p in ("cqhttp", "onebot", "gocq")
             ):
-                logger.debug("[platform] Forward supported: type match '%s'", platform_type_name)
+                logger.debug(
+                    "[platform] Forward supported: type match '%s'", platform_type_name
+                )
                 return True
 
             # 检查 event 是否有 bot 属性且看起来是 OneBot（有 call_action 方法）
@@ -258,7 +266,9 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
                 umo = event.unified_msg_origin
                 if umo and isinstance(umo, str):
                     if any(p in umo.lower() for p in ("aiocqhttp", "onebot", "gocq")):
-                        logger.debug("[platform] Forward supported: unified_msg_origin match")
+                        logger.debug(
+                            "[platform] Forward supported: unified_msg_origin match"
+                        )
                         return True
 
         except Exception as exc:
@@ -701,7 +711,9 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
                                 url,
                             )
                 except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
-                    logger.warning("[url_verify] URL verification failed: %s - %s", url, exc)
+                    logger.warning(
+                        "[url_verify] URL verification failed: %s - %s", url, exc
+                    )
 
         return valid_urls
 

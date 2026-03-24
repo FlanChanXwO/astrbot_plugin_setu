@@ -14,9 +14,7 @@ class FortuneRenderer:
 
     def __init__(self, template_path: Path | None = None):
         if template_path is None:
-            template_path = (
-                Path(__file__).parent.parent / "templates" / "fortune.html"
-            )
+            template_path = Path(__file__).parent.parent / "templates" / "fortune.html"
         self.template_path = template_path
         self._fonts_dir = self.template_path.parent / "res" / "fonts"
         self._embedded_fonts_css: str | None = None
@@ -103,9 +101,7 @@ class FortuneRenderer:
 <p>{{ description }}</p>
 </div></body></html>"""
 
-    def render(
-        self, fortune: dict[str, Any], image_base64: str | None = None
-    ) -> str:
+    def render(self, fortune: dict[str, Any], image_base64: str | None = None) -> str:
         """渲染运势卡片为 HTML 字符串。
 
         参数:
@@ -152,7 +148,10 @@ class FortuneRenderer:
             return ""
 
         html = re.sub(
-            r"{%\s*if\s+(\w+)\s*%}(.*?){%\s*endif\s*%}", process_if, html, flags=re.DOTALL
+            r"{%\s*if\s+(\w+)\s*%}(.*?){%\s*endif\s*%}",
+            process_if,
+            html,
+            flags=re.DOTALL,
         )
 
         return html
@@ -235,20 +234,31 @@ class FortuneRenderer:
                 if path.exists():
                     # 检查文件大小
                     file_size = path.stat().st_size
-                    logger.debug("[fortune] Reading image from path: %s (%d bytes)", result, file_size)
+                    logger.debug(
+                        "[fortune] Reading image from path: %s (%d bytes)",
+                        result,
+                        file_size,
+                    )
                     if file_size < 100:
-                        logger.error("[fortune] Rendered image too small (%d bytes), likely failed", file_size)
+                        logger.error(
+                            "[fortune] Rendered image too small (%d bytes), likely failed",
+                            file_size,
+                        )
                         return None
                     return await asyncio.to_thread(path.read_bytes)
                 else:
                     logger.error("[fortune] Rendered file not found: %s", result)
                     return None
 
-            logger.error("[fortune] Unexpected return type from html_render: %s", type(result))
+            logger.error(
+                "[fortune] Unexpected return type from html_render: %s", type(result)
+            )
             return None
 
         except NotImplementedError:
-            logger.error("[fortune] HTML rendering not supported by current T2I strategy (local strategy doesn't support custom templates)")
+            logger.error(
+                "[fortune] HTML rendering not supported by current T2I strategy (local strategy doesn't support custom templates)"
+            )
             return None
         except Exception as exc:
             logger.exception("[fortune] Failed to render image: %s", exc)

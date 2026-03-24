@@ -10,7 +10,7 @@ from ..constants import DEFAULT_TAG_ALIAS
 from .helpers import safe_bool, safe_int
 
 if TYPE_CHECKING:
-    from .base import ConfigBase
+    pass
 
 
 class SafetyConfigMixin:
