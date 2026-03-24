@@ -126,9 +126,10 @@ class FortuneCommandHandler:
         """处理 /jrys 或 /今日运势 命令。"""
         user_id = event.get_sender_id()
         username = event.get_sender_name() or user_id
+        group_id = event.get_group_id()
 
         # 获取今日运势数据
-        fortune = await self._fortune_core.get_today_fortune(user_id, username)
+        fortune = await self._fortune_core.get_today_fortune(user_id, username, group_id)
         if not fortune:
             yield event.plain_result("运势获取失败，请稍后重试。")
             return
@@ -295,7 +296,8 @@ class FortuneCommandHandler:
         args = args.strip().lower()
         if not args:
             # 显示当前配置
-            self._show_fortune_config(event)
+            async for result in self._show_fortune_config(event):
+                yield result
             return
 
         # 解析命令

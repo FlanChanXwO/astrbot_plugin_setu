@@ -42,7 +42,7 @@
         <sub>自定义标签搜索</sub>
       </td>
       <td align="center">
-        <img src="https://raw.githubusercontent.com/FlanChanXwO/astrbot_plugin_setu/master/assets/jrys_preview.png" width="400" alt="色图卡片预览3"/>
+        <img src="https://raw.githubusercontent.com/FlanChanXwO/astrbot_plugin_setu/master/assets/jrys_preview.png" width="400" alt="今日运势卡片预览"/>
         <br/>
         <sub>基于色图驱动的今日运势</sub>
       </td>

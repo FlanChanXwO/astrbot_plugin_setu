@@ -44,6 +44,19 @@ class FortuneLlmHandler:
             pass
         return False
 
+    @staticmethod
+    async def _check_super_admin(event: AstrMessageEvent) -> bool:
+        """检查用户是否为超级管理员。"""
+        try:
+            if hasattr(event, "is_super_user") and callable(
+                getattr(event, "is_super_user")
+            ):
+                if event.is_super_user():
+                    return True
+        except AttributeError:
+            pass
+        return False
+
     async def llm_get_fortune(self, event: AstrMessageEvent, **kwargs) -> dict:
         """LLM 工具：获取今日运势。
 
@@ -51,9 +64,10 @@ class FortuneLlmHandler:
         """
         user_id = event.get_sender_id()
         username = event.get_sender_name() or user_id
+        group_id = event.get_group_id()
 
         try:
-            fortune = await self._fortune_core.get_today_fortune(user_id, username)
+            fortune = await self._fortune_core.get_today_fortune(user_id, username, group_id)
 
             if not fortune:
                 return {
@@ -147,9 +161,9 @@ class FortuneLlmHandler:
 
         刷新所有用户的今日运势（仅超级管理员）。
         """
-        # 检查权限
-        is_admin = await self._check_admin(event)
-        if not is_admin:
+        # 检查权限：仅允许超级管理员
+        is_super_admin = await self._check_super_admin(event)
+        if not is_super_admin:
             return {
                 "success": False,
                 "message": "只有超级管理员可以刷新全局运势。",

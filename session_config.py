@@ -11,8 +11,6 @@ import time
 from pathlib import Path
 from typing import Any
 
-import aiofiles
-
 from astrbot.api import logger
 
 
@@ -61,12 +59,12 @@ class SessionConfigManager:
         old_config_file = self.data_dir.parent / "session_config.json"
         if old_config_file.exists() and not self.config_file.exists():
             try:
-                import aiofiles
-                async with aiofiles.open(old_config_file, encoding="utf-8") as f:
-                    content = await f.read()
-                    self._data = json.loads(content)
+                content = await asyncio.to_thread(
+                    old_config_file.read_text, encoding="utf-8"
+                )
+                self._data = json.loads(content)
                 await self._save()
-                old_config_file.unlink()
+                await asyncio.to_thread(old_config_file.unlink)
                 logger.info("[session_config] Migrated old config to new location")
             except (OSError, json.JSONDecodeError) as exc:
                 logger.warning("[session_config] Failed to migrate old config: %s", exc)
@@ -79,13 +77,14 @@ class SessionConfigManager:
             return
 
         try:
-            async with aiofiles.open(self.config_file, encoding="utf-8") as f:
-                content = await f.read()
-                loaded = json.loads(content)
-                self._data = {
-                    "sessions": loaded.get("sessions", {}),
-                    "meta": loaded.get("meta", {}),
-                }
+            content = await asyncio.to_thread(
+                self.config_file.read_text, encoding="utf-8"
+            )
+            loaded = json.loads(content)
+            self._data = {
+                "sessions": loaded.get("sessions", {}),
+                "meta": loaded.get("meta", {}),
+            }
         except (OSError, json.JSONDecodeError):
             logger.exception(
                 "[session_config] Failed to load session config, creating new"
@@ -97,9 +96,9 @@ class SessionConfigManager:
         """保存配置到文件（应在锁保护下调用）。"""
         try:
             tmp_path = self.config_file.with_suffix(".tmp")
-            async with aiofiles.open(tmp_path, "w", encoding="utf-8") as f:
-                await f.write(json.dumps(self._data, ensure_ascii=False, indent=2))
-            tmp_path.replace(self.config_file)
+            content = json.dumps(self._data, ensure_ascii=False, indent=2)
+            await asyncio.to_thread(tmp_path.write_text, content, encoding="utf-8")
+            await asyncio.to_thread(tmp_path.replace, self.config_file)
         except OSError:
             logger.exception("[session_config] Failed to save session config")
 

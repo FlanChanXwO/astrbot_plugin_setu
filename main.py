@@ -130,31 +130,31 @@ class SetuPlugin(Star):
                 "get_today_fortune",
                 handler.llm_get_fortune,
                 [],
-                "获取今日运势。",
+                "Get today's fortune for the user.",
             ),
             (
                 "refresh_my_fortune",
                 handler.llm_refresh_fortune,
                 [],
-                "刷新我的今日运势（管理员）。",
+                "Refresh my today's fortune (admin only).",
             ),
             (
                 "refresh_group_fortune",
                 handler.llm_refresh_group_fortune,
                 [],
-                "刷新群组今日运势（管理员）。",
+                "Refresh today's fortune for the current group (admin only).",
             ),
             (
                 "refresh_all_fortune",
                 handler.llm_refresh_all_fortune,
                 [],
-                "刷新全局今日运势（超级管理员）。",
+                "Refresh today's fortune for all users (super admin only).",
             ),
             (
                 "get_fortune_config",
                 handler.llm_get_fortune_config,
                 [],
-                "获取今日运势配置。",
+                "Get the fortune configuration for the current session.",
             ),
             (
                 "set_fortune_config",
@@ -163,16 +163,16 @@ class SetuPlugin(Star):
                     {
                         "name": "tags",
                         "type": "string",
-                        "description": "标签，如'少女,可爱'。留空则清除设置。",
+                        "description": "Tags for fortune images, e.g., 'girl,cute'. Leave empty to clear.",
                     },
                     {
                         "name": "mode",
                         "type": "string",
                         "enum": ["sfw", "r18", "mix"],
-                        "description": "内容模式。",
+                        "description": "Content mode for fortune images.",
                     },
                 ],
-                "设置今日运势配置（管理员）。",
+                "Set the fortune configuration for the current session (admin only).",
             ),
         ]
 

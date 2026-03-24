@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 from urllib.parse import quote
 
-import aiohttp
+import httpx
 
 from astrbot.api import logger
 
@@ -49,17 +49,14 @@ class SexNyanRunProvider(SetuImageProvider):
             url += f"&{tag_params}"
 
         try:
-            timeout = aiohttp.ClientTimeout(total=HTTP_TIMEOUT_SECONDS)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(url) as resp:
-                    if not resp.ok:
-                        logger.warning("SexNyanRun API 错误: %d %s", resp.status, url)
-                        return []
-                    data = await resp.json(content_type=None)
-        except aiohttp.ClientResponseError as e:
+            async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
+                resp = await client.get(url)
+                resp.raise_for_status()
+                data = resp.json()
+        except httpx.HTTPStatusError as e:
             logger.warning("SexNyanRun API 响应错误: %s %s", e, url)
             return []
-        except aiohttp.ClientError as e:
+        except httpx.HTTPError as e:
             logger.warning("SexNyanRun API 请求失败: %s %s", e, url)
             return []
         except asyncio.TimeoutError:

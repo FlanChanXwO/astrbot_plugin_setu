@@ -12,8 +12,6 @@ import random
 from pathlib import Path
 from typing import Any
 
-import aiofiles
-
 from astrbot.api import logger
 
 # 默认权重数组（对应0-7星）
@@ -208,8 +206,7 @@ class FortuneCore:
                 self._db_inited = True
         logger.info("[fortune] Database initialized")
 
-    @staticmethod
-    async def _migrate_db(db) -> None:
+    async def _migrate_db(self, db) -> None:
         """数据库版本迁移：添加缺失的列。"""
         # 获取表中所有列
         cursor = await db.execute("PRAGMA table_info(fortune_data)")
@@ -227,6 +224,18 @@ class FortuneCore:
         if "last_view_date" not in column_names:
             logger.info("[fortune] Migrating database: adding last_view_date column")
             await db.execute("ALTER TABLE fortune_data ADD COLUMN last_view_date TEXT")
+            await db.commit()
+            logger.info("[fortune] Migration completed")
+
+        # 检查并添加 group_id 列（用于群组运势刷新）
+        if "group_id" not in column_names:
+            logger.info("[fortune] Migrating database: adding group_id column")
+            await db.execute("ALTER TABLE fortune_data ADD COLUMN group_id TEXT")
+            await db.commit()
+            # 创建索引以优化按群组查询
+            await db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_fortune_group ON fortune_data(group_id, date_str)"
+            )
             await db.commit()
             logger.info("[fortune] Migration completed")
 
@@ -399,12 +408,17 @@ class FortuneCore:
         return removed
 
     async def get_today_fortune(
-        self, user_id: str, username: str
+        self, user_id: str, username: str, group_id: str | None = None
     ) -> dict[str, Any] | None:
         """获取今日运势。
 
         如果 auto_refresh 为 false，会保留前一天的运势直到第二天。
         每次获取都会更新 last_view_date。
+
+        参数:
+            user_id: 用户ID
+            username: 用户名
+            group_id: 群组ID（可选，用于群维度运势管理）
 
         返回:
             运势数据字典
@@ -420,7 +434,7 @@ class FortuneCore:
             async with aiosqlite.connect(str(self.db_path)) as db:
                 # 查询现有记录（包括 last_view_date）
                 cursor = await db.execute(
-                    "SELECT title, stars, desc_text, extra, theme, image_cached, img_url, date_str, last_view_date "
+                    "SELECT title, stars, desc_text, extra, theme, image_cached, img_url, date_str, last_view_date, group_id "
                     "FROM fortune_data WHERE user_id = ?",
                     (user_id,),
                 )
@@ -434,8 +448,8 @@ class FortuneCore:
                     if is_today:
                         # 今天已有运势，更新最后查看日期并返回
                         await db.execute(
-                            "UPDATE fortune_data SET last_view_date = ? WHERE user_id = ? AND date_str = ?",
-                            (today_str, user_id, today_str),
+                            "UPDATE fortune_data SET last_view_date = ?, group_id = COALESCE(?, group_id) WHERE user_id = ? AND date_str = ?",
+                            (today_str, group_id, user_id, today_str),
                         )
                         await db.commit()
                         return {
@@ -480,11 +494,11 @@ class FortuneCore:
                 # 生成新运势
                 fortune = self._generate_fortune(user_id, username, today_str)
 
-                # 保存到数据库（包含 last_view_date）
+                # 保存到数据库（包含 group_id 和 last_view_date）
                 await db.execute(
                     "INSERT OR REPLACE INTO fortune_data "
-                    "(user_id, date_str, title, stars, desc_text, extra, theme, image_cached, img_url, last_view_date) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "(user_id, date_str, title, stars, desc_text, extra, theme, image_cached, img_url, last_view_date, group_id) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         user_id,
                         today_str,
@@ -496,6 +510,7 @@ class FortuneCore:
                         0,
                         None,
                         today_str,  # 首次生成时设置 last_view_date
+                        group_id,  # 存储群组ID
                     ),
                 )
                 await db.commit()
@@ -509,8 +524,7 @@ class FortuneCore:
         cache_path = self._get_cache_path(user_id, date_str)
 
         async with self._cache_lock:
-            async with aiofiles.open(cache_path, "wb") as f:
-                await f.write(image_data)
+            await asyncio.to_thread(cache_path.write_bytes, image_data)
 
         # 更新数据库标记
         import aiosqlite
@@ -533,8 +547,7 @@ class FortuneCore:
         try:
             async with self._cache_lock:
                 if cache_path.exists():
-                    async with aiofiles.open(cache_path, "rb") as f:
-                        return await f.read()
+                    return await asyncio.to_thread(cache_path.read_bytes)
         except OSError:
             pass
         return None
@@ -591,30 +604,33 @@ class FortuneCore:
 
         async with self._db_lock:
             async with aiosqlite.connect(str(self.db_path)) as db:
-                # 获取今天的所有记录
+                # 获取今天该群的所有记录（group_id 匹配或 NULL）
                 cursor = await db.execute(
-                    "SELECT user_id FROM fortune_data WHERE date_str = ?",
-                    (date_str,),
+                    "SELECT user_id FROM fortune_data WHERE date_str = ? AND (group_id = ? OR group_id IS NULL)",
+                    (date_str, group_id),
                 )
                 rows = await cursor.fetchall()
 
                 # 删除这些记录
                 await db.execute(
-                    "DELETE FROM fortune_data WHERE date_str = ?",
-                    (date_str,),
+                    "DELETE FROM fortune_data WHERE date_str = ? AND (group_id = ? OR group_id IS NULL)",
+                    (date_str, group_id),
                 )
                 await db.commit()
 
-        # 清理缓存文件
+        # 清理缓存文件（只清理该群用户的缓存）
         async with self._cache_lock:
             for file_path in self.cache_dir.iterdir():
                 if file_path.is_file() and date_str in file_path.name:
-                    try:
-                        file_path.unlink()
-                    except OSError:
-                        pass
+                    # 检查是否属于该群用户
+                    user_id_from_file = file_path.stem.split("_")[0] if "_" in file_path.stem else None
+                    if user_id_from_file and any(row[0] == user_id_from_file for row in rows):
+                        try:
+                            file_path.unlink()
+                        except OSError:
+                            pass
 
-        logger.info("[fortune] Refreshed %d fortunes for date %s", len(rows), date_str)
+        logger.info("[fortune] Refreshed %d fortunes for group %s on date %s", len(rows), group_id, date_str)
         return len(rows)
 
     async def refresh_all_fortune(self) -> int:

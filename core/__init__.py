@@ -8,6 +8,8 @@ from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any
 
+import httpx
+
 import astrbot.api.message_components as Comp
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
@@ -675,6 +677,7 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
         """验证图片 URL 是否可访问。
 
         使用 HEAD 请求快速验证 URL 是否返回 200。
+        支持并发请求以提高性能。
 
         参数:
             urls: 图片 URL 列表
@@ -682,26 +685,36 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
         返回:
             验证通过的 URL 列表
         """
-        import aiohttp
+        if not urls:
+            return []
 
         valid_urls = []
-        timeout = aiohttp.ClientTimeout(total=self._config.url_send_timeout)
+        semaphore = asyncio.Semaphore(8)  # 限制并发数为8
 
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            for url in urls:
+        async def _check_single_url(client: httpx.AsyncClient, url: str) -> str | None:
+            async with semaphore:
                 try:
-                    async with session.head(url, allow_redirects=True) as response:
-                        if response.status == 200:
-                            valid_urls.append(url)
-                            logger.debug("[url_verify] URL valid: %s", url)
-                        else:
-                            logger.warning(
-                                "[url_verify] URL returned %d: %s",
-                                response.status,
-                                url,
-                            )
-                except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+                    response = await client.head(url, follow_redirects=True)
+                    if response.status_code == 200:
+                        logger.debug("[url_verify] URL valid: %s", url)
+                        return url
+                    else:
+                        logger.warning(
+                            "[url_verify] URL returned %d: %s",
+                            response.status_code,
+                            url,
+                        )
+                except httpx.HTTPError as exc:
                     logger.warning("[url_verify] URL verification failed: %s - %s", url, exc)
+            return None
+
+        async with httpx.AsyncClient(timeout=self._config.url_send_timeout) as client:
+            tasks = [_check_single_url(client, url) for url in urls]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for result in results:
+            if isinstance(result, str):
+                valid_urls.append(result)
 
         return valid_urls
 

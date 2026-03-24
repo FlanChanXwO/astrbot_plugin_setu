@@ -46,15 +46,14 @@ class FortuneSessionConfig:
             return
 
         try:
-            import aiofiles
-
-            async with aiofiles.open(self.config_file, encoding="utf-8") as f:
-                content = await f.read()
-                loaded = json.loads(content)
-                self._data = {
-                    "sessions": loaded.get("sessions", {}),
-                    "meta": loaded.get("meta", {}),
-                }
+            content = await asyncio.to_thread(
+                self.config_file.read_text, encoding="utf-8"
+            )
+            loaded = json.loads(content)
+            self._data = {
+                "sessions": loaded.get("sessions", {}),
+                "meta": loaded.get("meta", {}),
+            }
         except (OSError, json.JSONDecodeError):
             logger.exception("[fortune_session] Failed to load config")
             self._data = {"sessions": {}, "meta": {"created_at": int(time.time())}}
@@ -63,12 +62,10 @@ class FortuneSessionConfig:
     async def _save(self) -> None:
         """保存配置到文件。"""
         try:
-            import aiofiles
-
             tmp_path = self.config_file.with_suffix(".tmp")
-            async with aiofiles.open(tmp_path, "w", encoding="utf-8") as f:
-                await f.write(json.dumps(self._data, ensure_ascii=False, indent=2))
-            tmp_path.replace(self.config_file)
+            content = json.dumps(self._data, ensure_ascii=False, indent=2)
+            await asyncio.to_thread(tmp_path.write_text, content, encoding="utf-8")
+            await asyncio.to_thread(tmp_path.replace, self.config_file)
         except OSError:
             logger.exception("[fortune_session] Failed to save config")
 
