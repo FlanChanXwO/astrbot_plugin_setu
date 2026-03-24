@@ -135,7 +135,9 @@ class FortuneSessionConfig:
         """清除会话的标签配置。"""
         return await self.clear_config(session_id, is_group, "tags")
 
-    async def get_session_content_mode(self, session_id: str, is_group: bool) -> str | None:
+    async def get_session_content_mode(
+        self, session_id: str, is_group: bool
+    ) -> str | None:
         """获取会话的内容模式配置。"""
         return await self.get_config(session_id, is_group, "content_mode")
 

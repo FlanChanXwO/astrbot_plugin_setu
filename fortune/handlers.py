@@ -54,9 +54,7 @@ class FortuneCommandHandler:
             pass
         return False
 
-    async def _get_image_for_fortune(
-        self, event: AstrMessageEvent
-    ) -> bytes | None:
+    async def _get_image_for_fortune(self, event: AstrMessageEvent) -> bytes | None:
         """获取今日运势的图片。
 
         使用 Setu 插件的图片供应商，根据配置获取图片。
@@ -66,8 +64,14 @@ class FortuneCommandHandler:
 
         # 获取生效的配置
         fortune_cfg = getattr(self._config, "fortune", {})
-        global_tags = fortune_cfg.get("tags", "") if isinstance(fortune_cfg, dict) else ""
-        global_mode = fortune_cfg.get("content_mode", "sfw") if isinstance(fortune_cfg, dict) else "sfw"
+        global_tags = (
+            fortune_cfg.get("tags", "") if isinstance(fortune_cfg, dict) else ""
+        )
+        global_mode = (
+            fortune_cfg.get("content_mode", "sfw")
+            if isinstance(fortune_cfg, dict)
+            else "sfw"
+        )
 
         tags_str = await self._session_config.get_effective_tags(
             session_id, is_group, global_tags
@@ -182,7 +186,9 @@ class FortuneCommandHandler:
 
             if not html_renderer:
                 # 没有 HTML 渲染器，发送文字版运势
-                logger.warning("[fortune] No HTML renderer available, sending text version")
+                logger.warning(
+                    "[fortune] No HTML renderer available, sending text version"
+                )
                 stars = "★" * fortune["star_count"] + "☆" * (7 - fortune["star_count"])
                 msg = (
                     f"【今日运势】\n"
@@ -202,7 +208,9 @@ class FortuneCommandHandler:
             )
 
             if not rendered_image:
-                logger.warning("[fortune] Image render returned None/empty, sending text version")
+                logger.warning(
+                    "[fortune] Image render returned None/empty, sending text version"
+                )
                 stars = "★" * fortune["star_count"] + "☆" * (7 - fortune["star_count"])
                 msg = (
                     f"【今日运势】\n"
@@ -215,7 +223,9 @@ class FortuneCommandHandler:
                 yield event.plain_result(msg)
                 return
 
-            logger.debug("[fortune] Image rendered successfully: %d bytes", len(rendered_image))
+            logger.debug(
+                "[fortune] Image rendered successfully: %d bytes", len(rendered_image)
+            )
 
             # 保存到缓存
             await self._fortune_core.update_fortune_image_cache(
@@ -236,7 +246,11 @@ class FortuneCommandHandler:
         if not self._check_admin(event):
             # 检查配置是否允许非管理员刷新
             fortune_cfg = getattr(self._config, "fortune", {})
-            allow_refresh = fortune_cfg.get("allow_user_refresh", False) if isinstance(fortune_cfg, dict) else False
+            allow_refresh = (
+                fortune_cfg.get("allow_user_refresh", False)
+                if isinstance(fortune_cfg, dict)
+                else False
+            )
             if not allow_refresh:
                 yield event.plain_result("只有管理员可以刷新运势。")
                 return
@@ -247,7 +261,9 @@ class FortuneCommandHandler:
         try:
             # 刷新运势
             await self._fortune_core.refresh_fortune(user_id, username)
-            yield event.plain_result("已刷新你的今日运势，发送 今日运势 或 jrys 查看新的运势。")
+            yield event.plain_result(
+                "已刷新你的今日运势，发送 今日运势 或 jrys 查看新的运势。"
+            )
         except Exception as exc:
             logger.exception("[fortune] Failed to refresh fortune: %s", exc)
             yield event.plain_result("刷新失败，请稍后重试。")
@@ -266,7 +282,9 @@ class FortuneCommandHandler:
         try:
             # 刷新群组运势（删除该群所有今天的记录）
             count = await self._fortune_core.refresh_group_fortune(str(group_id))
-            yield event.plain_result(f"已刷新本群今日运势，共 {count} 条记录将被重新生成。")
+            yield event.plain_result(
+                f"已刷新本群今日运势，共 {count} 条记录将被重新生成。"
+            )
         except Exception as exc:
             logger.exception("[fortune] Failed to refresh group fortune: %s", exc)
             yield event.plain_result("刷新失败，请稍后重试。")
@@ -279,7 +297,9 @@ class FortuneCommandHandler:
 
         try:
             count = await self._fortune_core.refresh_all_fortune()
-            yield event.plain_result(f"已刷新全局今日运势，共 {count} 条记录将被重新生成。")
+            yield event.plain_result(
+                f"已刷新全局今日运势，共 {count} 条记录将被重新生成。"
+            )
         except Exception as exc:
             logger.exception("[fortune] Failed to refresh all fortune: %s", exc)
             yield event.plain_result("刷新失败，请稍后重试。")
@@ -363,8 +383,16 @@ class FortuneCommandHandler:
         )
 
         fortune_cfg = getattr(self._config, "fortune", {})
-        global_tags = fortune_cfg.get("tags", "未设置") if isinstance(fortune_cfg, dict) else "未设置"
-        global_mode = fortune_cfg.get("content_mode", "sfw") if isinstance(fortune_cfg, dict) else "sfw"
+        global_tags = (
+            fortune_cfg.get("tags", "未设置")
+            if isinstance(fortune_cfg, dict)
+            else "未设置"
+        )
+        global_mode = (
+            fortune_cfg.get("content_mode", "sfw")
+            if isinstance(fortune_cfg, dict)
+            else "sfw"
+        )
 
         effective_tags = session_tags if session_tags is not None else global_tags
         effective_mode = session_mode if session_mode else global_mode

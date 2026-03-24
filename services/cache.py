@@ -71,9 +71,13 @@ class UrlImageDiskCache:
                                         break
                             file_path.unlink()
                             removed += 1
-                            logger.debug("[setu.cache] migrated .img to .bin: %s", file_path.name)
+                            logger.debug(
+                                "[setu.cache] migrated .img to .bin: %s", file_path.name
+                            )
                         except OSError as exc:
-                            logger.warning("[setu.cache] failed to migrate .img file: %s", exc)
+                            logger.warning(
+                                "[setu.cache] failed to migrate .img file: %s", exc
+                            )
                         continue
                     # 只处理 .bin 文件（新的扩展名）
                     if file_path.suffix == ".bin":
@@ -82,7 +86,10 @@ class UrlImageDiskCache:
                             try:
                                 file_path.unlink()
                                 removed += 1
-                                logger.debug("[setu.cache] removed orphaned file: %s", file_path.name)
+                                logger.debug(
+                                    "[setu.cache] removed orphaned file: %s",
+                                    file_path.name,
+                                )
                             except OSError:
                                 pass
                 # 如果有迁移，保存索引
@@ -92,7 +99,9 @@ class UrlImageDiskCache:
             logger.warning("[setu.cache] failed to cleanup orphaned files: %s", exc)
 
         if removed > 0:
-            logger.info("[setu.cache] cleaned up %d orphaned/migrated cache files", removed)
+            logger.info(
+                "[setu.cache] cleaned up %d orphaned/migrated cache files", removed
+            )
         return removed
 
     async def get(self, url: str) -> bytes | None:

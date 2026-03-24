@@ -169,9 +169,7 @@ class ApiConfigMixin:
             return configs
         return []
 
-    def get_custom_api_config(
-        self, name: str | None = None
-    ) -> dict[str, Any] | None:
+    def get_custom_api_config(self, name: str | None = None) -> dict[str, Any] | None:
         """获取自定义 API 配置。
 
         参数:

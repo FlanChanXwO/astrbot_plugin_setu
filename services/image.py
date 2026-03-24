@@ -403,7 +403,7 @@ class ImageService:
 
     @staticmethod
     async def send_images(
-            event: AstrMessageEvent,
+        event: AstrMessageEvent,
         images: list[bytes],
         found_message: str | None = None,
     ):
@@ -430,7 +430,7 @@ class ImageService:
 
     @staticmethod
     async def send_forward(
-            event: AstrMessageEvent, images: list[bytes], bot_name: str = "Bot"
+        event: AstrMessageEvent, images: list[bytes], bot_name: str = "Bot"
     ):
         """以合并转发节点方式发送图片。"""
         logger.info("[forward] building nodes total=%d", len(images))

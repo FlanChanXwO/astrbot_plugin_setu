@@ -46,7 +46,10 @@ class RevokeTaskMixin:
                     platform = context.get_platform()
                     if platform and hasattr(platform, "bot"):
                         actual_bot = platform.bot
-                        logger.debug("[revoke] Retrieved bot from platform for message %s", message_id)
+                        logger.debug(
+                            "[revoke] Retrieved bot from platform for message %s",
+                            message_id,
+                        )
             except Exception as exc:
                 logger.debug("[revoke] Failed to retrieve bot from context: %s", exc)
 
@@ -77,11 +80,13 @@ class RevokeTaskMixin:
             await self._revoke_manager.mark_revoked(message_id)
             if actual_bot:
                 logger.warning(
-                    "[revoke] Failed to revoke message %s, marked as revoked", message_id
+                    "[revoke] Failed to revoke message %s, marked as revoked",
+                    message_id,
                 )
             else:
                 logger.warning(
-                    "[revoke] Cannot revoke message %s: no bot available, marked as revoked", message_id
+                    "[revoke] Cannot revoke message %s: no bot available, marked as revoked",
+                    message_id,
                 )
 
     async def _schedule_revoke(

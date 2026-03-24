@@ -92,7 +92,9 @@ class FortuneCore:
 
         today_str = datetime.date.today().isoformat()
         # 计算3天前的日期
-        three_days_ago = (datetime.date.today() - datetime.timedelta(days=3)).isoformat()
+        three_days_ago = (
+            datetime.date.today() - datetime.timedelta(days=3)
+        ).isoformat()
 
         pregenerated = 0
 
@@ -134,7 +136,9 @@ class FortuneCore:
                                 continue
 
                             # 生成运势
-                            fortune = self._generate_fortune(user_id, "指挥官", today_str)
+                            fortune = self._generate_fortune(
+                                user_id, "指挥官", today_str
+                            )
 
                             # 保存到数据库（使用 INSERT OR IGNORE 避免覆盖）
                             await db.execute(
@@ -157,7 +161,9 @@ class FortuneCore:
                             pregenerated += 1
                         except Exception as exc:
                             logger.warning(
-                                "[fortune] Failed to pregenerate for user %s: %s", user_id, exc
+                                "[fortune] Failed to pregenerate for user %s: %s",
+                                user_id,
+                                exc,
                             )
 
                     await db.commit()
@@ -363,7 +369,9 @@ class FortuneCore:
                     try:
                         # 提取日期部分，假设格式为 user_id_YYYY-MM-DD.jpg
                         file_name = file_path.stem  # 去掉 .jpg
-                        parts = file_name.rsplit("_", 1)  # 从右边分割，得到 [user_id, date]
+                        parts = file_name.rsplit(
+                            "_", 1
+                        )  # 从右边分割，得到 [user_id, date]
 
                         if len(parts) >= 2:
                             file_date = parts[-1]
