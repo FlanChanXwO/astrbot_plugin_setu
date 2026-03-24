@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import astrbot.api.message_components as Comp
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
+from astrbot.core.message.message_event_result import MessageChain
 
 if TYPE_CHECKING:
     from ..core import SetuCore
@@ -169,9 +170,10 @@ class FortuneLlmHandler:
                 return False
 
             # 发送图片
+            message_chain = MessageChain([Comp.Image.fromBytes(rendered_image)])
             await self._setu_plugin.context.send_message(
                 event.unified_msg_origin,
-                [Comp.Image.fromBytes(rendered_image)],
+                message_chain,
             )
             return True
 
