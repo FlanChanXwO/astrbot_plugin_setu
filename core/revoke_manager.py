@@ -75,11 +75,41 @@ class RevokeManager:
             await self._save()
 
     async def mark_revoked(self, message_id: str) -> None:
-        """标记消息为已撤回。"""
+        """标记消息为已撤回，并清理旧记录。"""
         async with self._lock:
             if message_id in self._data["entries"]:
                 self._data["entries"][message_id]["revoked"] = True
+                self._data["entries"][message_id]["revoked_at"] = int(time.time())
+                # 清理已撤销的过期记录（保留最近7天的）
+                await self._cleanup_revoked_entries()
                 await self._save()
+
+    async def _cleanup_revoked_entries(self, max_age_days: int = 7) -> int:
+        """清理已撤销的旧记录。
+
+        参数:
+            max_age_days: 已撤销记录保留天数
+
+        返回:
+            清理的记录数量
+        """
+        cutoff = int(time.time()) - (max_age_days * 24 * 3600)
+        to_remove = []
+
+        for message_id, entry in self._data["entries"].items():
+            # 只清理已撤销的过期记录
+            if entry.get("revoked", False):
+                revoked_at = entry.get("revoked_at", entry.get("created_at", 0))
+                if revoked_at < cutoff:
+                    to_remove.append(message_id)
+
+        for message_id in to_remove:
+            del self._data["entries"][message_id]
+
+        if to_remove:
+            logger.debug("[revoke] Cleaned up %d old revoked entries", len(to_remove))
+
+        return len(to_remove)
 
     def get_pending_entries(self) -> list[dict[str, Any]]:
         """获取待撤回的条目列表。"""

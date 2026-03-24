@@ -50,6 +50,20 @@ class CommandHandler:
             yield event.plain_result("插件尚未就绪，请稍后再试。")
             return
 
+        # 限流检查：每个用户同时只能有一个请求
+        if not await self._core.rate_limiter.acquire(event):
+            yield event.plain_result("你有一个请求正在处理中，请稍后再试~")
+            return
+
+        try:
+            async for result in self._handle_random_picture_internal(event):
+                yield result
+        finally:
+            # 无论成功或失败，都释放锁
+            await self._core.rate_limiter.release(event)
+
+    async def _handle_random_picture_internal(self, event: AstrMessageEvent):
+        """处理色图请求命令的内部逻辑。"""
         match = re.match(COMMAND_PATTERN, event.message_str.strip())
         if not match:
             return
@@ -83,19 +97,34 @@ class CommandHandler:
             is_r18 = self._core.determine_r18(effective_content_mode)
             logger.debug("num = %d invoke params = %s , r18 = %s", num, tags, is_r18)
 
-            downloaded = await asyncio.wait_for(
-                self._core.fetch_and_download_images(num, tags, is_r18), timeout=60.0
-            )
-            if not downloaded:
-                tags_info = f"标签: {', '.join(tags)}" if tags else ""
-                yield event.plain_result(
-                    f"未找到{tags_info}符合要求的图片，请尝试其他标签或检查标签拼写~"
+            # 检查是否使用 URL 发送模式
+            if self._config.url_send_mode:
+                # URL 模式：获取 URL 并直接发送
+                provider = self._core._get_provider()
+                if provider:
+                    img_urls = await provider.fetch_image_urls(
+                        num=num, tags=tags, r18=is_r18, exclude_ai=self._config.exclude_ai
+                    )
+                    async for result in self._core.send_images_by_url(
+                        event, img_urls, is_r18, tags
+                    ):
+                        yield result
+                else:
+                    yield event.plain_result("没有可用的图片源，请联系管理员。")
+            else:
+                # 正常模式：下载后发送
+                downloaded = await asyncio.wait_for(
+                    self._core.fetch_and_download_images(num, tags, is_r18), timeout=60.0
                 )
-                return
+                if not downloaded:
+                    tags_info = f"标签: {', '.join(tags)}" if tags else ""
+                    yield event.plain_result(
+                        f"未找到{tags_info}符合要求的图片，请尝试其他标签或检查标签拼写~"
+                    )
+                    return
 
-            async for result in self._core.send_images(event, downloaded, is_r18, tags):
-                # 传递所有结果，包括内部标记对象
-                yield result
+                async for result in self._core.send_images(event, downloaded, is_r18, tags):
+                    yield result
         except asyncio.TimeoutError:
             logger.warning("get_random_picture timeout (>60s)")
             yield event.plain_result("获取图片超时，网络可能不稳定，请稍后再试。")
@@ -111,6 +140,21 @@ class CommandHandler:
             yield event.plain_result("插件尚未就绪，请稍后再试。")
             return
 
+        # 限流检查：每个用户同时只能有一个请求
+        if not await self._core.rate_limiter.acquire(event):
+            yield event.plain_result("你有一个请求正在处理中，请稍后再试~")
+            return
+
+        try:
+            async for result in self._handle_setu_command_internal(event, count, tags=tags):
+                yield result
+        finally:
+            await self._core.rate_limiter.release(event)
+
+    async def _handle_setu_command_internal(
+        self, event: AstrMessageEvent, count: str = "1", *, tags: str = ""
+    ):
+        """处理 /setu 命令的内部逻辑。"""
         if self._core.is_group_blocked(event):
             return
 
@@ -140,22 +184,35 @@ class CommandHandler:
             effective_content_mode = await self._core.get_effective_content_mode(event)
             is_r18 = self._core.determine_r18(effective_content_mode)
 
-            downloaded = await asyncio.wait_for(
-                self._core.fetch_and_download_images(num, parsed_tags, is_r18),
-                timeout=60.0,
-            )
-            if not downloaded:
-                tags_info = f"标签: {', '.join(parsed_tags)}" if parsed_tags else ""
-                yield event.plain_result(
-                    f"未找到{tags_info}符合要求的图片，请尝试其他标签或检查标签拼写~"
+            # 检查是否使用 URL 发送模式
+            if self._config.url_send_mode:
+                provider = self._core._get_provider()
+                if provider:
+                    img_urls = await provider.fetch_image_urls(
+                        num=num, tags=parsed_tags, r18=is_r18, exclude_ai=self._config.exclude_ai
+                    )
+                    async for result in self._core.send_images_by_url(
+                        event, img_urls, is_r18, parsed_tags
+                    ):
+                        yield result
+                else:
+                    yield event.plain_result("没有可用的图片源，请联系管理员。")
+            else:
+                downloaded = await asyncio.wait_for(
+                    self._core.fetch_and_download_images(num, parsed_tags, is_r18),
+                    timeout=60.0,
                 )
-                return
+                if not downloaded:
+                    tags_info = f"标签: {', '.join(parsed_tags)}" if parsed_tags else ""
+                    yield event.plain_result(
+                        f"未找到{tags_info}符合要求的图片，请尝试其他标签或检查标签拼写~"
+                    )
+                    return
 
-            async for result in self._core.send_images(
-                event, downloaded, is_r18, parsed_tags
-            ):
-                # 传递所有结果，包括内部标记对象
-                yield result
+                async for result in self._core.send_images(
+                    event, downloaded, is_r18, parsed_tags
+                ):
+                    yield result
         except asyncio.TimeoutError:
             logger.warning("setu command timeout (>60s)")
             yield event.plain_result("获取图片超时，网络可能不稳定，请稍后再试。")

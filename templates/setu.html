@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Safe Render Template</title>
+    <style>
+        #main {
+            width: fit-content;
+            display: inline-flex;
+            justify-content: flex-start;
+            align-items: flex-start;
+            position: relative;
+        }
+
+        body {
+            {body_style}
+        }
+
+        /* 容器：自适应内容大小 */
+        .container {
+            width: fit-content;
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        /* 图片卡片样式 - 紧凑包装 */
+        .image-card {
+            overflow: hidden;
+            position: relative;
+            transition: transform 0.2s ease;
+            display: inline-block;
+            line-height: 0;
+        }
+
+        .image-card:hover {
+            transform: scale(1.01) !important;
+        }
+
+        /* 图片本身的处理 - 保持原始尺寸 */
+        .safe-img {
+            max-width: 100%;
+            max-height: 1600px;
+            width: auto;
+            height: auto;
+            display: block;
+            border-radius: 8px;
+            /* 极微小的对比度提升和亮度调整，改变像素值但肉眼难辨 */
+            filter: contrast(1.02) brightness(1.01) sepia(0.03);
+        }
+
+        /* 全局噪点层 (关键) */
+        .noise-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 9999;
+            opacity: {noise_opacity};
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+        }
+
+        /* 隐形网格线干扰 */
+        .grid-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+            background-image: linear-gradient(rgba(0, 0, 0, {grid_opacity}) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0, 0, 0, {grid_opacity}) 1px, transparent 1px);
+            background-size: 20px 20px;
+            z-index: 10;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+<div id="main">
+    <!-- 噪点遮罩层 -->
+    <div class="noise-overlay"></div>
+
+    <div class="container">
+        {cards}
+    </div>
+</div>
+</body>
+</html>

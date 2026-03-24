@@ -14,3 +14,6 @@ DEFAULT_TAG_ALIAS: dict[str, list[str]] = {
 
 # 命令匹配正则表达式
 COMMAND_PATTERN = r"^/?(来\s*(.*?)(份|个|张|点))(.*?)(?:福利|色|瑟|涩|塞)?图$"
+
+# 今日运势命令正则
+FORTUNE_PATTERN = r"^(今日运势|jrys)$"

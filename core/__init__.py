@@ -16,6 +16,7 @@ from ..config import SetuConfig
 from ..providers import get_provider
 from ..services import DocxService, HtmlCardRenderer, ImageService, UrlImageDiskCache
 from ..session_config import SessionConfigManager
+from .rate_limiter import SessionRequestLimiter
 from .revoke_manager import RevokeManager
 from .revoke_tasks import RevokeTaskMixin
 from .send_revoke import SendWithRevokeMixin
@@ -30,6 +31,7 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
         self.data_dir = data_dir
         self._revoke_manager = RevokeManager(data_dir)
         self._session_config = SessionConfigManager(data_dir)
+        self._rate_limiter = SessionRequestLimiter()
         self._docx_service = DocxService()
         self._revoke_tasks: set[asyncio.Task] = set()
         self._cache: UrlImageDiskCache | None = None
@@ -111,8 +113,20 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
         session_mode = await self._session_config.get_session_content_mode(
             session_id, is_group
         )
+
+        # 调试日志
+        logger.debug(
+            "[content_mode] session_id=%s, is_group=%s, session_mode=%s, global_mode=%s",
+            session_id,
+            is_group,
+            session_mode,
+            self._config.content_mode,
+        )
+
         if session_mode:
+            logger.debug("[content_mode] Using session mode: %s", session_mode)
             return session_mode
+        logger.debug("[content_mode] Using global mode: %s", self._config.content_mode)
         return self._config.content_mode
 
     async def get_effective_r18_docx_mode(self, event: AstrMessageEvent) -> bool:
@@ -154,7 +168,7 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
         if self._html_renderer is not None:
             return True
         try:
-            template_path = Path(__file__).parent.parent / "templates" / "main.html"
+            template_path = Path(__file__).parent.parent / "templates" / "setu.html"
             self._html_renderer = HtmlCardRenderer(template_path)
             return True
         except (OSError, ValueError):
@@ -177,16 +191,89 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
         目前支持的平台：OneBot v11 (aiocqhttp)
         """
         try:
-            platform_name = getattr(event.platform, "name", None)
-            if platform_name == "aiocqhttp":
+            # 获取平台信息（多种方式）
+            platform_name = None
+            platform_obj = None
+            platform_type_name = "Unknown"
+
+            # 方式1：通过 event.platform.name
+            if hasattr(event, "platform") and event.platform:
+                platform_obj = event.platform
+                platform_type_name = type(platform_obj).__name__
+                if hasattr(platform_obj, "name"):
+                    platform_name = platform_obj.name
+
+            # 方式2：通过 event.get_platform_name()
+            if not platform_name and hasattr(event, "get_platform_name"):
+                try:
+                    platform_name = event.get_platform_name()
+                except Exception:
+                    pass
+
+            # 方式3：通过 context 获取
+            if not platform_name and hasattr(self, "plugin") and self.plugin:
+                try:
+                    ctx = getattr(self.plugin, "context", None)
+                    if ctx and hasattr(ctx, "get_platform"):
+                        platform = ctx.get_platform()
+                        if platform and hasattr(platform, "name"):
+                            platform_name = platform.name
+                            platform_type_name = type(platform).__name__
+                except Exception:
+                    pass
+
+            # 调试日志
+            logger.debug(
+                "[platform] Checking forward support: platform_name=%s, platform_type=%s",
+                platform_name,
+                platform_type_name,
+            )
+
+            # 支持的平台列表（检查名称）
+            supported_platforms = ("aiocqhttp", "onebot11", "onebot", "go-cqhttp", "napcat", "llonebot")
+            if platform_name:
+                platform_name_lower = platform_name.lower()
+                for p in supported_platforms:
+                    if p in platform_name_lower:
+                        logger.debug("[platform] Forward supported: name match '%s'", p)
+                        return True
+
+            # 检查 platform 对象类型名
+            if platform_type_name and any(
+                p in platform_type_name.lower()
+                for p in ("cqhttp", "onebot", "gocq")
+            ):
+                logger.debug("[platform] Forward supported: type match '%s'", platform_type_name)
                 return True
-        except AttributeError:
-            pass
+
+            # 检查 event 是否有 bot 属性且看起来是 OneBot（有 call_action 方法）
+            if hasattr(event, "bot") and event.bot:
+                bot = event.bot
+                if hasattr(bot, "call_action"):
+                    logger.debug("[platform] Forward supported: bot has call_action")
+                    return True
+
+            # 检查 unified_msg_origin 格式
+            if hasattr(event, "unified_msg_origin"):
+                umo = event.unified_msg_origin
+                if umo and isinstance(umo, str):
+                    if any(p in umo.lower() for p in ("aiocqhttp", "onebot", "gocq")):
+                        logger.debug("[platform] Forward supported: unified_msg_origin match")
+                        return True
+
+        except Exception as exc:
+            logger.debug("[platform] Error checking forward support: %s", exc)
+
+        logger.debug("[platform] Forward not supported for platform=%s", platform_name)
         return False
 
     @property
     def session_config(self) -> SessionConfigManager:
         return self._session_config
+
+    @property
+    def rate_limiter(self) -> SessionRequestLimiter:
+        return self._rate_limiter
 
     @property
     def config(self) -> SetuConfig:
@@ -253,7 +340,7 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
 
             # 检查图片大小，Telegram 等平台有 10MB 或 20MB 限制
             for comp in chain:
-                if hasattr(comp, 'file') and isinstance(comp.file, bytes):
+                if hasattr(comp, "file") and isinstance(comp.file, bytes):
                     size_mb = len(comp.file) / (1024 * 1024)
                     if size_mb > 10:  # Telegram 通常限制 10-20MB
                         logger.warning(
@@ -583,3 +670,105 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
             result = await self._direct_send(event, chain)
             logger.info("[html_fallback] Direct send result: %s", result)
             return result
+
+    async def verify_image_urls(self, urls: list[str]) -> list[str]:
+        """验证图片 URL 是否可访问。
+
+        使用 HEAD 请求快速验证 URL 是否返回 200。
+
+        参数:
+            urls: 图片 URL 列表
+
+        返回:
+            验证通过的 URL 列表
+        """
+        import aiohttp
+
+        valid_urls = []
+        timeout = aiohttp.ClientTimeout(total=self._config.url_send_timeout)
+
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            for url in urls:
+                try:
+                    async with session.head(url, allow_redirects=True) as response:
+                        if response.status == 200:
+                            valid_urls.append(url)
+                            logger.debug("[url_verify] URL valid: %s", url)
+                        else:
+                            logger.warning(
+                                "[url_verify] URL returned %d: %s",
+                                response.status,
+                                url,
+                            )
+                except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+                    logger.warning("[url_verify] URL verification failed: %s - %s", url, exc)
+
+        return valid_urls
+
+    async def send_images_by_url(
+        self,
+        event: AstrMessageEvent,
+        urls: list[str],
+        is_r18: bool,
+        tags: list[str] | None = None,
+    ):
+        """通过 URL 直接发送图片（不下载）。
+
+        参数:
+            event: 消息事件
+            urls: 图片 URL 列表
+            is_r18: 是否为 R18 内容
+            tags: 标签列表
+        """
+        if not urls:
+            yield event.plain_result("运气不好，没有获取到图片链接...")
+            return
+
+        cfg = self._config
+
+        # 验证 URL（如果启用）
+        if cfg.url_send_verify:
+            valid_urls = await self.verify_image_urls(urls)
+            if not valid_urls:
+                yield event.plain_result("获取的图片链接均无法访问，请稍后再试。")
+                return
+            if len(valid_urls) < len(urls):
+                logger.warning(
+                    "[url_send] %d/%d URLs invalid, using valid ones",
+                    len(urls) - len(valid_urls),
+                    len(urls),
+                )
+        else:
+            valid_urls = urls
+
+        # 准备提示消息
+        found_message = (
+            cfg.format_found_message(len(valid_urls)) if cfg.msg_found_enabled else None
+        )
+
+        # 发送图片 URL
+        if found_message:
+            await self._direct_send_plain(event, found_message)
+
+        # 构建消息链 - 使用 Comp.Image.fromURL
+        chain = [Comp.Image.fromURL(url) for url in valid_urls]
+
+        effective_auto_revoke = await self.get_effective_auto_revoke_r18(event)
+        auto_revoke = is_r18 and effective_auto_revoke
+
+        if auto_revoke:
+            message_id = await self._send_with_revoke_support(
+                event,
+                chain,
+                bool(event.get_group_id()),
+                event.get_group_id() or event.get_sender_id(),
+            )
+            if message_id:
+                await self._schedule_revoke(event, message_id, cfg.auto_revoke_delay)
+                if cfg.msg_found_enabled:
+                    yield event.plain_result(
+                        cfg.format_found_message(len(valid_urls), cfg.auto_revoke_delay)
+                    )
+        else:
+            await self._direct_send(event, chain)
+            yield {"send_success": True, "image_count": len(valid_urls)}
