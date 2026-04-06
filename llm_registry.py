@@ -6,13 +6,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from astrbot.core.provider.register import llm_tools
 
 if TYPE_CHECKING:
-    from astrbot.api.event import AstrMessageEvent
+    pass
 
 
 @dataclass
