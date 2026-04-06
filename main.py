@@ -12,13 +12,17 @@ from pathlib import Path
 from astrbot.api.event import filter
 from astrbot.api.star import Context, Star, StarTools
 from astrbot.core import AstrBotConfig
-from astrbot.core.provider.register import llm_tools
 
 from .config import SetuConfig
 from .constants import COMMAND_PATTERN, FORTUNE_PATTERN
 from .core import SetuCore
 from .fortune import FortuneManager
 from .handlers import CommandHandler, LlmHandlers
+from .llm_registry import (
+    register_fortune_tools,
+    register_setu_tools,
+    unregister_all_tools,
+)
 
 
 class SetuPlugin(Star):
@@ -57,66 +61,7 @@ class SetuPlugin(Star):
 
     async def _register_setu_llm_tools(self) -> None:
         """注册 Setu 相关的 LLM 工具。"""
-        tools = [
-            (
-                "get_setu_image",
-                self._llm_handlers._llm_get_setu_handler,
-                [
-                    {
-                        "name": "count",
-                        "type": "integer",
-                        "description": "Number of images.",
-                    },
-                    {"name": "tags", "type": "array", "items": {"type": "string"}},
-                ],
-                "Fetch random anime images.",
-            ),
-            (
-                "get_setu_content_mode",
-                self._llm_handlers._llm_get_content_mode_handler,
-                [],
-                "Get content mode.",
-            ),
-            (
-                "set_setu_content_mode",
-                self._llm_handlers._llm_set_content_mode_handler,
-                [
-                    {
-                        "name": "mode",
-                        "type": "string",
-                        "enum": ["sfw", "r18", "mix", "clear"],
-                    },
-                ],
-                "Set content mode.",
-            ),
-            (
-                "set_setu_r18_docx_mode",
-                self._llm_handlers._llm_set_r18_docx_mode_handler,
-                [
-                    {"name": "enabled", "type": "boolean"},
-                ],
-                "Set R18 Docx mode.",
-            ),
-            (
-                "set_setu_auto_revoke",
-                self._llm_handlers._llm_set_auto_revoke_handler,
-                [
-                    {"name": "enabled", "type": "boolean"},
-                ],
-                "Set auto-revoke.",
-            ),
-        ]
-
-        for name, handler, args, desc in tools:
-            try:
-                llm_tools.add_func(
-                    name=name, func_args=args, desc=desc, handler=handler
-                )
-                tool = llm_tools.get_func(name)
-                if tool:
-                    tool.handler_module_path = __name__
-            except (AttributeError, RuntimeError):
-                pass
+        register_setu_tools(self._llm_handlers, __name__)
 
     async def _register_fortune_llm_tools(self) -> None:
         """注册今日运势的 LLM 工具。"""
@@ -124,66 +69,7 @@ class SetuPlugin(Star):
             return
 
         handler = self._fortune_manager.llm_handler
-
-        tools = [
-            (
-                "get_today_fortune",
-                handler.llm_get_fortune,
-                [],
-                "Get today's fortune for the user.",
-            ),
-            (
-                "refresh_my_fortune",
-                handler.llm_refresh_fortune,
-                [],
-                "Refresh my today's fortune (admin only).",
-            ),
-            (
-                "refresh_group_fortune",
-                handler.llm_refresh_group_fortune,
-                [],
-                "Refresh today's fortune for the current group (admin only).",
-            ),
-            (
-                "refresh_all_fortune",
-                handler.llm_refresh_all_fortune,
-                [],
-                "Refresh today's fortune for all users (super admin only).",
-            ),
-            (
-                "get_fortune_config",
-                handler.llm_get_fortune_config,
-                [],
-                "Get the fortune configuration for the current session.",
-            ),
-            (
-                "set_fortune_config",
-                handler.llm_set_fortune_config,
-                [
-                    {
-                        "name": "tags",
-                        "type": "string",
-                        "description": "Tags for fortune images, e.g., 'girl,cute'. Leave empty to clear.",
-                    },
-                    {
-                        "name": "mode",
-                        "type": "string",
-                        "enum": ["sfw", "r18", "mix"],
-                        "description": "Content mode for fortune images.",
-                    },
-                ],
-                "Set the fortune configuration for the current session (admin only).",
-            ),
-        ]
-
-        for name, h, args, desc in tools:
-            try:
-                llm_tools.add_func(name=name, func_args=args, desc=desc, handler=h)
-                tool = llm_tools.get_func(name)
-                if tool:
-                    tool.handler_module_path = __name__
-            except (AttributeError, RuntimeError):
-                pass
+        register_fortune_tools(handler, __name__)
 
     async def terminate(self) -> None:
         """卸载插件。"""
@@ -193,23 +79,7 @@ class SetuPlugin(Star):
             self._fortune_manager.terminate()
 
         # 注销 LLM 工具
-        for name in [
-            "get_setu_image",
-            "get_setu_content_mode",
-            "set_setu_content_mode",
-            "set_setu_r18_docx_mode",
-            "set_setu_auto_revoke",
-            "get_today_fortune",
-            "refresh_my_fortune",
-            "refresh_group_fortune",
-            "refresh_all_fortune",
-            "get_fortune_config",
-            "set_fortune_config",
-        ]:
-            try:
-                llm_tools.remove_func(name)
-            except (AttributeError, RuntimeError):
-                pass
+        unregister_all_tools()
 
     # ==================== Setu 命令 ====================
 
