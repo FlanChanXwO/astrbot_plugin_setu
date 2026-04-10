@@ -430,19 +430,20 @@ class SessionConfigManager(SessionConfigBase):
         return await self.clear_config(session_id, is_group, "send_mode")
 
     async def cleanup_expired_sessions(self, max_age_days: int = 30) -> int:
-        """清理超过指定天数的过期会话配置。
+        """[Deprecated] 兼容接口：清理过期会话配置（当前实现为 no-op）。
 
-        注意：由于新配置不包含时间戳，此方法在新版本中不再有效。
-        保留此方法以保持向后兼容。
+        历史版本曾基于时间戳删除会话配置；当前配置结构不再保存时间信息，
+        因此该方法仅兼容旧调用方而保留。
 
         参数:
-            max_age_days: 最大保留天数
+            max_age_days: 兼容参数，当前版本中不会被使用
 
         返回:
-            清理的会话数量
+            始终返回 0，不会执行任何删除操作
         """
-        # 新配置不包含时间戳，返回 0
         logger.info(
-            "[session_config] cleanup_expired_sessions is no-op in new config format"
+            "[session_config] cleanup_expired_sessions is deprecated no-op; "
+            "max_age_days=%s is ignored",
+            max_age_days,
         )
         return 0

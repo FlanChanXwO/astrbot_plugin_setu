@@ -54,7 +54,7 @@ class AtriProvider(SetuImageProvider):
         r18: bool,
         exclude_ai: bool = True,
     ) -> list[str]:
-        params: dict[str, str | int | list] = {
+        params: dict[str, str | int] = {
             "r18": 1 if r18 else 0,
             "num": num,
             "excludeAI": str(exclude_ai).lower(),
@@ -66,17 +66,22 @@ class AtriProvider(SetuImageProvider):
             params["proxy"] = self.proxy
         if self.aspect_ratio:
             params["aspectRatio"] = self.aspect_ratio
-        if self.uid:
-            params["uid"] = self.uid
         if self.keyword:
             params["keyword"] = self.keyword
 
-        # 构建带多个 'tag' 参数的 URL（使用 URL 编码防止特殊字符问题）
-        tag_params = "&".join(f"tag={quote(t, safe='')}" for t in tags) if tags else ""
+        # 构建重复参数：tag=...&tag=... 与 uid=...&uid=...
+        tag_params = "&".join(f"tag={quote(str(t), safe='')}" for t in tags) if tags else ""
+        uid_params = (
+            "&".join(f"uid={quote(str(u), safe='')}" for u in self.uid if u is not None)
+            if self.uid
+            else ""
+        )
         base_params = "&".join(
             f"{k}={quote(str(v), safe='')}" for k, v in params.items()
         )
         url = f"{self.API_URL}?{base_params}"
+        if uid_params:
+            url += f"&{uid_params}"
         if tag_params:
             url += f"&{tag_params}"
 
