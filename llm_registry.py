@@ -125,9 +125,7 @@ class LlmToolRegistry:
             成功注销的工具名称列表
         """
         tools_to_remove = [
-            name
-            for name, path in self._registered_tools.items()
-            if path == module_path
+            name for name, path in self._registered_tools.items() if path == module_path
         ]
         return self.unregister_tools(tools_to_remove)
 

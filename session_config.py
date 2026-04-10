@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -279,9 +278,7 @@ class SessionConfigManager:
                     if key in cfg:
                         del cfg[key]
                         # 如果配置项都为空，删除整个会话配置
-                        if not any(
-                            k in cfg for k in self.ALLOWED_KEYS if k != key
-                        ):
+                        if not any(k in cfg for k in self.ALLOWED_KEYS if k != key):
                             configs.pop(i)
                         self._config["session_configs"] = configs
                         self._config.save_config()
