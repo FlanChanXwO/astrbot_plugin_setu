@@ -6,6 +6,7 @@ from typing import Any
 
 from astrbot.api import logger
 
+from .atri import AtriProvider
 from .base import SetuImageProvider
 from .custom import CustomApiProvider
 from .lolicon import LoliconProvider
@@ -15,11 +16,12 @@ from .sexnyan import SexNyanRunProvider
 # 提供商注册表
 PROVIDERS: dict[str, type[SetuImageProvider]] = {
     "lolicon": LoliconProvider,
+    "atri": AtriProvider,
     "sexnyan": SexNyanRunProvider,
 }
 
 # 多API策略下的内置提供商列表
-BUILTIN_PROVIDERS = ["lolicon", "sexnyan"]
+BUILTIN_PROVIDERS = ["lolicon", "atri", "sexnyan"]
 
 
 def get_provider(
@@ -29,16 +31,18 @@ def get_provider(
     custom_api_configs: list[dict[str, Any]] | None = None,
     multi_api_strategy: str = "round_robin",
     lolicon_config: dict[str, Any] | None = None,
+    atri_config: dict[str, Any] | None = None,
 ) -> SetuImageProvider | MultiApiProvider:
     """根据类型名称获取提供商实例。
 
     参数:
-        api_type: 提供商类型（'lolicon'、'sexnyan'、'custom' 或 'all'）。
+        api_type: 提供商类型（'lolicon'、'atri'、'sexnyan'、'custom' 或 'all'）。
         custom_config: 自定义 API 配置（当 api_type 为 custom 时使用）。
         parser_config: API 响应解析配置（当 api_type 为 custom 时使用）。
         custom_api_configs: 自定义 API 配置列表（template_list 格式）。
         multi_api_strategy: 多 API 策略（'round_robin'、'random'、'failover'）。
         lolicon_config: Lolicon 专属配置参数。
+        atri_config: Atri 专属配置参数。
 
     返回:
         提供商实例（如果类型未知则默认返回 lolicon）。
@@ -49,6 +53,8 @@ def get_provider(
         for name in BUILTIN_PROVIDERS:
             if name == "lolicon" and lolicon_config:
                 provider = LoliconProvider(**lolicon_config)
+            elif name == "atri" and atri_config:
+                provider = AtriProvider(**atri_config)
             else:
                 provider = PROVIDERS[name]()
             providers.append(provider)
@@ -107,6 +113,8 @@ def get_provider(
     # 创建实例
     if api_type == "lolicon" and lolicon_config:
         return provider_cls(**lolicon_config)
+    if api_type == "atri" and atri_config:
+        return provider_cls(**atri_config)
     return provider_cls()
 
 
@@ -114,6 +122,7 @@ __all__ = [
     "SetuImageProvider",
     "MultiApiProvider",
     "LoliconProvider",
+    "AtriProvider",
     "SexNyanRunProvider",
     "CustomApiProvider",
     "get_provider",

@@ -20,14 +20,14 @@ class ApiConfigMixin:
         """API 提供商类型。
 
         返回:
-            返回 API 类型：lolicon、sexnyan、custom 或 all
+            返回 API 类型：lolicon、atri、sexnyan、custom 或 all
         """
         api_type = self._read(
             ("general", "api_type"), "api_type", "apiType", default="lolicon"
         )
         return (
             api_type
-            if api_type in ("lolicon", "sexnyan", "custom", "all")
+            if api_type in ("lolicon", "atri", "sexnyan", "custom", "all")
             else "lolicon"
         )
 
@@ -219,3 +219,77 @@ class ApiConfigMixin:
                 "json_path": cfg.get("json_path", ""),
             }
         return {"type": "auto", "json_path": ""}
+
+    # Atri 配置属性（和 Lolicon 相同结构）
+    @property
+    def atri_image_size(self: ConfigBase) -> str:
+        """图片尺寸（仅 atri 生效）。
+
+        返回:
+            返回图片尺寸：original（原图）、regular、small、thumb、mini
+        """
+        size = self._read(
+            ("api", "atri", "image_size"), "image_size", default="original"
+        )
+        return (
+            size
+            if size in ("original", "regular", "small", "thumb", "mini")
+            else "original"
+        )
+
+    @property
+    def atri_proxy(self: ConfigBase) -> str:
+        """图片代理主机（仅 atri 生效）。
+
+        返回:
+            代理服务器地址，默认 i.pixiv.re
+        """
+        return str(self._read(("api", "atri", "proxy"), "proxy", default="i.pixiv.re"))
+
+    @property
+    def atri_aspect_ratio(self: ConfigBase) -> str:
+        """宽高比过滤（仅 atri 生效）。
+
+        返回:
+            返回宽高比：horizontal（横向）、vertical（纵向）、square（方形）
+        """
+        ratio = self._read(("api", "atri", "aspect_ratio"), "aspect_ratio", default="")
+        return ratio if ratio in ("horizontal", "vertical", "square") else ""
+
+    @property
+    def atri_uid(self: ConfigBase) -> list[int]:
+        """作者 UID 列表（仅 atri 生效）。
+
+        返回:
+            指定作者的 UID 列表，用于筛选特定作者的作品
+        """
+        uids = self._read(("api", "atri", "uid"), "uid", default=[])
+        if isinstance(uids, list):
+            return [safe_int(uid, 0) for uid in uids if safe_int(uid, 0) > 0]
+        return []
+
+    @property
+    def atri_keyword(self: ConfigBase) -> str:
+        """关键词过滤（仅 atri 生效）。
+
+        返回:
+            用于过滤图片的关键词
+        """
+        return str(self._read(("api", "atri", "keyword"), "keyword", default=""))
+
+    @property
+    def atri_exclude_ai(self: ConfigBase) -> bool:
+        """排除 AI 生成作品（仅 atri 生效）。
+
+        返回:
+            是否排除 AI 生成的图片
+        """
+        return safe_bool(
+            self._read(
+                ("api", "atri", "exclude_ai"),
+                "exclude_ai",
+                "excludeAi",
+                default=True,
+            ),
+            True,
+        )

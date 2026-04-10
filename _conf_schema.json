@@ -11,6 +11,7 @@
         "default": "lolicon",
         "options": [
           "lolicon",
+          "atri",
           "sexnyan",
           "custom",
           "all"
@@ -310,6 +311,60 @@
           }
         }
       },
+      "atri": {
+        "description": "Atri 选项",
+        "type": "object",
+        "hint": "仅用于 atri 提供者。",
+        "items": {
+          "image_size": {
+            "type": "string",
+            "description": "图片尺寸",
+            "default": "original",
+            "options": [
+              "original",
+              "regular",
+              "small",
+              "thumb",
+              "mini"
+            ]
+          },
+          "proxy": {
+            "type": "string",
+            "description": "图片代理主机",
+            "hint": "默认为 i.pixiv.re。",
+            "default": "i.pixiv.re"
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "description": "宽高比过滤",
+            "default": "",
+            "options": [
+              "",
+              "horizontal",
+              "vertical",
+              "square"
+            ]
+          },
+          "uid": {
+            "type": "list",
+            "description": "作者 UID 列表",
+            "hint": "每行一个 UID。",
+            "default": [],
+            "obvious_hint": true
+          },
+          "keyword": {
+            "type": "string",
+            "description": "关键词过滤",
+            "default": ""
+          },
+          "exclude_ai": {
+            "type": "bool",
+            "description": "排除 AI 生成作品",
+            "hint": "排除 AI 生成的图片。",
+            "default": true
+          }
+        }
+      },
       "custom_api_configs": {
         "type": "template_list",
         "description": "自定义 API 列表",
@@ -491,6 +546,132 @@
         "description": "下载超时时间(秒)",
         "hint": "单个图片下载的最大超时时间。默认 30 秒，网络慢可适当增加。",
         "default": 30
+      }
+    }
+  },
+  "session_configs": {
+    "type": "template_list",
+    "description": "会话级配置覆盖",
+    "hint": "为特定群聊或私聊设置独立配置，优先于全局配置。可通过命令 /setu_config 在会话中设置。",
+    "default": [],
+    "obvious_hint": true,
+    "templates": {
+      "session_template": {
+        "name": "会话配置",
+        "hint": "一个群聊或私聊的独立配置",
+        "items": {
+          "session_id": {
+            "type": "string",
+            "description": "会话 ID",
+            "hint": "群号或用户 ID",
+            "default": ""
+          },
+          "session_type": {
+            "type": "string",
+            "description": "会话类型",
+            "hint": "group=群聊，private=私聊",
+            "default": "group",
+            "options": [
+              "group",
+              "private"
+            ]
+          },
+          "content_mode": {
+            "type": "string",
+            "description": "内容模式",
+            "hint": "覆盖全局内容模式设置",
+            "default": "",
+            "options": [
+              "",
+              "sfw",
+              "r18",
+              "mix"
+            ]
+          },
+          "r18_docx_mode": {
+            "type": "string",
+            "description": "R18 Docx 打包模式",
+            "hint": "覆盖全局 R18 Docx 打包设置",
+            "default": "",
+            "options": [
+              "",
+              "enabled",
+              "disabled"
+            ]
+          },
+          "auto_revoke_r18": {
+            "type": "string",
+            "description": "R18 自动撤回",
+            "hint": "覆盖全局自动撤回设置",
+            "default": "",
+            "options": [
+              "",
+              "enabled",
+              "disabled"
+            ]
+          },
+          "send_mode": {
+            "type": "string",
+            "description": "发送模式",
+            "hint": "覆盖全局发送模式设置",
+            "default": "",
+            "options": [
+              "",
+              "image",
+              "forward",
+              "auto"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "fortune_session_configs": {
+    "type": "template_list",
+    "description": "今日运势会话配置覆盖",
+    "hint": "为特定群聊或私聊设置独立的今日运势配置。可通过命令 /jrys_config 在会话中设置。",
+    "default": [],
+    "obvious_hint": true,
+    "templates": {
+      "fortune_session_template": {
+        "name": "今日运势会话配置",
+        "hint": "一个群聊或私聊的今日运势独立配置",
+        "items": {
+          "session_id": {
+            "type": "string",
+            "description": "会话 ID",
+            "hint": "群号或用户 ID",
+            "default": ""
+          },
+          "session_type": {
+            "type": "string",
+            "description": "会话类型",
+            "hint": "group=群聊，private=私聊",
+            "default": "group",
+            "options": [
+              "group",
+              "private"
+            ]
+          },
+          "tags": {
+            "type": "string",
+            "description": "标签",
+            "hint": "获取今日运势图片时的标签，如 '少女,可爱'",
+            "default": ""
+          },
+          "content_mode": {
+            "type": "string",
+            "description": "内容模式",
+            "hint": "覆盖全局内容模式设置",
+            "default": "",
+            "options": [
+              "",
+              "sfw",
+              "r18",
+              "mix"
+            ]
+          }
+        }
       }
     }
   }

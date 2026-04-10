@@ -1,21 +1,29 @@
 """今日运势会话配置管理。
 
 支持会话级别的独立配置，包括标签和内容模式。
+配置存储在 AstrBotConfig 的 fortune_session_configs 字段中，可在 WebUI 中管理。
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
-import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from astrbot.api import logger
 
+from ..session_config_base import SessionConfigBase
 
-class FortuneSessionConfig:
-    """今日运势会话配置管理器。"""
+if TYPE_CHECKING:
+    from astrbot.core import AstrBotConfig
+
+
+class FortuneSessionConfig(SessionConfigBase):
+    """今日运势会话配置管理器。
+
+    配置存储在 AstrBotConfig 的 fortune_session_configs 字段中，可在 WebUI 中管理。
+    """
 
     # 允许会话覆盖的配置项
     ALLOWED_KEYS = {"tags", "content_mode"}
@@ -23,51 +31,82 @@ class FortuneSessionConfig:
     # 有效的内容模式值
     VALID_CONTENT_MODES = {"sfw", "r18", "mix"}
 
-    def __init__(self, data_dir: Path):
-        self.data_dir = data_dir
-        self.config_file = data_dir / "fortune_session_config.json"
-        self._data: dict[str, Any] = {"sessions": {}, "meta": {}}
-        self._lock = asyncio.Lock()
+    def __init__(self, config: AstrBotConfig, data_dir: Path | None = None):
+        """初始化配置管理器。
+
+        参数:
+            config: AstrBotConfig 配置对象
+            data_dir: 插件数据目录（用于迁移旧配置）
+        """
+        super().__init__(config, config_key="fortune_session_configs")
+        self._data_dir = data_dir
+        self._migrated = False
 
     async def initialize(self) -> None:
-        """初始化配置。"""
-        self.data_dir.mkdir(parents=True, exist_ok=True)
-        async with self._lock:
-            await self._load()
-            self._data.setdefault("sessions", {})
-            self._data.setdefault("meta", {"created_at": int(time.time())})
+        """初始化配置，迁移旧配置文件到新格式。"""
+        if self._data_dir and not self._migrated:
+            await self._migrate_old_config()
+            self._migrated = True
         logger.info("[fortune_session] Session config initialized")
 
-    async def _load(self) -> None:
-        """从文件加载配置。"""
-        if not self.config_file.exists():
-            self._data = {"sessions": {}, "meta": {"created_at": int(time.time())}}
-            await self._save()
+    async def _migrate_old_config(self) -> None:
+        """迁移旧位置的配置文件到 AstrBotConfig。"""
+        old_config_file = self._data_dir / "fortune_session_config.json"
+
+        if not old_config_file.exists():
             return
 
         try:
             content = await asyncio.to_thread(
-                self.config_file.read_text, encoding="utf-8"
+                old_config_file.read_text, encoding="utf-8"
             )
-            loaded = json.loads(content)
-            self._data = {
-                "sessions": loaded.get("sessions", {}),
-                "meta": loaded.get("meta", {}),
-            }
-        except (OSError, json.JSONDecodeError):
-            logger.exception("[fortune_session] Failed to load config")
-            self._data = {"sessions": {}, "meta": {"created_at": int(time.time())}}
-            await self._save()
+            old_data = json.loads(content)
+            sessions = old_data.get("sessions", {})
 
-    async def _save(self) -> None:
-        """保存配置到文件。"""
-        try:
-            tmp_path = self.config_file.with_suffix(".tmp")
-            content = json.dumps(self._data, ensure_ascii=False, indent=2)
-            await asyncio.to_thread(tmp_path.write_text, content, encoding="utf-8")
-            await asyncio.to_thread(tmp_path.replace, self.config_file)
-        except OSError:
-            logger.exception("[fortune_session] Failed to save config")
+            if not sessions:
+                return
+
+            # 转换格式到新的 template_list 格式
+            new_configs = self._get_configs()
+
+            for session_key, session_data in sessions.items():
+                # 解析 session_key (格式: "group:12345" 或 "private:67890")
+                parsed = self._parse_session_key(session_key)
+                if not parsed:
+                    continue
+
+                session_type, session_id = parsed
+
+                # 构建新的配置项
+                new_item = {
+                    "session_id": session_id,
+                    "session_type": session_type,
+                }
+
+                # 迁移各配置项
+                if "tags" in session_data:
+                    new_item["tags"] = session_data["tags"]
+                if "content_mode" in session_data:
+                    new_item["content_mode"] = session_data["content_mode"]
+
+                # 检查是否已存在
+                self.merge_session_item(new_configs, new_item)
+
+            # 保存迁移后的配置
+            self._save_configs(new_configs)
+
+            # 删除旧配置文件
+            await asyncio.to_thread(old_config_file.unlink)
+            logger.info(
+                "[fortune_session] Migrated old config to AstrBotConfig, %d sessions",
+                len(new_configs),
+            )
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning("[fortune_session] Failed to migrate old config: %s", exc)
+
+    def _get_session_config(self, session_id: str, is_group: bool) -> dict | None:
+        """获取会话配置项。"""
+        return self._find_session_config(session_id, is_group)
 
     def _get_session_key(self, session_id: str, is_group: bool) -> str:
         """生成会话键。"""
@@ -86,16 +125,28 @@ class FortuneSessionConfig:
             logger.warning("[fortune_session] Invalid content_mode: %s", value)
             return False
 
-        session_key = self._get_session_key(session_id, is_group)
-
         async with self._lock:
-            if session_key not in self._data["sessions"]:
-                self._data["sessions"][session_key] = {}
+            session_type = "group" if is_group else "private"
+            configs = self._get_configs()
 
-            self._data["sessions"][session_key][key] = value
-            self._data["sessions"][session_key]["updated_at"] = int(time.time())
-            await self._save()
+            # 查找现有配置
+            existing_idx = self._find_session_index(configs, session_id, is_group)
 
+            if existing_idx is not None:
+                # 更新现有配置
+                configs[existing_idx][key] = value
+            else:
+                # 创建新配置
+                new_item = {
+                    "session_id": session_id,
+                    "session_type": session_type,
+                    key: value,
+                }
+                configs.append(new_item)
+
+            self._save_configs(configs)
+
+        session_key = self._get_session_key(session_id, is_group)
         logger.info("[fortune_session] Set %s=%s for %s", key, value, session_key)
         return True
 
@@ -103,23 +154,39 @@ class FortuneSessionConfig:
         self, session_id: str, is_group: bool, key: str, default: Any = None
     ) -> Any:
         """获取会话配置项。"""
-        session_key = self._get_session_key(session_id, is_group)
         async with self._lock:
-            session_data = self._data["sessions"].get(session_key, {})
-            return session_data.get(key, default)
+            cfg = self._get_session_config(session_id, is_group)
+            if not cfg:
+                return default
+
+            value = cfg.get(key)
+            if value is None or value == "":
+                return default
+
+            return value
 
     async def clear_config(self, session_id: str, is_group: bool, key: str) -> bool:
         """清除会话配置项。"""
-        session_key = self._get_session_key(session_id, is_group)
-
         async with self._lock:
-            if session_key in self._data["sessions"]:
-                if key in self._data["sessions"][session_key]:
-                    del self._data["sessions"][session_key][key]
-                    await self._save()
-                    logger.info("[fortune_session] Cleared %s for %s", key, session_key)
-                    return True
-        return False
+            configs = self._get_configs()
+
+            idx = self._find_session_index(configs, session_id, is_group)
+            if idx is None:
+                return False
+
+            cfg = configs[idx]
+            if key not in cfg:
+                return False
+
+            del cfg[key]
+            # 如果配置项都为空，删除整个会话配置
+            remaining_keys = [k for k in self.ALLOWED_KEYS if k in cfg]
+            if not remaining_keys:
+                configs.pop(idx)
+            self._save_configs(configs)
+            session_key = self._get_session_key(session_id, is_group)
+            logger.info("[fortune_session] Cleared %s for %s", key, session_key)
+            return True
 
     async def get_session_tags(self, session_id: str, is_group: bool) -> str | None:
         """获取会话的标签配置。"""

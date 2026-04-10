@@ -451,3 +451,94 @@ class LlmHandlers:
                     )
                 ]
             )
+
+    async def _llm_set_send_mode_handler(
+        self,
+        event: AstrMessageEvent,
+        mode: str | dict | None = None,
+    ) -> mcp.types.CallToolResult:
+        """LLM 工具处理器：设置会话级别的发送模式。"""
+        if not self.core:
+            return mcp.types.CallToolResult(
+                content=[
+                    mcp.types.TextContent(
+                        type="text", text="插件尚未就绪，请稍后再试。"
+                    )
+                ]
+            )
+
+        if not self._check_admin(event):
+            return mcp.types.CallToolResult(
+                content=[
+                    mcp.types.TextContent(
+                        type="text",
+                        text="❌ 权限不足：设置发送模式需要管理员或超级管理员权限。",
+                    )
+                ]
+            )
+
+        try:
+            # 处理可能被包装成字典的参数
+            if isinstance(mode, dict):
+                mode = mode.get("value")
+
+            session_id = event.get_session_id()
+            is_group = bool(event.get_group_id())
+            session_type = "群聊" if is_group else "私聊"
+
+            # 获取当前全局配置
+            global_mode = self.core.config.send_mode
+
+            if mode == "clear" or mode is None:
+                # 清除会话设置
+                success = await self.core.session_config.clear_session_send_mode(
+                    session_id, is_group
+                )
+                if success:
+                    msg = (
+                        f"✅ 已清除当前{session_type}的发送模式设置，将使用全局配置。\n"
+                        f"当前全局配置为：{global_mode}"
+                    )
+                else:
+                    msg = "ℹ️ 当前会话没有设置覆盖，已在使用全局配置。"
+            else:
+                mode_str = str(mode).strip().lower()
+                if mode_str not in ("image", "forward", "auto"):
+                    return mcp.types.CallToolResult(
+                        content=[
+                            mcp.types.TextContent(
+                                type="text",
+                                text=f"❌ 无效的发送模式 '{mode_str}'。\n"
+                                f"可用模式：image（直接发送）、forward（合并转发）、auto（自动选择）、clear（清除设置）",
+                            )
+                        ]
+                    )
+
+                success = await self.core.session_config.set_session_send_mode(
+                    session_id, is_group, mode_str
+                )
+                if success:
+                    mode_desc = {
+                        "image": "直接发送图片",
+                        "forward": "合并转发消息",
+                        "auto": "自动选择（单张直接发送，多张合并转发）",
+                    }
+                    msg = (
+                        f"✅ 已将当前{session_type}的发送模式设置为：{mode_str}\n"
+                        f"说明：{mode_desc.get(mode_str, '')}（优先于全局配置）。"
+                    )
+                else:
+                    msg = "❌ 设置失败，请稍后再试。"
+
+            return mcp.types.CallToolResult(
+                content=[mcp.types.TextContent(type="text", text=msg)]
+            )
+        except Exception as e:
+            logger.exception("LLM 工具设置发送模式失败")
+            return mcp.types.CallToolResult(
+                content=[
+                    mcp.types.TextContent(
+                        type="text", text=f"设置发送模式失败：{str(e)}"
+                    )
+                ]
+            )

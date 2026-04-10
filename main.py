@@ -9,9 +9,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from astrbot.api.event import filter
+from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, StarTools
 from astrbot.core import AstrBotConfig
+from astrbot.core.message.components import Plain
 from astrbot.core.provider.register import llm_tools
 
 from .config import SetuConfig
@@ -104,6 +105,18 @@ class SetuPlugin(Star):
                     {"name": "enabled", "type": "boolean"},
                 ],
                 "Set auto-revoke.",
+            ),
+            (
+                "set_setu_send_mode",
+                self._llm_handlers._llm_set_send_mode_handler,
+                [
+                    {
+                        "name": "mode",
+                        "type": "string",
+                        "enum": ["image", "forward", "auto", "clear"],
+                    },
+                ],
+                "Set session send mode.",
             ),
         ]
 
@@ -199,6 +212,7 @@ class SetuPlugin(Star):
             "set_setu_content_mode",
             "set_setu_r18_docx_mode",
             "set_setu_auto_revoke",
+            "set_setu_send_mode",
             "get_today_fortune",
             "refresh_my_fortune",
             "refresh_group_fortune",
@@ -210,6 +224,13 @@ class SetuPlugin(Star):
                 llm_tools.remove_func(name)
             except (AttributeError, RuntimeError):
                 pass
+
+    def _is_explicit_slash_command(self, event: AstrMessageEvent) -> bool:
+        """Check whether original message text uses an explicit '/' command prefix."""
+        for comp in event.get_messages():
+            if isinstance(comp, Plain):
+                return comp.text.strip().startswith("/")
+        return False
 
     # ==================== Setu 命令 ====================
 
@@ -239,15 +260,18 @@ class SetuPlugin(Star):
     # ==================== Fortune 命令 ====================
 
     @filter.regex(FORTUNE_PATTERN)
-    async def fortune_command(self, event):
-        """处理今日运势命令 (/jrys, /今日运势)。"""
+    async def fortune_regex(self, event):
+        """处理纯文本今日运势触发（今日运势, jrys）。"""
+        # Avoid duplicate handling when user sends /今日运势 or /jrys.
+        if self._is_explicit_slash_command(event):
+            return
         if self._fortune_manager and self._fortune_manager.cmd_handler:
             async for result in self._fortune_manager.cmd_handler.handle_fortune(event):
                 yield result
 
     @filter.command(command_name="今日运势", alias={"jrys"})
-    async def jrys_command(self, event):
-        """处理 /jrys 命令。"""
+    async def fortune_command(self, event):
+        """处理今日运势命令 (/今日运势, /jrys)。"""
         if self._fortune_manager and self._fortune_manager.cmd_handler:
             async for result in self._fortune_manager.cmd_handler.handle_fortune(event):
                 yield result

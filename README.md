@@ -149,6 +149,39 @@
 - 支持通过大模型自动调用色图工具
 - 需在 AstrBot 配置好 LLM 提供商
 
+#### 可用 LLM 工具清单（完整）
+
+> 说明：以下工具名为插件内部注册名。权限类工具在非管理员场景会返回权限不足提示。
+> 文档中的“超级管理员”即常见简称“超管”。
+
+##### Setu 工具
+
+| 工具名 | 作用 | 参数 | 权限 |
+|---|---|---|---|
+| `get_setu_image` | 获取并发送随机图片 | `count: integer`（数量）, `tags: string[]`（标签） | 普通用户可用 |
+| `get_setu_content_mode` | 查看当前会话生效的内容模式 | 无 | 普通用户可用 |
+| `set_setu_content_mode` | 设置当前会话内容模式 | `mode: string`，可选 `sfw/r18/mix/clear` | 管理员/超级管理员 |
+| `set_setu_r18_docx_mode` | 设置当前会话 R18 Docx 封装开关 | `enabled: boolean`（部分场景支持 clear 语义） | 管理员/超级管理员 |
+| `set_setu_auto_revoke` | 设置当前会话 R18 自动撤回开关 | `enabled: boolean`（部分场景支持 clear 语义） | 管理员/超级管理员 |
+| `set_setu_send_mode` | 设置当前会话发送模式 | `mode: string`，可选 `image/forward/auto/clear` | 管理员/超级管理员 |
+
+##### 今日运势工具
+
+| 工具名 | 作用 | 参数 | 权限 |
+|---|---|---|---|
+| `get_today_fortune` | 获取并发送今日运势（含运势图） | 无 | 普通用户可用 |
+| `refresh_my_fortune` | 刷新“我的”今日运势 | 无 | 管理员 |
+| `refresh_group_fortune` | 刷新当前群今日运势 | 无 | 管理员 |
+| `refresh_all_fortune` | 刷新全局今日运势 | 无 | 超级管理员 |
+| `get_fortune_config` | 查看当前会话运势配置 | 无 | 普通用户可用 |
+| `set_fortune_config` | 设置当前会话运势配置 | `tags: string`, `mode: string(sfw/r18/mix)` | 管理员 |
+
+##### 调用建议
+
+- 需要“仅查看状态”时优先调用查询类工具（如 `get_setu_content_mode`、`get_fortune_config`）。
+- 需要会话级覆写时使用 `set_*` 工具；希望回到全局配置时可使用 `clear` 语义参数（支持的工具见上表）。
+- 对于发送类工具，插件会直接把结果发送到当前会话，工具返回文本用于说明执行结果。
+
 ### 高级用法
 
 - **自定义 API**：可在配置中设置 `api_type` 为 `custom`，并填写自定义 API 地址和解析规则，实现对接任意第三方色图接口, 注意标签和分级筛选目前还是实验性阶段。
@@ -175,12 +208,10 @@
 
 ## 未来更新
 - [ ] 更好的自定义API
-- [ ] 新增一个作者自己的图库内置API，该图库的更新速度会比目前的图库API更快，并且跟随了当前版本潮流！
+- [x] 新增一个作者自己的图库内置API，该图库的更新速度会比目前的图库API更快，并且跟随了当前版本潮流！
 - [x] 一些基于色图的额外插件功能 (今日运势)
 ---
 
 ## 📄 开源协议
 
-本项目基于 [APGL](LICENSE) 协议开源。
-
----
+ 本项目基于 [AGPL](LICENSE) 协议开源。
