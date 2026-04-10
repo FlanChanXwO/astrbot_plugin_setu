@@ -152,6 +152,7 @@
 #### 可用 LLM 工具清单（完整）
 
 > 说明：以下工具名为插件内部注册名。权限类工具在非管理员场景会返回权限不足提示。
+> 文档中的“超级管理员”即常见简称“超管”。
 
 ##### Setu 工具
 
@@ -159,10 +160,10 @@
 |---|---|---|---|
 | `get_setu_image` | 获取并发送随机图片 | `count: integer`（数量）, `tags: string[]`（标签） | 普通用户可用 |
 | `get_setu_content_mode` | 查看当前会话生效的内容模式 | 无 | 普通用户可用 |
-| `set_setu_content_mode` | 设置当前会话内容模式 | `mode: string`，可选 `sfw/r18/mix/clear` | 管理员/超管 |
-| `set_setu_r18_docx_mode` | 设置当前会话 R18 Docx 封装开关 | `enabled: boolean`（部分场景支持 clear 语义） | 管理员/超管 |
-| `set_setu_auto_revoke` | 设置当前会话 R18 自动撤回开关 | `enabled: boolean`（部分场景支持 clear 语义） | 管理员/超管 |
-| `set_setu_send_mode` | 设置当前会话发送模式 | `mode: string`，可选 `image/forward/auto/clear` | 管理员/超管 |
+| `set_setu_content_mode` | 设置当前会话内容模式 | `mode: string`，可选 `sfw/r18/mix/clear` | 管理员/超级管理员 |
+| `set_setu_r18_docx_mode` | 设置当前会话 R18 Docx 封装开关 | `enabled: boolean`（部分场景支持 clear 语义） | 管理员/超级管理员 |
+| `set_setu_auto_revoke` | 设置当前会话 R18 自动撤回开关 | `enabled: boolean`（部分场景支持 clear 语义） | 管理员/超级管理员 |
+| `set_setu_send_mode` | 设置当前会话发送模式 | `mode: string`，可选 `image/forward/auto/clear` | 管理员/超级管理员 |
 
 ##### 今日运势工具
 

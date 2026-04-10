@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -441,7 +442,12 @@ class SessionConfigManager(SessionConfigBase):
         返回:
             始终返回 0，不会执行任何删除操作
         """
-        logger.info(
+        warnings.warn(
+            "SessionConfigManager.cleanup_expired_sessions() is deprecated and is now a no-op.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        logger.warning(
             "[session_config] cleanup_expired_sessions is deprecated no-op; "
             "max_age_days=%s is ignored",
             max_age_days,

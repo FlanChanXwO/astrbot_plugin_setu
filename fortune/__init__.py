@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from astrbot.api import logger
 
@@ -16,9 +16,6 @@ from .handlers import FortuneCommandHandler
 from .llm_handlers import FortuneLlmHandler
 from .renderer import FortuneRenderer
 from .session_config import FortuneSessionConfig
-
-if TYPE_CHECKING:
-    from astrbot.core import AstrBotConfig
 
 
 class FortuneManager:

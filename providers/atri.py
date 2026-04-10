@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import asyncio
-from urllib.parse import quote
 
 import httpx
 
@@ -54,50 +53,43 @@ class AtriProvider(SetuImageProvider):
         r18: bool,
         exclude_ai: bool = True,
     ) -> list[str]:
-        params: dict[str, str | int] = {
-            "r18": 1 if r18 else 0,
-            "num": num,
-            "excludeAI": str(exclude_ai).lower(),
-            "size": self.image_size,
-        }
+        query_params: list[tuple[str, str | int]] = [
+            ("r18", 1 if r18 else 0),
+            ("num", num),
+            ("excludeAI", str(exclude_ai).lower()),
+            ("size", self.image_size),
+        ]
 
         # 添加可选参数
         if self.proxy:
-            params["proxy"] = self.proxy
+            query_params.append(("proxy", self.proxy))
         if self.aspect_ratio:
-            params["aspectRatio"] = self.aspect_ratio
+            query_params.append(("aspectRatio", self.aspect_ratio))
         if self.keyword:
-            params["keyword"] = self.keyword
+            query_params.append(("keyword", self.keyword))
 
-        # 构建重复参数：tag=...&tag=... 与 uid=...&uid=...
-        tag_params = "&".join(f"tag={quote(str(t), safe='')}" for t in tags) if tags else ""
-        uid_params = (
-            "&".join(f"uid={quote(str(u), safe='')}" for u in self.uid if u is not None)
-            if self.uid
-            else ""
-        )
-        base_params = "&".join(
-            f"{k}={quote(str(v), safe='')}" for k, v in params.items()
-        )
-        url = f"{self.API_URL}?{base_params}"
-        if uid_params:
-            url += f"&{uid_params}"
-        if tag_params:
-            url += f"&{tag_params}"
+        # 重复参数由 httpx 统一编码处理
+        for uid in self.uid:
+            if uid is not None:
+                query_params.append(("uid", uid))
+        for tag in tags:
+            if tag:
+                query_params.append(("tag", tag))
 
         try:
             async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
-                resp = await client.get(url)
+                resp = await client.get(self.API_URL, params=query_params)
                 resp.raise_for_status()
                 data = resp.json()
         except httpx.HTTPStatusError as e:
-            logger.warning("Atri API 响应错误: %s %s", e, url)
+            logger.warning("Atri API 响应错误: %s %s", e, e.request.url)
             return []
         except httpx.HTTPError as e:
-            logger.warning("Atri API 请求失败: %s %s", e, url)
+            request_url = getattr(getattr(e, "request", None), "url", self.API_URL)
+            logger.warning("Atri API 请求失败: %s %s", e, request_url)
             return []
         except asyncio.TimeoutError:
-            logger.warning("Atri API 请求超时: %s", url)
+            logger.warning("Atri API 请求超时: %s", self.API_URL)
             return []
         except Exception as e:
             logger.exception("Atri API 异常: %s", e)
