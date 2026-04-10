@@ -25,3 +25,22 @@ class SetuImageProvider:
             图片 URL 列表。
         """
         raise NotImplementedError
+
+    @staticmethod
+    def _normalize_bool(value, default: bool = True) -> bool:
+        """Normalize possibly-dirty boolean input from config/runtime sources."""
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        if isinstance(value, str):
+            lowered = value.strip().lower()
+            if lowered in {"true", "1", "yes", "on"}:
+                return True
+            if lowered in {"false", "0", "no", "off"}:
+                return False
+            if lowered in {"none", "null", ""}:
+                return default
+        return default

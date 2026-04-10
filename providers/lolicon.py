@@ -54,10 +54,11 @@ class LoliconProvider(SetuImageProvider):
         r18: bool,
         exclude_ai: bool = True,
     ) -> list[str]:
+        exclude_ai_flag = self._normalize_bool(exclude_ai, default=True)
         params: dict[str, str | int | list] = {
             "r18": 1 if r18 else 0,
             "num": num,
-            "excludeAI": str(exclude_ai).lower(),
+            "excludeAI": str(exclude_ai_flag).lower(),
             "size": self.image_size,
         }
 
