@@ -70,7 +70,9 @@ class AtriProvider(SetuImageProvider):
             params["keyword"] = self.keyword
 
         # 构建重复参数：tag=...&tag=... 与 uid=...&uid=...
-        tag_params = "&".join(f"tag={quote(str(t), safe='')}" for t in tags) if tags else ""
+        tag_params = (
+            "&".join(f"tag={quote(str(t), safe='')}" for t in tags) if tags else ""
+        )
         uid_params = (
             "&".join(f"uid={quote(str(u), safe='')}" for u in self.uid if u is not None)
             if self.uid
