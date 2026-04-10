@@ -26,7 +26,9 @@ class SafetyConfigMixin:
             none=不启用黑白名单，blacklist=仅黑名单模式，whitelist=仅白名单模式
         """
         mode = self._read(
-            ("safety", "access_control_mode"), "access_control_mode", default="blacklist"
+            ("safety", "access_control_mode"),
+            "access_control_mode",
+            default="blacklist",
         )
         valid_modes = ("none", "blacklist", "whitelist")
         if mode not in valid_modes:
