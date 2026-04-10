@@ -244,9 +244,7 @@ class ApiConfigMixin:
         返回:
             代理服务器地址，默认 i.pixiv.re
         """
-        return str(
-            self._read(("api", "atri", "proxy"), "proxy", default="i.pixiv.re")
-        )
+        return str(self._read(("api", "atri", "proxy"), "proxy", default="i.pixiv.re"))
 
     @property
     def atri_aspect_ratio(self: ConfigBase) -> str:
@@ -255,9 +253,7 @@ class ApiConfigMixin:
         返回:
             返回宽高比：horizontal（横向）、vertical（纵向）、square（方形）
         """
-        ratio = self._read(
-            ("api", "atri", "aspect_ratio"), "aspect_ratio", default=""
-        )
+        ratio = self._read(("api", "atri", "aspect_ratio"), "aspect_ratio", default="")
         return ratio if ratio in ("horizontal", "vertical", "square") else ""
 
     @property

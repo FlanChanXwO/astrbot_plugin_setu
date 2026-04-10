@@ -393,8 +393,7 @@ class CommandHandler:
         """处理 R18 Docx 打包模式配置。"""
         if value not in ("on", "off", "clear", ""):
             yield event.plain_result(
-                "❌ 无效的设置。\n"
-                "可用值：on（启用）、off（禁用）、clear（清除设置）"
+                "❌ 无效的设置。\n可用值：on（启用）、off（禁用）、clear（清除设置）"
             )
             return
 
@@ -430,8 +429,7 @@ class CommandHandler:
         """处理自动撤回配置。"""
         if value not in ("on", "off", "clear", ""):
             yield event.plain_result(
-                "❌ 无效的设置。\n"
-                "可用值：on（启用）、off（禁用）、clear（清除设置）"
+                "❌ 无效的设置。\n可用值：on（启用）、off（禁用）、clear（清除设置）"
             )
             return
 

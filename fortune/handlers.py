@@ -355,7 +355,9 @@ class FortuneCommandHandler:
                     session_id, is_group, value_lower
                 )
                 if success:
-                    yield event.plain_result(f"✅ 已设置今日运势内容模式为：{value_lower}")
+                    yield event.plain_result(
+                        f"✅ 已设置今日运势内容模式为：{value_lower}"
+                    )
                 else:
                     yield event.plain_result("❌ 设置失败。")
             elif value_lower == "clear":

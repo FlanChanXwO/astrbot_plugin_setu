@@ -126,9 +126,7 @@ class FortuneLlmHandler:
 
         return None
 
-    async def _send_fortune_image(
-        self, event: AstrMessageEvent, fortune: dict
-    ) -> bool:
+    async def _send_fortune_image(self, event: AstrMessageEvent, fortune: dict) -> bool:
         """生成并发送运势图片给用户。
 
         参数:
@@ -222,7 +220,9 @@ class FortuneLlmHandler:
                 )
             else:
                 # 没有缓存，生成新图片
-                logger.debug("[fortune_llm] No cached image, generating new one for %s", user_id)
+                logger.debug(
+                    "[fortune_llm] No cached image, generating new one for %s", user_id
+                )
                 await self._send_fortune_image(event, fortune)
 
             return {
