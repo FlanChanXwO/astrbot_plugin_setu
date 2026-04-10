@@ -125,9 +125,7 @@ class LlmToolRegistry:
             成功注销的工具名称列表
         """
         tools_to_remove = [
-            name
-            for name, path in self._registered_tools.items()
-            if path == module_path
+            name for name, path in self._registered_tools.items() if path == module_path
         ]
         return self.unregister_tools(tools_to_remove)
 
@@ -209,6 +207,19 @@ def get_setu_tool_definitions(handler) -> list[LlmToolDefinition]:
             ],
             description="Set auto-revoke.",
         ),
+        LlmToolDefinition(
+            name="set_setu_send_mode",
+            handler=handler._llm_set_send_mode_handler,
+            args=[
+                {
+                    "name": "mode",
+                    "type": "string",
+                    "enum": ["image", "forward", "auto", "clear"],
+                    "description": "Send mode override for current session.",
+                }
+            ],
+            description="Set session send mode.",
+        ),
     ]
 
 
@@ -218,6 +229,7 @@ SETU_TOOL_NAMES = [
     "set_setu_content_mode",
     "set_setu_r18_docx_mode",
     "set_setu_auto_revoke",
+    "set_setu_send_mode",
 ]
 
 

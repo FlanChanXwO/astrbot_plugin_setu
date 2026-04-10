@@ -8,17 +8,18 @@ from __future__ import annotations
 
 import asyncio
 import json
-import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from astrbot.api import logger
 
+from .session_config_base import SessionConfigBase
+
 if TYPE_CHECKING:
     from astrbot.core import AstrBotConfig
 
 
-class SessionConfigManager:
+class SessionConfigManager(SessionConfigBase):
     """会话级别配置管理器。
 
     管理每个会话（群聊/私聊）的独立配置，支持内容模式覆盖。
@@ -27,7 +28,7 @@ class SessionConfigManager:
     Attributes:
         _config: AstrBotConfig 配置对象
         _data_dir: 插件数据目录（用于迁移）
-        _lock: 异步锁，防止并发写入冲突
+        _lock: 异步锁，防止并发读写不一致
     """
 
     # 允许会话覆盖的配置项
@@ -46,9 +47,8 @@ class SessionConfigManager:
             config: AstrBotConfig 配置对象
             data_dir: 插件数据目录（用于迁移旧配置）
         """
-        self._config = config
+        super().__init__(config, config_key="session_configs")
         self._data_dir = data_dir
-        self._lock = asyncio.Lock()
         self._migrated = False
 
     async def initialize(self) -> None:
@@ -79,15 +79,14 @@ class SessionConfigManager:
                 return
 
             # 转换格式到新的 template_list 格式
-            new_configs = list(self._config.get("session_configs", []))
+            new_configs = self._get_configs()
 
             for session_key, session_data in sessions.items():
-                # 解析 session_key (格式: "group:12345" 或 "private:67890")
-                parts = session_key.split(":", 1)
-                if len(parts) != 2:
+                parsed = self._parse_session_key(session_key)
+                if not parsed:
                     continue
 
-                session_type, session_id = parts
+                session_type, session_id = parsed
                 is_group = session_type == "group"
 
                 # 构建新的配置项
@@ -110,24 +109,10 @@ class SessionConfigManager:
                 if "send_mode" in session_data:
                     new_item["send_mode"] = session_data["send_mode"]
 
-                # 检查是否已存在
-                existing_idx = None
-                for i, cfg in enumerate(new_configs):
-                    if (
-                        cfg.get("session_id") == session_id
-                        and cfg.get("session_type") == session_type
-                    ):
-                        existing_idx = i
-                        break
-
-                if existing_idx is not None:
-                    new_configs[existing_idx] = new_item
-                else:
-                    new_configs.append(new_item)
+                self.merge_session_item(new_configs, new_item)
 
             # 保存迁移后的配置
-            self._config["session_configs"] = new_configs
-            self._config.save_config()
+            self._save_configs(new_configs)
 
             # 删除旧配置文件
             await asyncio.to_thread(old_config_file.unlink)
@@ -140,16 +125,7 @@ class SessionConfigManager:
 
     def _get_session_config(self, session_id: str, is_group: bool) -> dict | None:
         """获取会话配置项。"""
-        session_type = "group" if is_group else "private"
-        configs = self._config.get("session_configs", [])
-
-        for cfg in configs:
-            if (
-                cfg.get("session_id") == session_id
-                and cfg.get("session_type") == session_type
-            ):
-                return cfg
-        return None
+        return self._find_session_config(session_id, is_group)
 
     def _get_session_key(self, session_id: str, is_group: bool) -> str:
         """生成会话键。"""
@@ -186,17 +162,10 @@ class SessionConfigManager:
 
         async with self._lock:
             session_type = "group" if is_group else "private"
-            configs = list(self._config.get("session_configs", []))
+            configs = self._get_configs()
 
             # 查找现有配置
-            existing_idx = None
-            for i, cfg in enumerate(configs):
-                if (
-                    cfg.get("session_id") == session_id
-                    and cfg.get("session_type") == session_type
-                ):
-                    existing_idx = i
-                    break
+            existing_idx = self._find_session_index(configs, session_id, is_group)
 
             # 根据配置项类型设置值
             config_value = value
@@ -217,8 +186,7 @@ class SessionConfigManager:
                 }
                 configs.append(new_item)
 
-            self._config["session_configs"] = configs
-            self._config.save_config()
+            self._save_configs(configs)
 
         session_key = self._get_session_key(session_id, is_group)
         logger.info(
@@ -240,21 +208,22 @@ class SessionConfigManager:
         返回:
             配置值，如果不存在则返回默认值
         """
-        cfg = self._get_session_config(session_id, is_group)
-        if not cfg:
-            return default
+        async with self._lock:
+            cfg = self._get_session_config(session_id, is_group)
+            if not cfg:
+                return default
 
-        value = cfg.get(key)
-        if value is None or value == "":
-            return default
+            value = cfg.get(key)
+            if value is None or value == "":
+                return default
 
-        # 转换布尔值类型
-        if key == "r18_docx_mode":
-            return value == "enabled"
-        if key == "auto_revoke_r18":
-            return value == "enabled"
+            # 转换布尔值类型
+            if key == "r18_docx_mode":
+                return value == "enabled"
+            if key == "auto_revoke_r18":
+                return value == "enabled"
 
-        return value
+            return value
 
     async def clear_config(self, session_id: str, is_group: bool, key: str) -> bool:
         """清除会话配置项。
@@ -268,31 +237,25 @@ class SessionConfigManager:
             清除成功返回 True，否则返回 False
         """
         async with self._lock:
-            session_type = "group" if is_group else "private"
-            configs = list(self._config.get("session_configs", []))
+            configs = self._get_configs()
 
-            for i, cfg in enumerate(configs):
-                if (
-                    cfg.get("session_id") == session_id
-                    and cfg.get("session_type") == session_type
-                ):
-                    if key in cfg:
-                        del cfg[key]
-                        # 如果配置项都为空，删除整个会话配置
-                        if not any(
-                            k in cfg for k in self.ALLOWED_KEYS if k != key
-                        ):
-                            configs.pop(i)
-                        self._config["session_configs"] = configs
-                        self._config.save_config()
-                        session_key = self._get_session_key(session_id, is_group)
-                        logger.info(
-                            "[session_config] Cleared %s for session %s",
-                            key,
-                            session_key,
-                        )
-                        return True
-            return False
+            idx = self._find_session_index(configs, session_id, is_group)
+            if idx is None:
+                return False
+
+            cfg = configs[idx]
+            if key not in cfg:
+                return False
+
+            del cfg[key]
+            # 如果配置项都为空，删除整个会话配置
+            if not any(k in cfg for k in self.ALLOWED_KEYS if k != key):
+                configs.pop(idx)
+
+            self._save_configs(configs)
+            session_key = self._get_session_key(session_id, is_group)
+            logger.info("[session_config] Cleared %s for session %s", key, session_key)
+            return True
 
     async def get_session_content_mode(
         self, session_id: str, is_group: bool

@@ -126,7 +126,7 @@ class FortuneCore:
                     # 为每个活跃用户预生成运势
                     for (user_id,) in active_users:
                         try:
-                            # 再次检查今天是否已有运势（避免并发��争）
+                            # 再次检查今天是否已有运势（避免并发竞争）
                             check_cursor = await db.execute(
                                 "SELECT 1 FROM fortune_data WHERE user_id = ? AND date_str = ?",
                                 (user_id, today_str),

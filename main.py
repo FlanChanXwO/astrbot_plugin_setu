@@ -106,6 +106,18 @@ class SetuPlugin(Star):
                 ],
                 "Set auto-revoke.",
             ),
+            (
+                "set_setu_send_mode",
+                self._llm_handlers._llm_set_send_mode_handler,
+                [
+                    {
+                        "name": "mode",
+                        "type": "string",
+                        "enum": ["image", "forward", "auto", "clear"],
+                    },
+                ],
+                "Set session send mode.",
+            ),
         ]
 
         for name, handler, args, desc in tools:
@@ -200,6 +212,7 @@ class SetuPlugin(Star):
             "set_setu_content_mode",
             "set_setu_r18_docx_mode",
             "set_setu_auto_revoke",
+            "set_setu_send_mode",
             "get_today_fortune",
             "refresh_my_fortune",
             "refresh_group_fortune",
