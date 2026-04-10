@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from astrbot.api import logger
 
@@ -17,6 +17,9 @@ from .llm_handlers import FortuneLlmHandler
 from .renderer import FortuneRenderer
 from .session_config import FortuneSessionConfig
 
+if TYPE_CHECKING:
+    from astrbot.core import AstrBotConfig
+
 
 class FortuneManager:
     """今日运势管理器。
@@ -24,10 +27,13 @@ class FortuneManager:
     封装今日运势的所有功能，便于在主插件中集成。
     """
 
-    def __init__(self, plugin, data_dir: Path, config: dict[str, Any]):
+    def __init__(
+        self, plugin, data_dir: Path, config: dict[str, Any], astrbot_config=None
+    ):
         self.plugin = plugin
         self.data_dir = data_dir
         self.config = config
+        self._astrbot_config = astrbot_config or plugin.config
 
         self._core: FortuneCore | None = None
         self._renderer: FortuneRenderer | None = None
@@ -44,7 +50,7 @@ class FortuneManager:
         await self._core.initialize()
 
         self._renderer = FortuneRenderer()
-        self._session_config = FortuneSessionConfig(self.data_dir)
+        self._session_config = FortuneSessionConfig(self._astrbot_config, self.data_dir)
         await self._session_config.initialize()
 
         # 初始化处理器

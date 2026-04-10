@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.2.0] - 2026-04-10
+
+### Added
+- **新增 Atri 图片供应商**: 接入 `https://api.atri.rodeo/setu` 作为可选图源
+  - 新增 `providers/atri.py`，支持 `r18`、`excludeAI`、`size`、`proxy`、`aspectRatio`、`uid`、`keyword` 参数
+  - 支持多 `tag` 查询与 URL 编码，提升中文/特殊字符标签兼容性
+
+### Fixed
+- **今日运势重复触发**: 修复 `/今日运势`、`/jrys` 同时命中 regex 与 command 导致重复响应的问题
+  - 为纯文本入口增加显式 `/` 前缀拦截，仅保留命令路由处理
+- **今日运势图文不一致**: 修复 LLM 返回星级与运势图片星级偶发不一致的问题
+  - `get_today_fortune` 改为仅查询当天记录，避免误读历史记录
+
+### Changed
+- **今日运势查询策略调整**: 严格按“今日”语义处理
+  - 当天有记录：直接返回并更新 `last_view_date`
+  - 当天无记录：即时生成并落库，再返回结果
+
 ## [1.1.0] - 2026-03-24
 
 ### Added

@@ -27,12 +27,14 @@ from .send_revoke import SendWithRevokeMixin
 class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
     """Setu 插件核心逻辑类。"""
 
-    def __init__(self, plugin, config: SetuConfig, data_dir: Path):
+    def __init__(self, plugin, config: SetuConfig, data_dir: Path, astrbot_config=None):
         self.plugin = plugin
         self._config = config
         self.data_dir = data_dir
         self._revoke_manager = RevokeManager(data_dir)
-        self._session_config = SessionConfigManager(data_dir)
+        self._session_config = SessionConfigManager(
+            astrbot_config or plugin.config, data_dir
+        )
         self._rate_limiter = SessionRequestLimiter()
         self._docx_service = DocxService()
         self._revoke_tasks: set[asyncio.Task] = set()
@@ -92,6 +94,7 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
     def _get_provider(self):
         cfg = self._config
         lolicon_config = None
+        atri_config = None
         if cfg.api_type in ("lolicon", "all"):
             lolicon_config = {
                 "image_size": cfg.image_size,
@@ -99,6 +102,14 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
                 "aspect_ratio": cfg.aspect_ratio,
                 "uid": cfg.uid,
                 "keyword": cfg.keyword,
+            }
+        if cfg.api_type in ("atri", "all"):
+            atri_config = {
+                "image_size": cfg.atri_image_size,
+                "proxy": cfg.atri_proxy,
+                "aspect_ratio": cfg.atri_aspect_ratio,
+                "uid": cfg.atri_uid,
+                "keyword": cfg.atri_keyword,
             }
         return get_provider(
             cfg.api_type,
@@ -109,6 +120,7 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
             else None,
             multi_api_strategy=cfg.multi_api_strategy,
             lolicon_config=lolicon_config,
+            atri_config=atri_config,
         )
 
     async def get_effective_content_mode(self, event: AstrMessageEvent) -> str:
@@ -155,6 +167,19 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
         if session_mode is not None:
             return session_mode
         return self._config.auto_revoke_r18
+
+    async def get_effective_send_mode(self, event: AstrMessageEvent) -> str:
+        """获取生效的发送模式（优先会话配置）。"""
+        session_id = event.get_session_id()
+        is_group = bool(event.get_group_id())
+        session_mode = await self._session_config.get_session_send_mode(
+            session_id, is_group
+        )
+        if session_mode:
+            logger.debug("[send_mode] Using session mode: %s", session_mode)
+            return session_mode
+        logger.debug("[send_mode] Using global mode: %s", self._config.send_mode)
+        return self._config.send_mode
 
     @staticmethod
     def determine_r18(content_mode: str) -> bool:
@@ -418,7 +443,8 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
             return
 
         cfg = self._config
-        send_mode = cfg.send_mode
+        # 使用会话级发送模式（优先会话配置）
+        send_mode = await self.get_effective_send_mode(event)
         actual_send_mode = self._resolve_send_mode(send_mode, len(images))
 
         effective_auto_revoke = await self.get_effective_auto_revoke_r18(event)

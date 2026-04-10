@@ -126,7 +126,7 @@ class FortuneCore:
                     # 为每个活跃用户预生成运势
                     for (user_id,) in active_users:
                         try:
-                            # 再次检查今天是否已有运势（避免并发竞争）
+                            # 再次检查今天是否已有运势（避免并发��争）
                             check_cursor = await db.execute(
                                 "SELECT 1 FROM fortune_data WHERE user_id = ? AND date_str = ?",
                                 (user_id, today_str),
@@ -420,7 +420,7 @@ class FortuneCore:
     ) -> dict[str, Any] | None:
         """获取今日运势。
 
-        如果 auto_refresh 为 false，会保留前一天的运势直到第二天。
+        仅查询今天的记录；如果今天尚未生成，则立即生成并保存。
         每次获取都会更新 last_view_date。
 
         参数:
@@ -440,66 +440,36 @@ class FortuneCore:
 
         async with self._db_lock:
             async with aiosqlite.connect(str(self.db_path)) as db:
-                # 查询现有记录（包括 last_view_date）
+                # 仅查询今天的记录
                 cursor = await db.execute(
-                    "SELECT title, stars, desc_text, extra, theme, image_cached, img_url, date_str, last_view_date, group_id "
-                    "FROM fortune_data WHERE user_id = ?",
-                    (user_id,),
+                    "SELECT title, stars, desc_text, extra, theme, image_cached, img_url "
+                    "FROM fortune_data WHERE user_id = ? AND date_str = ?",
+                    (user_id, today_str),
                 )
                 row = await cursor.fetchone()
 
                 if row:
-                    # 有记录，检查是否是今天
-                    record_date = row[7]
-                    is_today = record_date == today_str
+                    # 今天已有运势，更新最后查看日期并返回
+                    await db.execute(
+                        "UPDATE fortune_data SET last_view_date = ?, group_id = COALESCE(?, group_id) WHERE user_id = ? AND date_str = ?",
+                        (today_str, group_id, user_id, today_str),
+                    )
+                    await db.commit()
+                    return {
+                        "user_id": user_id,
+                        "username": username,
+                        "date_str": today_str,
+                        "title": row[0],
+                        "star_count": row[1],
+                        "max_stars": 7,
+                        "description": row[2],
+                        "extra_message": row[3],
+                        "theme_color": row[4],
+                        "image_cached": bool(row[5]),
+                        "img_url": row[6],
+                    }
 
-                    if is_today:
-                        # 今天已有运势，更新最后查看日期并返回
-                        await db.execute(
-                            "UPDATE fortune_data SET last_view_date = ?, group_id = COALESCE(?, group_id) WHERE user_id = ? AND date_str = ?",
-                            (today_str, group_id, user_id, today_str),
-                        )
-                        await db.commit()
-                        return {
-                            "user_id": user_id,
-                            "username": username,
-                            "date_str": today_str,
-                            "title": row[0],
-                            "star_count": row[1],
-                            "max_stars": 7,
-                            "description": row[2],
-                            "extra_message": row[3],
-                            "theme_color": row[4],
-                            "image_cached": bool(row[5]),
-                            "img_url": row[6],
-                        }
-                    else:
-                        # 不是今天的记录，检查是否自动刷新
-                        auto_refresh = self.config.get("auto_refresh", True)
-                        if not auto_refresh:
-                            # 不自动刷新，返回旧数据（但显示今天的日期）
-                            # 同时更新最后查看日期（基于旧记录）
-                            await db.execute(
-                                "UPDATE fortune_data SET last_view_date = ? WHERE user_id = ? AND date_str = ?",
-                                (today_str, user_id, record_date),
-                            )
-                            await db.commit()
-                            return {
-                                "user_id": user_id,
-                                "username": username,
-                                "date_str": today_str,
-                                "title": row[0],
-                                "star_count": row[1],
-                                "max_stars": 7,
-                                "description": row[2],
-                                "extra_message": row[3],
-                                "theme_color": row[4],
-                                "image_cached": bool(row[5]),
-                                "img_url": row[6],
-                            }
-                        # 需要重新生成
-
-                # 生成新运势
+                # 今天没有记录，生成新运势
                 fortune = self._generate_fortune(user_id, username, today_str)
 
                 # 保存到数据库（包含 group_id 和 last_view_date）
@@ -517,8 +487,8 @@ class FortuneCore:
                         fortune["theme_color"],
                         0,
                         None,
-                        today_str,  # 首次生成时设置 last_view_date
-                        group_id,  # 存储群组ID
+                        today_str,
+                        group_id,
                     ),
                 )
                 await db.commit()

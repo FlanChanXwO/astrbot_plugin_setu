@@ -231,55 +231,6 @@ class CommandHandler:
             logger.exception("setu command failed")
             yield event.plain_result("获取图片失败，网络或服务异常，请稍后再试。")
 
-    async def handle_setu_mode(self, event: AstrMessageEvent, mode: str = ""):
-        """处理 /setu_mode 命令。"""
-        if not self._core:
-            yield event.plain_result("插件尚未就绪，请稍后再试。")
-            return
-
-        if not self._check_admin(event):
-            yield event.plain_result("❌ 权限不足：此命令仅限管理员或超级管理员使用。")
-            return
-
-        mode = mode.strip().lower()
-        if not mode:
-            async for result in self._show_mode_status(event):
-                yield result
-            return
-
-        if mode not in ("sfw", "r18", "mix", "clear"):
-            yield event.plain_result(
-                "❌ 无效的模式。\n"
-                "可用模式：sfw（全年龄）、r18（成人）、mix（混合）、clear（清除设置）"
-            )
-            return
-
-        session_id = event.get_session_id()
-        is_group = bool(event.get_group_id())
-
-        if mode == "clear":
-            success = await self._core.session_config.clear_session_content_mode(
-                session_id, is_group
-            )
-            if success:
-                yield event.plain_result(
-                    "✅ 已清除当前会话的内容模式设置，将使用全局配置。"
-                )
-            else:
-                yield event.plain_result("ℹ️ 当前会话没有设置覆盖，已在使用全局配置。")
-        else:
-            success = await self._core.session_config.set_session_content_mode(
-                session_id, is_group, mode
-            )
-            if success:
-                session_type = "群聊" if is_group else "私聊"
-                yield event.plain_result(
-                    f"✅ 已将当前{session_type}的内容模式设置为：{mode}\n"
-                    f"此后发送的图片将使用此模式（优先于全局配置）。"
-                )
-            else:
-                yield event.plain_result("❌ 设置失败，请稍后再试。")
-
     async def _show_mode_status(self, event: AstrMessageEvent):
         """显示当前会话的模式状态。"""
         session_id = event.get_session_id()
@@ -303,6 +254,12 @@ class CommandHandler:
         delay = self._core.config.auto_revoke_delay
         effective_revoke = await self._core.get_effective_auto_revoke_r18(event)
 
+        session_send = await self._core.session_config.get_session_send_mode(
+            session_id, is_group
+        )
+        global_send = self._core.config.send_mode
+        effective_send = await self._core.get_effective_send_mode(event)
+
         def fmt(val, is_bool=True):
             if val is None:
                 return "未设置"
@@ -322,9 +279,226 @@ class CommandHandler:
             f"   会话覆盖：{fmt(session_revoke)}\n"
             f"   全局配置：{'启用' if global_revoke else '禁用'}（延迟 {delay} 秒）\n"
             f"   生效设置：{'启用' if effective_revoke else '禁用'}\n\n"
+            f"4️⃣ 发送模式：\n"
+            f"   会话覆盖：{fmt(session_send, False) if session_send else '未设置'}\n"
+            f"   全局配置：{global_send}\n"
+            f"   生效模式：{effective_send}\n\n"
             f"可用命令：\n"
-            f"   /setu_mode sfw|r18|mix|clear - 设置内容分级\n"
-            f"   LLM 工具：set_setu_r18_docx_mode - 设置 R18 Docx 模式\n"
-            f"   LLM 工具：set_setu_auto_revoke - 设置自动撤回"
+            f"   /setu_config mode <sfw|r18|mix|clear> - 设置内容分级\n"
+            f"   /setu_config docx <on|off|clear> - 设置 R18 Docx 模式\n"
+            f"   /setu_config revoke <on|off|clear> - 设置自动撤回\n"
+            f"   /setu_config send <image|forward|auto|clear> - 设置发送模式\n"
+            f"   /setu_config show - 显示当前配置"
         )
         yield event.plain_result(msg)
+
+    async def handle_setu_config(self, event: AstrMessageEvent, args: str = ""):
+        """处理 /setu_config 命令（统一配置管理）。"""
+        if not self._core:
+            yield event.plain_result("插件尚未就绪，请稍后再试。")
+            return
+
+        if not self._check_admin(event):
+            yield event.plain_result("❌ 权限不足：此命令仅限管理员或超级管理员使用。")
+            return
+
+        args = args.strip()
+        if not args or args.lower() == "show":
+            async for result in self._show_mode_status(event):
+                yield result
+            return
+
+        # 解析命令（只将命令部分转为小写）
+        parts = args.split(maxsplit=1)
+        cmd = parts[0].lower()
+        value = parts[1].lower() if len(parts) > 1 else ""
+
+        session_id = event.get_session_id()
+        is_group = bool(event.get_group_id())
+        session_type = "群聊" if is_group else "私聊"
+
+        if cmd == "mode":
+            # 内容分级设置
+            async for result in self._handle_config_mode(
+                event, session_id, is_group, session_type, value
+            ):
+                yield result
+
+        elif cmd == "docx":
+            # R18 Docx 打包模式设置
+            async for result in self._handle_config_docx(
+                event, session_id, is_group, session_type, value
+            ):
+                yield result
+
+        elif cmd == "revoke":
+            # 自动撤回设置
+            async for result in self._handle_config_revoke(
+                event, session_id, is_group, session_type, value
+            ):
+                yield result
+
+        elif cmd == "send":
+            # 发送模式设置
+            async for result in self._handle_config_send(
+                event, session_id, is_group, session_type, value
+            ):
+                yield result
+
+        else:
+            yield event.plain_result(
+                "❌ 未知的配置项。\n"
+                "可用配置项：mode（内容分级）、docx（打包模式）、revoke（自动撤回）、send（发送模式）\n"
+                "使用 /setu_config show 查看当前配置。"
+            )
+
+    async def _handle_config_mode(
+        self, event, session_id, is_group, session_type, value
+    ):
+        """处理内容分级配置。"""
+        if value not in ("sfw", "r18", "mix", "clear"):
+            yield event.plain_result(
+                "❌ 无效的模式。\n"
+                "可用模式：sfw（全年龄）、r18（成人）、mix（混合）、clear（清除设置）"
+            )
+            return
+
+        if value == "clear":
+            success = await self._core.session_config.clear_session_content_mode(
+                session_id, is_group
+            )
+            if success:
+                global_mode = self._core.config.content_mode
+                yield event.plain_result(
+                    f"✅ 已清除当前{session_type}的内容分级设置，将使用全局配置。\n"
+                    f"当前全局配置为：{global_mode}"
+                )
+            else:
+                yield event.plain_result("ℹ️ 当前会话没有设置覆盖，已在使用全局配置。")
+        else:
+            success = await self._core.session_config.set_session_content_mode(
+                session_id, is_group, value
+            )
+            if success:
+                yield event.plain_result(
+                    f"✅ 已将当前{session_type}的内容分级设置为：{value}\n"
+                    f"此后发送的图片将使用此模式（优先于全局配置）。"
+                )
+            else:
+                yield event.plain_result("❌ 设置失败，请稍后再试。")
+
+    async def _handle_config_docx(
+        self, event, session_id, is_group, session_type, value
+    ):
+        """处理 R18 Docx 打包模式配置。"""
+        if value not in ("on", "off", "clear", ""):
+            yield event.plain_result(
+                "❌ 无效的设置。\n"
+                "可用值：on（启用）、off（禁用）、clear（清除设置）"
+            )
+            return
+
+        global_docx = self._core.config.r18_docx_mode
+
+        if value == "clear" or value == "":
+            success = await self._core.session_config.clear_session_r18_docx_mode(
+                session_id, is_group
+            )
+            if success:
+                yield event.plain_result(
+                    f"✅ 已清除当前{session_type}的 R18 Docx 打包模式设置，将使用全局配置。\n"
+                    f"当前全局配置为：{'启用' if global_docx else '禁用'}"
+                )
+            else:
+                yield event.plain_result("ℹ️ 当前会话没有设置覆盖，已在使用全局配置。")
+        else:
+            enabled = value == "on"
+            success = await self._core.session_config.set_session_r18_docx_mode(
+                session_id, is_group, enabled
+            )
+            if success:
+                yield event.plain_result(
+                    f"✅ 已将当前{session_type}的 R18 Docx 打包模式设置为：{'启用' if enabled else '禁用'}\n"
+                    f"此后发送的 R18 图片将{'打包为 DOCX 文件' if enabled else '直接发送'}（优先于全局配置）。"
+                )
+            else:
+                yield event.plain_result("❌ 设置失败，请稍后再试。")
+
+    async def _handle_config_revoke(
+        self, event, session_id, is_group, session_type, value
+    ):
+        """处理自动撤回配置。"""
+        if value not in ("on", "off", "clear", ""):
+            yield event.plain_result(
+                "❌ 无效的设置。\n"
+                "可用值：on（启用）、off（禁用）、clear（清除设置）"
+            )
+            return
+
+        global_revoke = self._core.config.auto_revoke_r18
+        delay = self._core.config.auto_revoke_delay
+
+        if value == "clear" or value == "":
+            success = await self._core.session_config.clear_session_auto_revoke_r18(
+                session_id, is_group
+            )
+            if success:
+                yield event.plain_result(
+                    f"✅ 已清除当前{session_type}的自动撤回设置，将使用全局配置。\n"
+                    f"当前全局配置为：{'启用' if global_revoke else '禁用'}（延迟 {delay} 秒）"
+                )
+            else:
+                yield event.plain_result("ℹ️ 当前会话没有设置覆盖，已在使用全局配置。")
+        else:
+            enabled = value == "on"
+            success = await self._core.session_config.set_session_auto_revoke_r18(
+                session_id, is_group, enabled
+            )
+            if success:
+                yield event.plain_result(
+                    f"✅ 已将当前{session_type}的自动撤回设置为：{'启用' if enabled else '禁用'}\n"
+                    f"此后发送的 R18 内容将{'在 {delay} 秒后自动撤回' if enabled else '不会自动撤回'}（优先于全局配置）。"
+                )
+            else:
+                yield event.plain_result("❌ 设置失败，请稍后再试。")
+
+    async def _handle_config_send(
+        self, event, session_id, is_group, session_type, value
+    ):
+        """处理发送模式配置。"""
+        if value not in ("image", "forward", "auto", "clear", ""):
+            yield event.plain_result(
+                "❌ 无效的发送模式。\n"
+                "可用模式：image（直接发送）、forward（合并转发）、auto（自动选择）、clear（清除设置）"
+            )
+            return
+
+        global_send = self._core.config.send_mode
+
+        if value == "clear" or value == "":
+            success = await self._core.session_config.clear_session_send_mode(
+                session_id, is_group
+            )
+            if success:
+                yield event.plain_result(
+                    f"✅ 已清除当前{session_type}的发送模式设置，将使用全局配置。\n"
+                    f"当前全局配置为：{global_send}"
+                )
+            else:
+                yield event.plain_result("ℹ️ 当前会话没有设置覆盖，已在使用全局配置。")
+        else:
+            success = await self._core.session_config.set_session_send_mode(
+                session_id, is_group, value
+            )
+            if success:
+                mode_desc = {
+                    "image": "直接发送图片",
+                    "forward": "合并转发消息",
+                    "auto": "自动选择（单张直接发送，多张合并转发）",
+                }
+                yield event.plain_result(
+                    f"✅ 已将当前{session_type}的发送模式设置为：{value}\n"
+                    f"说明：{mode_desc.get(value, '')}（优先于全局配置）。"
+                )
+            else:
+                yield event.plain_result("❌ 设置失败，请稍后再试。")

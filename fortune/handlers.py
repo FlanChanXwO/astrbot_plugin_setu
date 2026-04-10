@@ -315,20 +315,20 @@ class FortuneCommandHandler:
         session_id = event.get_session_id()
         is_group = bool(event.get_group_id())
 
-        args = args.strip().lower()
+        args = args.strip()
         if not args:
             # 显示当前配置
             async for result in self._show_fortune_config(event):
                 yield result
             return
 
-        # 解析命令
+        # 解析命令（只将命令部分转为小写）
         parts = args.split(maxsplit=1)
-        cmd = parts[0]
+        cmd = parts[0].lower()
         value = parts[1] if len(parts) > 1 else ""
 
         if cmd == "tags":
-            # 设置标签
+            # 设置标签（标签保持原样，不转小写）
             if value:
                 success = await self._session_config.set_session_tags(
                     session_id, is_group, value
@@ -349,15 +349,16 @@ class FortuneCommandHandler:
 
         elif cmd == "mode":
             # 设置内容模式
-            if value in ("sfw", "r18", "mix"):
+            value_lower = value.lower()
+            if value_lower in ("sfw", "r18", "mix"):
                 success = await self._session_config.set_session_content_mode(
-                    session_id, is_group, value
+                    session_id, is_group, value_lower
                 )
                 if success:
-                    yield event.plain_result(f"✅ 已设置今日运势内容模式为：{value}")
+                    yield event.plain_result(f"✅ 已设置今日运势内容模式为：{value_lower}")
                 else:
                     yield event.plain_result("❌ 设置失败。")
-            elif value == "clear":
+            elif value_lower == "clear":
                 success = await self._session_config.clear_session_content_mode(
                     session_id, is_group
                 )

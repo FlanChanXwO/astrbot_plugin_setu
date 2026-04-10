@@ -1,6 +1,7 @@
 """会话级别配置管理器。
 
 提供会话级别的配置覆盖功能，允许管理员在特定会话中设置不同的内容模式。
+配置存储在 AstrBotConfig 中，可在 WebUI 中管理。
 """
 
 from __future__ import annotations
@@ -9,109 +10,149 @@ import asyncio
 import json
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from astrbot.api import logger
+
+if TYPE_CHECKING:
+    from astrbot.core import AstrBotConfig
 
 
 class SessionConfigManager:
     """会话级别配置管理器。
 
     管理每个会话（群聊/私聊）的独立配置，支持内容模式覆盖。
-    配置持久化存储在 plugin_data_dir/session_config.json 中。
+    配置存储在 AstrBotConfig 的 session_configs 字段中，可在 WebUI 中管理。
 
     Attributes:
-        config_file: 配置文件路径
-        _data: 配置数据字典
+        _config: AstrBotConfig 配置对象
+        _data_dir: 插件数据目录（用于迁移）
         _lock: 异步锁，防止并发写入冲突
     """
 
     # 允许会话覆盖的配置项
-    ALLOWED_KEYS = {"content_mode", "r18_docx_mode", "auto_revoke_r18"}
+    ALLOWED_KEYS = {"content_mode", "r18_docx_mode", "auto_revoke_r18", "send_mode"}
 
     # 有效的内容模式值
     VALID_CONTENT_MODES = {"sfw", "r18", "mix"}
 
-    def __init__(self, data_dir: Path):
+    # 有效的发送模式值
+    VALID_SEND_MODES = {"image", "forward", "auto"}
+
+    def __init__(self, config: AstrBotConfig, data_dir: Path | None = None):
         """初始化会话配置管理器。
 
         参数:
-            data_dir: 插件数据目录
+            config: AstrBotConfig 配置对象
+            data_dir: 插件数据目录（用于迁移旧配置）
         """
-        self.data_dir = data_dir / "setu"
-        self.config_file = self.data_dir / "setu_session_config.json"
-        self._data: dict[str, Any] = {"sessions": {}, "meta": {}}
+        self._config = config
+        self._data_dir = data_dir
         self._lock = asyncio.Lock()
+        self._migrated = False
 
     async def initialize(self) -> None:
-        """初始化配置，从文件加载现有配置。"""
-        self.data_dir.mkdir(parents=True, exist_ok=True)
-        # 检查并迁移旧配置（从 data_dir/session_config.json 到 data_dir/setu/session_config.json）
-        await self._migrate_old_config()
-        async with self._lock:
-            await self._load()
-            self._data.setdefault("sessions", {})
-            self._data.setdefault("meta", {"created_at": int(time.time())})
+        """初始化配置，迁移旧配置文件到新格式。"""
+        if self._data_dir and not self._migrated:
+            await self._migrate_old_config()
+            self._migrated = True
         logger.info("[session_config] SessionConfigManager initialized")
 
     async def _migrate_old_config(self) -> None:
-        """迁移旧位置的配置文件到新位置。"""
-        old_config_file = self.data_dir.parent / "session_config.json"
-        if old_config_file.exists() and not self.config_file.exists():
-            try:
-                content = await asyncio.to_thread(
-                    old_config_file.read_text, encoding="utf-8"
-                )
-                self._data = json.loads(content)
-                await self._save()
-                await asyncio.to_thread(old_config_file.unlink)
-                logger.info("[session_config] Migrated old config to new location")
-            except (OSError, json.JSONDecodeError) as exc:
-                logger.warning("[session_config] Failed to migrate old config: %s", exc)
+        """迁移旧位置的配置文件到 AstrBotConfig。"""
+        old_config_file = self._data_dir / "setu" / "setu_session_config.json"
+        if not old_config_file.exists():
+            # 检查旧的位置
+            old_config_file = self._data_dir / "session_config.json"
 
-    async def _load(self) -> None:
-        """从文件加载配置（调用方应确保锁保护）。"""
-        if not self.config_file.exists():
-            self._data = {"sessions": {}, "meta": {"created_at": int(time.time())}}
-            await self._save()
+        if not old_config_file.exists():
             return
 
         try:
             content = await asyncio.to_thread(
-                self.config_file.read_text, encoding="utf-8"
+                old_config_file.read_text, encoding="utf-8"
             )
-            loaded = json.loads(content)
-            self._data = {
-                "sessions": loaded.get("sessions", {}),
-                "meta": loaded.get("meta", {}),
-            }
-        except (OSError, json.JSONDecodeError):
-            logger.exception(
-                "[session_config] Failed to load session config, creating new"
-            )
-            self._data = {"sessions": {}, "meta": {"created_at": int(time.time())}}
-            await self._save()
+            old_data = json.loads(content)
+            sessions = old_data.get("sessions", {})
 
-    async def _save(self) -> None:
-        """保存配置到文件（应在锁保护下调用）。"""
-        try:
-            tmp_path = self.config_file.with_suffix(".tmp")
-            content = json.dumps(self._data, ensure_ascii=False, indent=2)
-            await asyncio.to_thread(tmp_path.write_text, content, encoding="utf-8")
-            await asyncio.to_thread(tmp_path.replace, self.config_file)
-        except OSError:
-            logger.exception("[session_config] Failed to save session config")
+            if not sessions:
+                return
+
+            # 转换格式到新的 template_list 格式
+            new_configs = list(self._config.get("session_configs", []))
+
+            for session_key, session_data in sessions.items():
+                # 解析 session_key (格式: "group:12345" 或 "private:67890")
+                parts = session_key.split(":", 1)
+                if len(parts) != 2:
+                    continue
+
+                session_type, session_id = parts
+                is_group = session_type == "group"
+
+                # 构建新的配置项
+                new_item = {
+                    "session_id": session_id,
+                    "session_type": "group" if is_group else "private",
+                }
+
+                # 迁移各配置项
+                if "content_mode" in session_data:
+                    new_item["content_mode"] = session_data["content_mode"]
+                if "r18_docx_mode" in session_data:
+                    new_item["r18_docx_mode"] = (
+                        "enabled" if session_data["r18_docx_mode"] else "disabled"
+                    )
+                if "auto_revoke_r18" in session_data:
+                    new_item["auto_revoke_r18"] = (
+                        "enabled" if session_data["auto_revoke_r18"] else "disabled"
+                    )
+                if "send_mode" in session_data:
+                    new_item["send_mode"] = session_data["send_mode"]
+
+                # 检查是否已存在
+                existing_idx = None
+                for i, cfg in enumerate(new_configs):
+                    if (
+                        cfg.get("session_id") == session_id
+                        and cfg.get("session_type") == session_type
+                    ):
+                        existing_idx = i
+                        break
+
+                if existing_idx is not None:
+                    new_configs[existing_idx] = new_item
+                else:
+                    new_configs.append(new_item)
+
+            # 保存迁移后的配置
+            self._config["session_configs"] = new_configs
+            self._config.save_config()
+
+            # 删除旧配置文件
+            await asyncio.to_thread(old_config_file.unlink)
+            logger.info(
+                "[session_config] Migrated old config to AstrBotConfig, %d sessions",
+                len(new_configs),
+            )
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning("[session_config] Failed to migrate old config: %s", exc)
+
+    def _get_session_config(self, session_id: str, is_group: bool) -> dict | None:
+        """获取会话配置项。"""
+        session_type = "group" if is_group else "private"
+        configs = self._config.get("session_configs", [])
+
+        for cfg in configs:
+            if (
+                cfg.get("session_id") == session_id
+                and cfg.get("session_type") == session_type
+            ):
+                return cfg
+        return None
 
     def _get_session_key(self, session_id: str, is_group: bool) -> str:
-        """生成会话键。
-
-        参数:
-            session_id: 会话ID
-            is_group: 是否为群聊
-
-        返回:
-            格式化的会话键，如 "group:12345" 或 "private:67890"
-        """
+        """生成会话键。"""
         prefix = "group" if is_group else "private"
         return f"{prefix}:{session_id}"
 
@@ -138,17 +179,48 @@ class SessionConfigManager:
             logger.warning("[session_config] Invalid content_mode: %s", value)
             return False
 
-        session_key = self._get_session_key(session_id, is_group)
+        # 验证 send_mode 值
+        if key == "send_mode" and value not in self.VALID_SEND_MODES:
+            logger.warning("[session_config] Invalid send_mode: %s", value)
+            return False
 
-        # 使用锁保护并发写入
         async with self._lock:
-            if session_key not in self._data["sessions"]:
-                self._data["sessions"][session_key] = {}
+            session_type = "group" if is_group else "private"
+            configs = list(self._config.get("session_configs", []))
 
-            self._data["sessions"][session_key][key] = value
-            self._data["sessions"][session_key]["updated_at"] = int(time.time())
-            await self._save()
+            # 查找现有配置
+            existing_idx = None
+            for i, cfg in enumerate(configs):
+                if (
+                    cfg.get("session_id") == session_id
+                    and cfg.get("session_type") == session_type
+                ):
+                    existing_idx = i
+                    break
 
+            # 根据配置项类型设置值
+            config_value = value
+            if key == "r18_docx_mode":
+                config_value = "enabled" if value else "disabled"
+            elif key == "auto_revoke_r18":
+                config_value = "enabled" if value else "disabled"
+
+            if existing_idx is not None:
+                # 更新现有配置
+                configs[existing_idx][key] = config_value
+            else:
+                # 创建新配置
+                new_item = {
+                    "session_id": session_id,
+                    "session_type": session_type,
+                    key: config_value,
+                }
+                configs.append(new_item)
+
+            self._config["session_configs"] = configs
+            self._config.save_config()
+
+        session_key = self._get_session_key(session_id, is_group)
         logger.info(
             "[session_config] Set %s=%s for session %s", key, value, session_key
         )
@@ -168,11 +240,21 @@ class SessionConfigManager:
         返回:
             配置值，如果不存在则返回默认值
         """
-        session_key = self._get_session_key(session_id, is_group)
-        # 使用锁保护读操作，防止并发可见性问题
-        async with self._lock:
-            session_data = self._data["sessions"].get(session_key, {})
-            return session_data.get(key, default)
+        cfg = self._get_session_config(session_id, is_group)
+        if not cfg:
+            return default
+
+        value = cfg.get(key)
+        if value is None or value == "":
+            return default
+
+        # 转换布尔值类型
+        if key == "r18_docx_mode":
+            return value == "enabled"
+        if key == "auto_revoke_r18":
+            return value == "enabled"
+
+        return value
 
     async def clear_config(self, session_id: str, is_group: bool, key: str) -> bool:
         """清除会话配置项。
@@ -185,19 +267,32 @@ class SessionConfigManager:
         返回:
             清除成功返回 True，否则返回 False
         """
-        session_key = self._get_session_key(session_id, is_group)
-
-        # 使用锁保护并发写入
         async with self._lock:
-            if session_key in self._data["sessions"]:
-                if key in self._data["sessions"][session_key]:
-                    del self._data["sessions"][session_key][key]
-                    await self._save()
-                    logger.info(
-                        "[session_config] Cleared %s for session %s", key, session_key
-                    )
-                    return True
-        return False
+            session_type = "group" if is_group else "private"
+            configs = list(self._config.get("session_configs", []))
+
+            for i, cfg in enumerate(configs):
+                if (
+                    cfg.get("session_id") == session_id
+                    and cfg.get("session_type") == session_type
+                ):
+                    if key in cfg:
+                        del cfg[key]
+                        # 如果配置项都为空，删除整个会话配置
+                        if not any(
+                            k in cfg for k in self.ALLOWED_KEYS if k != key
+                        ):
+                            configs.pop(i)
+                        self._config["session_configs"] = configs
+                        self._config.save_config()
+                        session_key = self._get_session_key(session_id, is_group)
+                        logger.info(
+                            "[session_config] Cleared %s for session %s",
+                            key,
+                            session_key,
+                        )
+                        return True
+            return False
 
     async def get_session_content_mode(
         self, session_id: str, is_group: bool
@@ -330,8 +425,52 @@ class SessionConfigManager:
         """
         return await self.clear_config(session_id, is_group, "auto_revoke_r18")
 
+    async def get_session_send_mode(
+        self, session_id: str, is_group: bool
+    ) -> str | None:
+        """获取会话的发送模式设置。
+
+        参数:
+            session_id: 会话ID
+            is_group: 是否为群聊
+
+        返回:
+            发送模式 (image/forward/auto)，如果未设置则返回 None
+        """
+        return await self.get_config(session_id, is_group, "send_mode")
+
+    async def set_session_send_mode(
+        self, session_id: str, is_group: bool, mode: str
+    ) -> bool:
+        """设置会话的发送模式。
+
+        参数:
+            session_id: 会话ID
+            is_group: 是否为群聊
+            mode: 发送模式 (image/forward/auto)
+
+        返回:
+            设置成功返回 True，否则返回 False
+        """
+        return await self.set_config(session_id, is_group, "send_mode", mode)
+
+    async def clear_session_send_mode(self, session_id: str, is_group: bool) -> bool:
+        """清除会话的发送模式设置。
+
+        参数:
+            session_id: 会话ID
+            is_group: 是否为群聊
+
+        返回:
+            清除成功返回 True，否则返回 False
+        """
+        return await self.clear_config(session_id, is_group, "send_mode")
+
     async def cleanup_expired_sessions(self, max_age_days: int = 30) -> int:
         """清理超过指定天数的过期会话配置。
+
+        注意：由于新配置不包含时间戳，此方法在新版本中不再有效。
+        保留此方法以保持向后兼容。
 
         参数:
             max_age_days: 最大保留天数
@@ -339,25 +478,8 @@ class SessionConfigManager:
         返回:
             清理的会话数量
         """
-        cutoff = int(time.time()) - (max_age_days * 24 * 3600)
-        to_remove = []
-
-        # 使用锁保护并发读写
-        async with self._lock:
-            for session_key, session_data in self._data["sessions"].items():
-                updated_at = session_data.get("updated_at", 0)
-                if updated_at < cutoff:
-                    to_remove.append(session_key)
-
-            for session_key in to_remove:
-                del self._data["sessions"][session_key]
-
-            if to_remove:
-                await self._save()
-
-        if to_remove:
-            logger.info(
-                "[session_config] Cleaned up %d expired sessions", len(to_remove)
-            )
-
-        return len(to_remove)
+        # 新配置不包含时间戳，返回 0
+        logger.info(
+            "[session_config] cleanup_expired_sessions is no-op in new config format"
+        )
+        return 0
