@@ -19,8 +19,23 @@ class SafetyConfigMixin:
     _read: Any
 
     @property
+    def access_control_mode(self) -> str:
+        """访问控制模式。
+
+        返回:
+            none=不启用黑白名单，blacklist=仅黑名单模式，whitelist=仅白名单模式
+        """
+        mode = self._read(
+            ("safety", "access_control_mode"), "access_control_mode", default="blacklist"
+        )
+        valid_modes = ("none", "blacklist", "whitelist")
+        if mode not in valid_modes:
+            return "blacklist"
+        return mode
+
+    @property
     def blocked_groups(self) -> list[str]:
-        """被屏蔽的群聊列表。
+        """被屏蔽的群聊列表（黑名单）。
 
         返回:
             群聊 ID 列表，这些群聊将禁止使用插件功能
@@ -30,8 +45,27 @@ class SafetyConfigMixin:
             return [str(g).strip() for g in groups if str(g).strip()]
         return []
 
+    @property
+    def whitelist_groups(self) -> list[str]:
+        """白名单群聊列表。
+
+        返回:
+            群聊 ID 列表，仅在白名单模式时生效
+        """
+        groups = self._read(
+            ("safety", "whitelist_groups"), "whitelist_groups", default=[]
+        )
+        if isinstance(groups, list):
+            return [str(g).strip() for g in groups if str(g).strip()]
+        return []
+
     def is_group_blocked(self, group_id: str | None) -> bool:
         """检查群聊是否被屏蔽。
+
+        根据访问控制模式决定检查逻辑：
+        - none: 所有群组都可用
+        - blacklist: 在黑名单中的群组被屏蔽
+        - whitelist: 不在白名单中的群组被屏蔽
 
         参数:
             group_id: 群聊 ID
@@ -41,7 +75,24 @@ class SafetyConfigMixin:
         """
         if not group_id:
             return False
-        return str(group_id) in self.blocked_groups
+
+        mode = self.access_control_mode
+        gid = str(group_id)
+
+        if mode == "none":
+            # 不启用黑白名单，所有群组都可用
+            return False
+
+        if mode == "whitelist":
+            # 白名单模式：不在白名单中的群组被屏蔽
+            whitelist = self.whitelist_groups
+            if not whitelist:
+                # 白名单为空时，所有群组都可用（兼容旧配置）
+                return False
+            return gid not in whitelist
+
+        # 黑名单模式（默认）：在黑名单中的群组被屏蔽
+        return gid in self.blocked_groups
 
     @property
     def cache_enabled(self) -> bool:

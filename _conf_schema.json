@@ -486,10 +486,28 @@
     "type": "object",
     "hint": "群组限制和标签规范化。",
     "items": {
+      "access_control_mode": {
+        "type": "string",
+        "description": "访问控制模式",
+        "hint": "none=不启用黑白名单，blacklist=仅黑名单模式，whitelist=仅白名单模式（仅在白名单中的群组可用）",
+        "default": "blacklist",
+        "options": [
+          "none",
+          "blacklist",
+          "whitelist"
+        ]
+      },
       "blocked_groups": {
         "type": "list",
-        "description": "屏蔽群组列表",
-        "hint": "在这些群组中禁用插件。每行一个 ID。",
+        "description": "黑名单群组列表",
+        "hint": "在黑名单中的群组将禁用插件。每行一个 ID。仅在黑名单模式或访问控制模式为 blacklist 时生效。",
+        "default": [],
+        "obvious_hint": true
+      },
+      "whitelist_groups": {
+        "type": "list",
+        "description": "白名单群组列表",
+        "hint": "仅在白名单中的群组可使用插件。每行一个 ID。仅在访问控制模式为 whitelist 时生效。",
         "default": [],
         "obvious_hint": true
       },

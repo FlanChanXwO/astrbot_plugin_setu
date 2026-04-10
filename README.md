@@ -98,6 +98,9 @@
 | `r18_docx_mode` | 布尔值 | R18 是否使用 Docx 封装 | `true` |
 | `enable_range_download` | 布尔值 | 启用分段下载（高带宽优化） | `false` |
 | `download_concurrent_limit` | 整数 | 并发下载限制 | `10` |
+| `access_control_mode` | 字符串 | 访问控制模式（none/blacklist/whitelist） | `blacklist` |
+| `blocked_groups` | 列表 | 黑名单群组 ID 列表 | `[]` |
+| `whitelist_groups` | 列表 | 白名单群组 ID 列表 | `[]` |
 
 ### 配置示例
 
@@ -202,7 +205,29 @@
   - `download_concurrent_limit`: 并发下载限制，高带宽服务器可适当提高
   - `download_timeout_seconds`: 下载超时时间（秒）
 
-更多详细配置和玩法请参考上方“配置项”表格及实际管理面板说明。
+### 黑白名单配置
+
+通过 `access_control_mode` 配置项可灵活控制群组的插件访问权限：
+
+| 模式 | 说明 | 适用场景 |
+|------|------|----------|
+| `none` | 不启用黑白名单，所有群组都可用 | 公开使用，无需限制 |
+| `blacklist` (默认) | 仅在黑名单中的群组被禁用 | 大部分群可用，仅屏蔽少数群 |
+| `whitelist` | 仅在白名单中的群组可用 | 仅特定群可用，其他群全部屏蔽 |
+
+**配置示例：**
+
+```json
+{
+  “access_control_mode”: “whitelist”,
+  “whitelist_groups”: [“123456789”, “987654321”]
+}
+```
+
+- 白名单为空时（`[]`），所有群组都可用（避免误配置导致服务不可用）
+- 黑名单模式兼容原有配置，已设置的 `blocked_groups` 仍然有效
+
+更多详细配置和玩法请参考上方”配置项”表格及实际管理面板说明。
 
 ---
 
