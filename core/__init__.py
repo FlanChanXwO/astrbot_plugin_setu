@@ -163,7 +163,9 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
         return get_provider(
             effective_api_type,
             custom_config=cfg.custom_api if effective_api_type == "custom" else None,
-            parser_config=cfg.api_response_parser if effective_api_type == "custom" else None,
+            parser_config=cfg.api_response_parser
+            if effective_api_type == "custom"
+            else None,
             custom_api_configs=cfg.custom_api_configs
             if effective_api_type in ("custom", "all")
             else None,

@@ -141,7 +141,9 @@ class FortuneCommandHandler:
             return
 
         # 检查运势独立的群组黑名单
-        if group_id and self._core.access_control.is_fortune_group_blocked(str(group_id)):
+        if group_id and self._core.access_control.is_fortune_group_blocked(
+            str(group_id)
+        ):
             logger.debug("[fortune] Access denied: fortune group blocked")
             return
 

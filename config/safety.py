@@ -25,7 +25,7 @@ class SafetyConfigMixin:
         if user_conflicts:
             logger.warning(
                 "[access_control] 用户同时存在于黑白名单中: %s，黑名单优先",
-                user_conflicts
+                user_conflicts,
             )
 
         # 检测群组冲突
@@ -33,7 +33,7 @@ class SafetyConfigMixin:
         if group_conflicts:
             logger.warning(
                 "[access_control] 群组同时存在于黑白名单中: %s，黑名单优先",
-                group_conflicts
+                group_conflicts,
             )
 
     @property
@@ -142,9 +142,7 @@ class SafetyConfigMixin:
         返回:
             用户 ID 列表，仅在白名单模式时生效
         """
-        users = self._read(
-            ("safety", "whitelist_users"), "whitelist_users", default=[]
-        )
+        users = self._read(("safety", "whitelist_users"), "whitelist_users", default=[])
         if isinstance(users, list):
             return [str(u).strip() for u in users if str(u).strip()]
         return []
@@ -202,6 +200,7 @@ class SafetyConfigMixin:
         """
         # 从 core 获取 access_control 并使用全局检查
         from ..services import AccessControlManager
+
         return AccessControlManager.check_global_access(
             self, user_id, group_id, self.access_control_mode
         )
