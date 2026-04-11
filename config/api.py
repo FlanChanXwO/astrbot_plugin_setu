@@ -23,7 +23,11 @@ class ApiConfigMixin:
             返回 API 类型：lolicon、atri、sexnyan、custom 或 all
         """
         api_type = self._read(
-            ("general", "api_type"), "api_type", "apiType", default="lolicon"
+            ("setu_general", "api_type"),
+            ("general", "api_type"),
+            "api_type",
+            "apiType",
+            default="lolicon",
         )
         return (
             api_type
@@ -39,6 +43,7 @@ class ApiConfigMixin:
             返回策略类型：round_robin（轮询）、random（随机）、failover（故障转移）
         """
         strategy = self._read(
+            ("setu_general", "multi_api_strategy"),
             ("general", "multi_api_strategy"),
             "multi_api_strategy",
             default="round_robin",
@@ -57,7 +62,11 @@ class ApiConfigMixin:
             返回内容模式：sfw（全年龄）、r18（成人）、mix（混合）
         """
         mode = self._read(
-            ("general", "content_mode"), "content_mode", "contentMode", default="sfw"
+            ("setu_general", "content_mode"),
+            ("general", "content_mode"),
+            "content_mode",
+            "contentMode",
+            default="sfw",
         )
         return mode if mode in ("sfw", "r18", "mix") else "sfw"
 
@@ -147,6 +156,7 @@ class ApiConfigMixin:
         """
         return safe_int(
             self._read(
+                ("setu_general", "max_replenish_rounds"),
                 ("general", "max_replenish_rounds"),
                 "max_replenish_rounds",
                 "maxReplenishRounds",
@@ -293,3 +303,30 @@ class ApiConfigMixin:
             ),
             True,
         )
+
+    @property
+    def fortune_api_type(self: ConfigBase) -> str:
+        """今日运势的 API 提供商类型。
+
+        返回:
+            返回 API 类型：inherit（继承色图配置）、lolicon、atri、sexnyan、custom
+        """
+        api_type = self._read(
+            ("fortune", "api_type"), "fortune_api_type", default="inherit"
+        )
+        if api_type in ("inherit", "lolicon", "atri", "sexnyan", "custom"):
+            return api_type
+        return "inherit"
+
+    def get_effective_fortune_api_type(self: ConfigBase) -> str:
+        """获取生效的今日运势 API 类型。
+
+        如果设置为 inherit，则使用色图的 api_type。
+
+        返回:
+            生效的 API 类型：lolicon、atri、sexnyan、custom、all
+        """
+        fortune_api = self.fortune_api_type
+        if fortune_api == "inherit":
+            return self.api_type
+        return fortune_api
