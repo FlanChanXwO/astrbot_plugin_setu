@@ -100,8 +100,8 @@ class FortuneCommandHandler:
         )
 
         try:
-            # 使用 SetuCore 的 provider 获取图片
-            provider = self._core._get_provider()
+            # 使用 SetuCore 的 fortune_provider 获取图片
+            provider = self._core._get_fortune_provider()
             if not provider:
                 logger.error("[fortune] No provider available")
                 return None
@@ -131,6 +131,19 @@ class FortuneCommandHandler:
         user_id = event.get_sender_id()
         username = event.get_sender_name() or user_id
         group_id = event.get_group_id()
+
+        # 检查全局黑白名单
+        is_blocked, reason = self._core.access_control.check_global_access(
+            user_id, group_id, self._core._config.access_control_mode
+        )
+        if is_blocked:
+            logger.debug("[fortune] Access denied by global: %s", reason)
+            return
+
+        # 检查运势独立的群组黑名单
+        if group_id and self._core.access_control.is_fortune_group_blocked(str(group_id)):
+            logger.debug("[fortune] Access denied: fortune group blocked")
+            return
 
         # 获取今日运势数据
         fortune = await self._fortune_core.get_today_fortune(

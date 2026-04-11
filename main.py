@@ -311,3 +311,61 @@ class SetuPlugin(Star):
                 event, args
             ):
                 yield result
+
+    # ==================== 黑白名单管理命令（中文）====================
+
+    @filter.command("开启色图")
+    async def enable_setu_group_command(self, event, args: str = ""):
+        """处理 /开启色图 命令（在当前群组开启色图）。"""
+        if self._cmd_handler:
+            async for result in self._cmd_handler.handle_enable_setu_group(event, args):
+                yield result
+
+    @filter.command("关闭色图")
+    async def disable_setu_group_command(self, event, args: str = ""):
+        """处理 /关闭色图 命令（在当前群组关闭色图）。"""
+        if self._cmd_handler:
+            async for result in self._cmd_handler.handle_disable_setu_group(event, args):
+                yield result
+
+    @filter.command("开启运势")
+    async def enable_fortune_group_command(self, event, args: str = ""):
+        """处理 /开启运势 命令（在当前群组开启运势）。"""
+        if self._cmd_handler:
+            async for result in self._cmd_handler.handle_enable_fortune_group(event, args):
+                yield result
+
+    @filter.command("关闭运势")
+    async def disable_fortune_group_command(self, event, args: str = ""):
+        """处理 /关闭运势 命令（在当前群组关闭运势）。"""
+        if self._cmd_handler:
+            async for result in self._cmd_handler.handle_disable_fortune_group(event, args):
+                yield result
+
+    @filter.command("拉黑用户")
+    async def block_user_command(self, event, args: str = ""):
+        """处理 /拉黑用户 命令（AT某人将其加入黑名单）。"""
+        if self._cmd_handler:
+            async for result in self._cmd_handler.handle_block_user(event, args):
+                yield result
+
+    @filter.command("解除拉黑")
+    async def unblock_user_command(self, event, args: str = ""):
+        """处理 /解除拉黑 命令（AT某人将其从黑名单移除）。"""
+        if self._cmd_handler:
+            async for result in self._cmd_handler.handle_unblock_user(event, args):
+                yield result
+
+    @filter.command("信任用户")
+    async def trust_user_command(self, event, args: str = ""):
+        """处理 /信任用户 命令（AT某人将其加入白名单）。"""
+        if self._cmd_handler:
+            async for result in self._cmd_handler.handle_trust_user(event, args):
+                yield result
+
+    @filter.command("取消信任")
+    async def untrust_user_command(self, event, args: str = ""):
+        """处理 /取消信任 命令（AT某人将其从白名单移除）。"""
+        if self._cmd_handler:
+            async for result in self._cmd_handler.handle_untrust_user(event, args):
+                yield result

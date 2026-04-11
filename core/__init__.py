@@ -16,7 +16,14 @@ from astrbot.api.event import AstrMessageEvent
 
 from ..config import SetuConfig
 from ..providers import get_provider
-from ..services import DocxService, HtmlCardRenderer, ImageService, UrlImageDiskCache
+from ..services import (
+    AccessControlManager,
+    ConfigManager,
+    DocxService,
+    HtmlCardRenderer,
+    ImageService,
+    UrlImageDiskCache,
+)
 from ..session_config import SessionConfigManager
 from .rate_limiter import SessionRequestLimiter
 from .revoke_manager import RevokeManager
@@ -41,11 +48,14 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
         self._cache: UrlImageDiskCache | None = None
         self._image_service: ImageService | None = None
         self._html_renderer: HtmlCardRenderer | None = None
+        self._config_manager = ConfigManager(data_dir)
+        self._access_control = AccessControlManager(self._config_manager)
 
     async def initialize(self) -> None:
         """初始化核心组件。"""
         await self._revoke_manager.initialize()
         await self._session_config.initialize()
+        await self._config_manager.initialize()
         await self._restore_pending_revokes()
 
         if (
@@ -117,6 +127,45 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
             parser_config=cfg.api_response_parser if cfg.api_type == "custom" else None,
             custom_api_configs=cfg.custom_api_configs
             if cfg.api_type in ("custom", "all")
+            else None,
+            multi_api_strategy=cfg.multi_api_strategy,
+            lolicon_config=lolicon_config,
+            atri_config=atri_config,
+        )
+
+    def _get_fortune_provider(self):
+        """获取今日运势专用的 provider。
+
+        支持独立的 API 提供商配置。
+        """
+        cfg = self._config
+        # 获取生效的 fortune API 类型
+        effective_api_type = cfg.get_effective_fortune_api_type()
+
+        lolicon_config = None
+        atri_config = None
+        if effective_api_type in ("lolicon", "all"):
+            lolicon_config = {
+                "image_size": cfg.image_size,
+                "proxy": cfg.proxy,
+                "aspect_ratio": cfg.aspect_ratio,
+                "uid": cfg.uid,
+                "keyword": cfg.keyword,
+            }
+        if effective_api_type in ("atri", "all"):
+            atri_config = {
+                "image_size": cfg.atri_image_size,
+                "proxy": cfg.atri_proxy,
+                "aspect_ratio": cfg.atri_aspect_ratio,
+                "uid": cfg.atri_uid,
+                "keyword": cfg.atri_keyword,
+            }
+        return get_provider(
+            effective_api_type,
+            custom_config=cfg.custom_api if effective_api_type == "custom" else None,
+            parser_config=cfg.api_response_parser if effective_api_type == "custom" else None,
+            custom_api_configs=cfg.custom_api_configs
+            if effective_api_type in ("custom", "all")
             else None,
             multi_api_strategy=cfg.multi_api_strategy,
             lolicon_config=lolicon_config,
@@ -208,13 +257,35 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
             return False
 
     def is_group_blocked(self, event: AstrMessageEvent) -> bool:
-        """检查群聊是否被屏蔽。"""
+        """检查群聊或用户是否被屏蔽。
+
+        同时检查用户级和群组级的访问控制。
+        """
         try:
-            group_id = event.message_obj.group_id
-            if group_id and self._config.is_group_blocked(str(group_id)):
+            # 获取用户 ID
+            user_id = event.get_sender_id()
+
+            # 获取群组 ID（私聊时可能为 None）
+            group_id = None
+            try:
+                group_id = event.message_obj.group_id
+            except AttributeError:
+                pass
+
+            # 使用统一的访问检查（仅全局黑白名单）
+            is_blocked, reason = self._access_control.check_global_access(
+                user_id, group_id, self._config.access_control_mode
+            )
+
+            if is_blocked:
+                logger.debug(
+                    "Access denied for user=%s, group=%s: %s", user_id, group_id, reason
+                )
                 return True
+
         except AttributeError:
-            logger.debug("failed to inspect group id for blocked check")
+            logger.debug("failed to inspect user/group id for blocked check")
+
         return False
 
     def _is_forward_supported(self, event: AstrMessageEvent) -> bool:
@@ -318,6 +389,10 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
     @property
     def config(self) -> SetuConfig:
         return self._config
+
+    @property
+    def access_control(self) -> AccessControlManager:
+        return self._access_control
 
     async def fetch_and_download_images(
         self, num: int, tags: list[str], is_r18: bool

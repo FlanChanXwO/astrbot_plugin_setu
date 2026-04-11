@@ -1,8 +1,8 @@
 {
-  "general": {
-    "description": "基础行为",
+  "setu_general": {
+    "description": "色图基础行为",
     "type": "object",
-    "hint": "核心请求和提供者策略设置。",
+    "hint": "色图核心请求和提供者策略设置。",
     "items": {
       "api_type": {
         "type": "string",
@@ -60,6 +60,13 @@
           "max": 3,
           "step": 1
         }
+      },
+      "tag_alias": {
+        "type": "text",
+        "description": "标签别名映射",
+        "hint": "格式：canonical=alias1,alias2",
+        "default": "",
+        "obvious_hint": true
       }
     }
   },
@@ -189,6 +196,19 @@
         "description": "启用今日运势",
         "hint": "是否启用今日运势功能。",
         "default": true
+      },
+      "api_type": {
+        "type": "string",
+        "description": "API 提供者类型",
+        "hint": "今日运势独立的图片源配置。inherit 表示使用色图相同的配置。",
+        "default": "inherit",
+        "options": [
+          "inherit",
+          "lolicon",
+          "atri",
+          "sexnyan",
+          "custom"
+        ]
       },
       "tags": {
         "type": "string",
@@ -508,6 +528,20 @@
         "type": "list",
         "description": "白名单群组列表",
         "hint": "仅在白名单中的群组可使用插件。每行一个 ID。仅在访问控制模式为 whitelist 时生效。",
+        "default": [],
+        "obvious_hint": true
+      },
+      "blocked_users": {
+        "type": "list",
+        "description": "黑名单用户列表",
+        "hint": "在黑名单中的用户将禁用插件（全局生效，不受模式限制）。每行一个用户 ID。",
+        "default": [],
+        "obvious_hint": true
+      },
+      "whitelist_users": {
+        "type": "list",
+        "description": "白名单用户列表",
+        "hint": "仅在白名单中的用户可使用插件（全局生效，不受模式限制）。每行一个用户 ID。",
         "default": [],
         "obvious_hint": true
       },
