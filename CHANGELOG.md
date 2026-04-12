@@ -2,46 +2,38 @@
 
 ## [1.3.0] - 2026-04-10
 
-### Changed
-- **黑白名单系统简化**：大幅简化黑白名单命令，移除复杂的功能级黑白名单
-  - 用户命令改为中文：`/拉黑用户`、`/解除拉黑`、`/信任用户`、`/取消信任`
-  - 群组命令改为中文：`/开启色图`、`/关闭色图`、`/开启运势`、`/关闭运势`
-  - **用户控制必须通过AT**：不再支持直接输入用户ID
-  - **群组命令仅操作当前群**：不再支持指定其他群组ID
-  - 移除16个功能级黑白名单命令（setu_*、fortune_*）
-  - 保留运势独立的群组黑名单（fortune_blocked_groups）
-
 ### Added
-- **今日运势独立 API 配置**：新增 `fortune.api_type` 配置项
-  - 支持 `inherit`（继承色图配置，默认）、`lolicon`、`atri`、`sexnyan`、`custom`
-  - 允许今日运势使用与色图不同的图片源
-- **黑白名单管理命令**：新增管理员命令用于动态管理黑白名单
-  - 配置持久化到 `config.json` 文件，WebUI 可查看
-- **配置管理服务**：新增 `ConfigManager` 和 `AccessControlManager` 服务类
-  - 支持持久化存储黑白名单配置
-  - 提供统一的列表操作接口（添加、移除、查询）
-- **用户级黑白名单**：新增用户级别的访问控制，实现更细粒度的权限管理
-  - 新增 `blocked_users` 黑名单用户列表配置（全局生效，优先级最高）
-  - 新增 `whitelist_users` 白名单用户列表配置（类似超级会员模式）
-  - 用户黑名单优先级最高，即使用户在群组白名单中也会被屏蔽
-  - 私聊场景下只有用户级黑白名单生效
-- **黑白名单功能**：新增灵活的群组访问控制机制
-  - 新增 `access_control_mode` 配置项，支持三种模式：
-    - `none`: 不启用黑白名单，所有群组都可用
-    - `blacklist` (默认): 仅在黑名单中的群组被禁用
-    - `whitelist`: 仅在白名单中的群组可用
-  - 新增 `whitelist_groups` 白名单群组列表配置
-  - 原有 `blocked_groups` 更名为黑名单群组列表，保持向后兼容
-  - 白名单为空时自动降级为所有群组可用，避免误配置导致服务不可用
+- **安全配置升级为功能级 + 维度级**：`setu` 与 `fortune` 完全独立，并将访问模式细分为用户/群组两个维度
+  - 新增 `safety.setu_user_access_control_mode`
+  - 新增 `safety.setu_group_access_control_mode`
+  - 新增 `safety.fortune_user_access_control_mode`
+  - 新增 `safety.fortune_group_access_control_mode`
+- **功能级黑白名单管理完善**：提供 setu/fortune 独立的用户与群组黑白名单读写能力
+  - `setu_blocked_users` / `setu_whitelist_users` / `setu_blocked_groups` / `setu_whitelist_groups`
+  - `fortune_blocked_users` / `fortune_whitelist_users` / `fortune_blocked_groups` / `fortune_whitelist_groups`
+- **安全配置读取缓存**：主配置读取增加 mtime 缓存，减少高频消息场景下的重复磁盘 I/O 与 JSON 解析开销
 
 ### Changed
-- **配置结构调整**: 将 `general` 配置节重命名为 `setu_general`，更清晰区分色图基础配置
-- **标签别名配置迁移**: 将 `tag_alias` 从 `safety` 节移动到 `setu_general` 节
-- **访问控制逻辑增强**: `is_group_blocked()` 方法支持用户级检查
-  - 同时检查用户黑名单、用户白名单、群组黑白名单
-  - 新增访问拒绝原因日志记录，便于排查权限问题
-- **安全配置重命名**: `blocked_groups` 描述更新为"黑名单群组列表"
-- **访问控制代码改进**: `access_control_mode` 属性增加归一化和非法值警告日志
+- **访问控制判定逻辑重构**：访问检查改为“用户模式 + 群组模式”双通道判定
+  - 用户和群组分别按各自模式（`none`/`blacklist`/`whitelist`）执行
+  - `setu` 与 `fortune` 的访问判定互不影响
+- **黑白名单互斥策略**：同一用户不会同时存在于同一功能的黑名单与白名单
+  - 执行“信任用户”时自动从对应黑名单移除
+  - 执行“拉黑用户”时自动从对应白名单移除
+- **安全配置来源优先级调整**：优先读取主配置 `safety`（WebUI 持久化来源），再回退运行时与本地缓存
+
+### Fixed
+- **修复 WebUI 安全配置读取不一致**：修复 `safety` 配置保存后插件读取不到或读到旧值的问题
+  - 修复启动阶段同步方向，避免本地空缓存反向覆盖 WebUI 配置
+  - 修复 Windows 下带 BOM 的主配置读取兼容性（`utf-8-sig`）
+- **修复访问控制兜底行为**：当 `feature` 缺失或非法时不再静默跳过检查，改为默认拒绝（fail-closed）
+- **修复 URL 模式超时反馈**：`fetch_image_urls` 超时时返回明确用户提示，区分“拉取超时”与其他失败
+
+### Migration
+- **旧键兼容**：保留旧配置键读取兼容
+  - `safety.setu_access_control_mode` -> 同步映射到 `setu_user_access_control_mode` 与 `setu_group_access_control_mode`
+  - `safety.fortune_access_control_mode` -> 同步映射到 `fortune_user_access_control_mode` 与 `fortune_group_access_control_mode`
+- **升级建议**：建议在 WebUI 中显式配置 4 个新模式键，逐步移除旧键，避免后续版本兼容层移除后的歧义
 
 ## [1.2.1] - 2026-04-10
 

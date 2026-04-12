@@ -115,74 +115,82 @@
 | `download_concurrent_limit` | 整数 | 并发下载限制 | 1-50 | `10` |
 | `download_timeout_seconds` | 整数 | 下载超时时间（秒） | 5-300 | `30` |
 
-### 访问控制配置
+### 访问控制配置（1.3.0+）
+
+> 安全配置统一位于 `safety` 下，且 `setu` / `fortune` 完全独立。
 
 | 配置项 | 类型 | 说明 | 可选值 | 默认值 |
 |--------|------|------|--------|--------|
-| `access_control_mode` | 字符串 | 群组访问控制模式 | `none` / `blacklist` / `whitelist` | `blacklist` |
-| `blocked_groups` | 列表 | 黑名单群组 ID 列表 | 字符串数组 | `[]` |
-| `whitelist_groups` | 列表 | 白名单群组 ID 列表 | 字符串数组 | `[]` |
-| `blocked_users` | 列表 | 黑名单用户 ID 列表（全局） | 字符串数组 | `[]` |
-| `whitelist_users` | 列表 | 白名单用户 ID 列表（全局） | 字符串数组 | `[]` |
+| `setu_user_access_control_mode` | 字符串 | 色图-用户访问控制模式 | `none` / `blacklist` / `whitelist` | `none` |
+| `setu_group_access_control_mode` | 字符串 | 色图-群组访问控制模式 | `none` / `blacklist` / `whitelist` | `none` |
+| `setu_blocked_users` | 列表 | 色图用户黑名单 | 字符串数组 | `[]` |
+| `setu_whitelist_users` | 列表 | 色图用户白名单 | 字符串数组 | `[]` |
+| `setu_blocked_groups` | 列表 | 色图群组黑名单 | 字符串数组 | `[]` |
+| `setu_whitelist_groups` | 列表 | 色图群组白名单 | 字符串数组 | `[]` |
+| `fortune_user_access_control_mode` | 字符串 | 运势-用户访问控制模式 | `none` / `blacklist` / `whitelist` | `none` |
+| `fortune_group_access_control_mode` | 字符串 | 运势-群组访问控制模式 | `none` / `blacklist` / `whitelist` | `none` |
+| `fortune_blocked_users` | 列表 | 运势用户黑名单 | 字符串数组 | `[]` |
+| `fortune_whitelist_users` | 列表 | 运势用户白名单 | 字符串数组 | `[]` |
+| `fortune_blocked_groups` | 列表 | 运势群组黑名单 | 字符串数组 | `[]` |
+| `fortune_whitelist_groups` | 列表 | 运势群组白名单 | 字符串数组 | `[]` |
 
 #### 访问控制模式说明
 
 | 模式 | 说明 | 适用场景 |
 |------|------|----------|
-| `none` | 不启用黑白名单，所有群组都可用 | 公开使用，无需限制 |
-| `blacklist` | 仅在黑名单中的群组被禁用 | 大部分群可用，仅屏蔽少数群 |
-| `whitelist` | 仅在白名单中的群组可用 | 仅特定群可用，其他群全部屏蔽 |
+| `none` | 不启用该维度的黑白名单检查 | 不限制该维度 |
+| `blacklist` | 命中黑名单即拒绝 | 只屏蔽少数对象 |
+| `whitelist` | 不在白名单即拒绝 | 仅允许特定对象 |
 
-#### 访问控制优先级（从高到低）
+#### 判定规则（当前实现）
 
-| 优先级 | 检查项 | 说明 |
-|--------|--------|------|
-| 1 | 用户黑名单 | 用户在 `blocked_users` 中 → ❌ 拒绝访问 |
-| 2 | 用户白名单 | 用户在 `whitelist_users` 中 → ✅ **允许访问**（跳过群组检查） |
-| 3 | 用户白名单（配置了但用户不在其中） | 配置了 `whitelist_users` 但用户不在其中 → ❌ 拒绝访问 |
-| 4 | 群组黑名单 | 群组在 `blocked_groups` 中 → ❌ 拒绝访问 |
-| 5 | 群组白名单模式 | 群组不在 `whitelist_groups` 中 → ❌ 拒绝访问 |
-| 6 | 通过所有检查 | ✅ 允许访问 |
+- 用户和群组分别按各自模式独立判定；任一维度拒绝则最终拒绝。
+- `setu` 与 `fortune` 的名单和模式互不影响。
+- 用户白名单**不再**具有“跳过群组限制”的特权。
+- 当同一用户被“拉黑”后又“信任”（或反向操作）时，会自动从对立名单移除，保持互斥。
 
-**注意：**
-- **用户白名单具有最高特权**：白名单用户**不受群组级限制影响**，即使在黑名单群组中也能使用
-- **黑名单始终优先**：当用户/群组同时存在于黑白名单中时，**黑名单优先**（拒绝访问）
-- 配置了用户白名单后，只有白名单内的用户可以使用插件（白名单用户享有特权）
-- 私聊场景下只有用户级黑白名单生效
-- 白名单为空时（`[]`），所有群组都可用（避免误配置导致服务不可用）
+#### 兼容迁移（旧键 -> 新键）
 
-#### 边界情况处理
+- `safety.setu_access_control_mode` -> `safety.setu_user_access_control_mode` + `safety.setu_group_access_control_mode`
+- `safety.fortune_access_control_mode` -> `safety.fortune_user_access_control_mode` + `safety.fortune_group_access_control_mode`
 
-| 场景 | 处理规则 | 说明 |
-|------|----------|------|
-| 用户同时在黑白名单中 | ❌ **拒绝访问**（黑名单优先） | 即使用户在白名单中，只要同时被拉黑就无法使用 |
-| 群组同时在黑白名单中 | ❌ **拒绝访问**（黑名单优先） | 无论当前是什么模式，黑名单群组始终被禁止 |
-| 用户是白名单用户，群组是黑名单群组 | ✅ **允许访问**（用户特权） | 白名单用户不受群组限制影响 |
-| 用户是白名单用户，群组在白名单模式但群组不在白名单 | ✅ **允许访问**（用户特权） | 白名单用户跳过群组级检查 |
+> 旧键当前仍兼容读取，建议在 WebUI 中显式配置新键，后续版本更稳。
 
 ### 配置示例
 
 ```json
 {
-  "api_type": "lolicon",
-  "send_mode": "auto",
-  "content_mode": "mix",
-  "max_count": 5,
-  "cache_enabled": true,
-  "html_card_strategy": "fallback",
-  "auto_revoke_r18": true,
-  "r18_docx_mode": false,
-  "exclude_ai": false,
-  "enable_range_download": false,
-  "range_segments": 3,
-  "range_download_threshold": 512,
-  "download_concurrent_limit": 10,
-  "download_timeout_seconds": 30,
-  "access_control_mode": "blacklist",
-  "blocked_groups": [],
-  "whitelist_groups": [],
-  "blocked_users": [],
-  "whitelist_users": []
+  "setu_general": {
+    "api_type": "lolicon",
+    "content_mode": "mix",
+    "max_count": 5
+  },
+  "delivery": {
+    "send_mode": "auto",
+    "auto_revoke_r18": true,
+    "r18_docx_mode": false
+  },
+  "performance": {
+    "enable_range_download": false,
+    "range_segments": 3,
+    "range_download_threshold": 512,
+    "download_concurrent_limit": 10,
+    "download_timeout_seconds": 30
+  },
+  "safety": {
+    "setu_user_access_control_mode": "blacklist",
+    "setu_group_access_control_mode": "none",
+    "setu_blocked_users": [],
+    "setu_whitelist_users": [],
+    "setu_blocked_groups": [],
+    "setu_whitelist_groups": [],
+    "fortune_user_access_control_mode": "none",
+    "fortune_group_access_control_mode": "whitelist",
+    "fortune_blocked_users": [],
+    "fortune_whitelist_users": [],
+    "fortune_blocked_groups": [],
+    "fortune_whitelist_groups": []
+  }
 }
 ```
 
@@ -212,69 +220,59 @@
 
 ### 黑白名单管理命令（管理员）
 
-通过以下命令可动态管理黑白名单（配置会自动保存到 `config.json`）。
+通过以下命令可动态管理黑白名单（配置会自动持久化）。
 
-#### 用户黑白名单
+#### 色图用户黑白名单
 
 | 命令 | 说明 | 示例 |
 |------|------|------|
-| `/拉黑用户 @用户` | 将用户加入黑名单（必须AT） | `/拉黑用户 @小明` |
-| `/解除拉黑 @用户` | 将用户从黑名单移除（必须AT） | `/解除拉黑 @小明` |
-| `/信任用户 @用户` | 将用户加入白名单（必须AT） | `/信任用户 @小明` |
-| `/取消信任 @用户` | 将用户从白名单移除（必须AT） | `/取消信任 @小明` |
+| `/拉黑色图用户 @用户` | 将用户加入色图黑名单（必须AT） | `/拉黑色图用户 @小明` |
+| `/解除色图拉黑 @用户` | 将用户从色图黑名单移除（必须AT） | `/解除色图拉黑 @小明` |
+| `/信任色图用户 @用户` | 将用户加入色图白名单（必须AT） | `/信任色图用户 @小明` |
+| `/取消色图信任 @用户` | 将用户从色图白名单移除（必须AT） | `/取消色图信任 @小明` |
+
+#### 运势用户黑白名单
+
+| 命令 | 说明 | 示例 |
+|------|------|------|
+| `/拉黑运势用户 @用户` | 将用户加入运势黑名单（必须AT） | `/拉黑运势用户 @小明` |
+| `/解除运势拉黑 @用户` | 将用户从运势黑名单移除（必须AT） | `/解除运势拉黑 @小明` |
+| `/信任运势用户 @用户` | 将用户加入运势白名单（必须AT） | `/信任运势用户 @小明` |
+| `/取消运势信任 @用户` | 将用户从运势白名单移除（必须AT） | `/取消运势信任 @小明` |
 
 #### 群组功能开关
 
 | 命令 | 说明 | 示例 |
 |------|------|------|
-| `/开启色图` | 在本群开启色图功能 | `/开启色图` |
-| `/关闭色图` | 在本群关闭色图功能 | `/关闭色图` |
-| `/开启运势` | 在本群开启运势功能 | `/开启运势` |
-| `/关闭运势` | 在本群关闭运势功能 | `/关闭运势` |
+| `/开启色图` | 在本群开启色图功能（移出色图群组黑名单） | `/开启色图` |
+| `/关闭色图` | 在本群关闭色图功能（加入色图群组黑名单） | `/关闭色图` |
+| `/开启运势` | 在本群开启运势功能（移出运势群组黑名单） | `/开启运势` |
+| `/关闭运势` | 在本群关闭运势功能（加入运势群组黑名单） | `/关闭运势` |
 
 **注意：**
-- 以上命令仅限管理员或超级管理员使用
-- 管理员不能将自己加入黑名单（但可以加入白名单）
-- **用户命令必须通过 `@` AT 用户**，不支持直接输入用户 ID
-- **群组命令只能操作当前群组**，不支持指定其他群组
-- 配置会持久化到插件数据目录的 `config.json` 文件中
-- 可在 WebUI 配置面板中查看和修改黑白名单
+- 以上命令仅限管理员或超级管理员使用。
+- 用户类命令必须通过 `@` 指定目标用户，不支持直接输入用户 ID。
+- 群组命令仅作用于当前群。
+- 白名单/黑名单会自动保持互斥（同一功能下不会同时存在）。
 
-#### 黑白名单配置
-
-黑白名单配置存储在 `config.json` 中：
+#### 安全配置示例（`safety`）
 
 ```json
 {
-  "blocked_users": [],
-  "whitelist_users": [],
-  "blocked_groups": [],
-  "whitelist_groups": [],
-  "setu_blocked_groups": [],
-  "fortune_blocked_groups": []
+  "setu_user_access_control_mode": "blacklist",
+  "setu_group_access_control_mode": "none",
+  "setu_blocked_users": ["10001"],
+  "setu_whitelist_users": [],
+  "setu_blocked_groups": ["20001"],
+  "setu_whitelist_groups": [],
+  "fortune_user_access_control_mode": "none",
+  "fortune_group_access_control_mode": "whitelist",
+  "fortune_blocked_users": [],
+  "fortune_whitelist_users": ["10002"],
+  "fortune_blocked_groups": [],
+  "fortune_whitelist_groups": ["20002"]
 }
 ```
-
-**说明**：
-- `blocked_users`: 全局黑名单用户（所有功能都禁用）
-- `whitelist_users`: 全局白名单用户（仅白名单用户可用）
-- `blocked_groups`: 全局黑名单群组（所有功能都禁用）
-- `whitelist_groups`: 全局白名单群组（仅在白名单中的群组可用）
-- `setu_blocked_groups`: 色图独立黑名单（仅禁用色图，运势仍可用）
-- `fortune_blocked_groups`: 运势独立黑名单（仅禁用运势，色图仍可用）
-
-**访问控制优先级**：
-
-1. 检查用户黑名单（最高优先级）
-2. 检查用户白名单（如果配置了白名单）
-3. 检查功能级群组黑名单（`setu_blocked_groups` 或 `fortune_blocked_groups`）
-4. 检查全局群组黑白名单
-
-**使用场景示例**：
-- 某用户违规：将其加入黑名单，所有功能都禁用
-- 某群只想禁用色图但保留运势：`/关闭色图`
-- 某群只想禁用运势但保留色图：`/关闭运势`
-- 仅限白名单用户使用：配置 `whitelist_users` 后只有白名单用户可用
 
 ### LLM 工具调用
 
