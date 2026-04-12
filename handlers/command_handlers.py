@@ -557,7 +557,9 @@ class CommandHandler:
 
         success = self._core.access_control.remove_setu_blocked_user(target_id)
         if success:
-            yield event.plain_result(f"✅ 已将用户 `{target_id}` 从色图功能黑名单移除。")
+            yield event.plain_result(
+                f"✅ 已将用户 `{target_id}` 从色图功能黑名单移除。"
+            )
         else:
             yield event.plain_result("❌ 操作失败，请稍后再试。")
 
@@ -589,7 +591,9 @@ class CommandHandler:
         else:
             yield event.plain_result("❌ 操作失败，请稍后再试。")
 
-    async def handle_fortune_unblock_user(self, event: AstrMessageEvent, args: str = ""):
+    async def handle_fortune_unblock_user(
+        self, event: AstrMessageEvent, args: str = ""
+    ):
         """处理 /解除运势拉黑 命令（AT某人从Fortune黑名单移除）。"""
         if not self._core:
             yield event.plain_result("插件尚未就绪，请稍后再试。")
@@ -608,7 +612,9 @@ class CommandHandler:
 
         success = self._core.access_control.remove_fortune_blocked_user(target_id)
         if success:
-            yield event.plain_result(f"✅ 已将用户 `{target_id}` 从运势功能黑名单移除。")
+            yield event.plain_result(
+                f"✅ 已将用户 `{target_id}` 从运势功能黑名单移除。"
+            )
         else:
             yield event.plain_result("❌ 操作失败，请稍后再试。")
 
@@ -654,7 +660,9 @@ class CommandHandler:
 
         success = self._core.access_control.remove_setu_whitelist_user(target_id)
         if success:
-            yield event.plain_result(f"✅ 已将用户 `{target_id}` 从色图功能白名单移除。")
+            yield event.plain_result(
+                f"✅ 已将用户 `{target_id}` 从色图功能白名单移除。"
+            )
         else:
             yield event.plain_result("❌ 操作失败，请稍后再试。")
 
@@ -681,7 +689,9 @@ class CommandHandler:
         else:
             yield event.plain_result("❌ 操作失败，请稍后再试。")
 
-    async def handle_fortune_untrust_user(self, event: AstrMessageEvent, args: str = ""):
+    async def handle_fortune_untrust_user(
+        self, event: AstrMessageEvent, args: str = ""
+    ):
         """处理 /取消运势信任 命令（AT某人从Fortune白名单移除）。"""
         if not self._core:
             yield event.plain_result("插件尚未就绪，请稍后再试。")
@@ -700,7 +710,9 @@ class CommandHandler:
 
         success = self._core.access_control.remove_fortune_whitelist_user(target_id)
         if success:
-            yield event.plain_result(f"✅ 已将用户 `{target_id}` 从运势功能白名单移除。")
+            yield event.plain_result(
+                f"✅ 已将用户 `{target_id}` 从运势功能白名单移除。"
+            )
         else:
             yield event.plain_result("❌ 操作失败，请稍后再试。")
 
@@ -804,4 +816,3 @@ class CommandHandler:
                 if target not in ("all", "0"):
                     return target
         return None
-

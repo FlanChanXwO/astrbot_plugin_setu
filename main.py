@@ -384,26 +384,34 @@ class SetuPlugin(Star):
     async def block_fortune_user_command(self, event, args: str = ""):
         """处理 /拉黑运势用户 命令（AT某人加入运势黑名单）。"""
         if self._cmd_handler:
-            async for result in self._cmd_handler.handle_fortune_block_user(event, args):
+            async for result in self._cmd_handler.handle_fortune_block_user(
+                event, args
+            ):
                 yield result
 
     @filter.command("解除运势拉黑")
     async def unblock_fortune_user_command(self, event, args: str = ""):
         """处理 /解除运势拉黑 命令（AT某人从运势黑名单移除）。"""
         if self._cmd_handler:
-            async for result in self._cmd_handler.handle_fortune_unblock_user(event, args):
+            async for result in self._cmd_handler.handle_fortune_unblock_user(
+                event, args
+            ):
                 yield result
 
     @filter.command("信任运势用户")
     async def trust_fortune_user_command(self, event, args: str = ""):
         """处理 /信任运势用户 命令（AT某人加入运势白名单）。"""
         if self._cmd_handler:
-            async for result in self._cmd_handler.handle_fortune_trust_user(event, args):
+            async for result in self._cmd_handler.handle_fortune_trust_user(
+                event, args
+            ):
                 yield result
 
     @filter.command("取消运势信任")
     async def untrust_fortune_user_command(self, event, args: str = ""):
         """处理 /取消运势信任 命令（AT某人从运势白名单移除）。"""
         if self._cmd_handler:
-            async for result in self._cmd_handler.handle_fortune_untrust_user(event, args):
+            async for result in self._cmd_handler.handle_fortune_untrust_user(
+                event, args
+            ):
                 yield result
