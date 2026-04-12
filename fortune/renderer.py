@@ -30,21 +30,21 @@ class FortuneRenderer:
         fonts_config = [
             {
                 "name": "NotoSansSC-Regular",
-                "file": "NotoSansSC-Regular.otf",
-                "format": "opentype",
-                "mime": "font/otf",
+                "file": "NotoSansSC-Regular.woff2",
+                "format": "woff2",
+                "mime": "font/woff2",
             },
             {
                 "name": "NotoSansSC-Bold",
-                "file": "NotoSansSC-Bold.otf",
-                "format": "opentype",
-                "mime": "font/otf",
+                "file": "NotoSansSC-Bold.woff2",
+                "format": "woff2",
+                "mime": "font/woff2",
             },
             {
                 "name": "SSFangTangTi",
-                "file": "SSFangTangTi.ttf",
-                "format": "truetype",
-                "mime": "font/truetype",
+                "file": "SSFangTangTi.woff2",
+                "format": "woff2",
+                "mime": "font/woff2",
             },
         ]
 
