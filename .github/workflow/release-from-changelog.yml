@@ -1,0 +1,211 @@
+name: Release From Changelog
+
+on:
+  push:
+    branches:
+      - master
+      - main
+    paths:
+      - data/plugins/**/CHANGELOG.md
+      - data/plugins/**/changelog.md
+  workflow_dispatch:
+    inputs:
+      changelog_path:
+        description: "Optional single changelog path (e.g. data/plugins/foo/CHANGELOG.md)"
+        required: false
+        default: ""
+      tag_prefix:
+        description: "Optional tag prefix override. Empty = <plugin>-v"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-from-changelog-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      changelog_files: ${{ steps.collect.outputs.changelog_files }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Collect changelog files
+        id: collect
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -n "${{ inputs.changelog_path }}" ]; then
+            file="${{ inputs.changelog_path }}"
+            if [ ! -f "$file" ]; then
+              echo "Input changelog path does not exist: $file" >&2
+              exit 1
+            fi
+            python - <<'PY'
+import json
+import os
+
+file_path = os.environ["FILE_PATH"]
+with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+    fh.write("changelog_files=" + json.dumps([file_path]) + "\n")
+PY
+          else
+            before="${{ github.event.before }}"
+            after="${{ github.sha }}"
+
+            if [ -z "$before" ] || [ "$before" = "0000000000000000000000000000000000000000" ]; then
+              changed_files="$(git --no-pager ls-files "data/plugins/*/CHANGELOG.md" "data/plugins/*/changelog.md")"
+            else
+              changed_files="$(git --no-pager diff --name-only "$before" "$after")"
+            fi
+
+            printf '%s\n' "$changed_files" \
+              | grep -E '^data/plugins/[^/]+/(CHANGELOG\.md|changelog\.md)$' > _changed_changelogs.txt || true
+
+            python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+items = [line.strip() for line in Path("_changed_changelogs.txt").read_text(encoding="utf-8").splitlines() if line.strip()]
+seen = set()
+result = []
+for item in items:
+    if item not in seen:
+        seen.add(item)
+        result.append(item)
+
+with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+    fh.write("changelog_files=" + json.dumps(result) + "\n")
+PY
+          fi
+        env:
+          FILE_PATH: ${{ inputs.changelog_path }}
+
+  release:
+    runs-on: ubuntu-latest
+    needs: prepare
+    if: needs.prepare.outputs.changelog_files != '[]' && needs.prepare.outputs.changelog_files != ''
+
+    strategy:
+      fail-fast: false
+      matrix:
+        changelog: ${{ fromJson(needs.prepare.outputs.changelog_files) }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Parse version and notes
+        id: parse
+        shell: bash
+        run: |
+          python - <<'PY'
+import os
+import pathlib
+import re
+import sys
+
+changelog_path = pathlib.Path("${{ matrix.changelog }}")
+if not changelog_path.exists():
+    print(f"Missing changelog: {changelog_path}", file=sys.stderr)
+    sys.exit(1)
+
+parts = changelog_path.parts
+if len(parts) < 3 or parts[0] != "data" or parts[1] != "plugins":
+    print(f"Unsupported changelog path: {changelog_path}", file=sys.stderr)
+    sys.exit(1)
+plugin_name = parts[2]
+
+text = changelog_path.read_text(encoding="utf-8")
+match = re.search(r"^##\s*\[?v?(\d+\.\d+\.\d+(?:[-+][^\]\s]+)?)\]?.*$", text, re.MULTILINE)
+if not match:
+    print("No version heading like '## [1.2.3]' found.", file=sys.stderr)
+    sys.exit(1)
+
+version = match.group(1)
+start = match.start()
+next_match = re.search(r"^##\s+", text[match.end():], re.MULTILINE)
+if next_match:
+    end = match.end() + next_match.start()
+    notes = text[start:end].strip()
+else:
+    notes = text[start:].strip()
+
+prefix_input = "${{ inputs.tag_prefix }}".strip()
+if prefix_input:
+    tag = f"{prefix_input}{version}"
+else:
+    tag = f"{plugin_name}-v{version}"
+
+notes_file = pathlib.Path(f"release-notes-{plugin_name}.md")
+notes_file.write_text(notes + "\n", encoding="utf-8")
+
+with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+    fh.write(f"plugin={plugin_name}\n")
+    fh.write(f"version={version}\n")
+    fh.write(f"tag={tag}\n")
+    fh.write(f"notes_file={notes_file.as_posix()}\n")
+PY
+
+      - name: Check existing tag/release
+        id: dedupe
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          tag="${{ steps.parse.outputs.tag }}"
+          skip="false"
+          reason=""
+
+          if gh api "repos/${{ github.repository }}/git/ref/tags/${tag}" >/dev/null 2>&1; then
+            skip="true"
+            reason="tag '$tag' already exists"
+          fi
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            skip="true"
+            if [ -z "$reason" ]; then
+              reason="release '$tag' already exists"
+            else
+              reason="$reason; release '$tag' already exists"
+            fi
+          fi
+
+          echo "skip=$skip" >> "$GITHUB_OUTPUT"
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+
+      - name: Skip summary
+        if: steps.dedupe.outputs.skip == 'true'
+        shell: bash
+        run: |
+          echo "Skip creating release for ${{ steps.parse.outputs.plugin }}: ${{ steps.dedupe.outputs.reason }}"
+
+      - name: Create release and tag
+        if: steps.dedupe.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          tag="${{ steps.parse.outputs.tag }}"
+          gh release create "$tag" \
+            --target "$GITHUB_SHA" \
+            --title "$tag" \
+            --notes-file "${{ steps.parse.outputs.notes_file }}"
+
+      - name: Release summary
+        if: steps.dedupe.outputs.skip != 'true'
+        shell: bash
+        run: |
+          echo "Created release ${{ steps.parse.outputs.tag }} from ${{ matrix.changelog }}"
