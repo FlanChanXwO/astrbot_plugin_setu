@@ -43,8 +43,6 @@ class SetuConfig(
             config: AstrBot 配置对象
         """
         super().__init__(config)
-        # 检测黑白名单冲突
-        self._log_conflicts_if_any()
 
 
 __all__ = ["SetuConfig", "parse_count"]

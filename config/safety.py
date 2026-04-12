@@ -14,195 +14,72 @@ if TYPE_CHECKING:
 
 
 class SafetyConfigMixin:
-    """安全和缓存配置混入类。"""
+    """安全和缓存配置混入类。
+
+    注意：用户级黑白名单已完全分离为 setu 和 fortune 独立的配置，
+    请通过 AccessControlManager 直接使用功能级黑白名单方法。
+    """
 
     _read: Any
 
-    def _log_conflicts_if_any(self) -> None:
-        """检测并记录黑白名单冲突警告。"""
-        # 检测用户冲突
-        user_conflicts = set(self.blocked_users) & set(self.whitelist_users)
-        if user_conflicts:
-            logger.warning(
-                "[access_control] 用户同时存在于黑白名单中: %s，黑名单优先",
-                user_conflicts
-            )
-
-        # 检测群组冲突
-        group_conflicts = set(self.blocked_groups) & set(self.whitelist_groups)
-        if group_conflicts:
-            logger.warning(
-                "[access_control] 群组同时存在于黑白名单中: %s，黑名单优先",
-                group_conflicts
-            )
+    @staticmethod
+    def _normalize_access_mode(value: Any, default: str = "none") -> str:
+        """规范化访问控制模式字符串。"""
+        if isinstance(value, str) and value in {"none", "blacklist", "whitelist"}:
+            return value
+        return default
 
     @property
-    def access_control_mode(self) -> str:
-        """访问控制模式。
+    def setu_access_control_mode(self) -> str:
+        """色图访问控制模式（旧配置，兼容保留）。"""
+        value = self._read(("safety", "setu_access_control_mode"), default="none")
+        return self._normalize_access_mode(value)
 
-        返回:
-            none=不启用黑白名单，blacklist=仅黑名单模式，whitelist=仅白名单模式
-        """
-        raw_mode = self._read(
-            ("safety", "access_control_mode"), "access_control_mode", default="blacklist"
+    @property
+    def fortune_access_control_mode(self) -> str:
+        """运势访问控制模式（旧配置，兼容保留）。"""
+        value = self._read(("safety", "fortune_access_control_mode"), default="none")
+        return self._normalize_access_mode(value)
+
+    @property
+    def setu_user_access_control_mode(self) -> str:
+        """色图用户访问控制模式。"""
+        value = self._read(
+            ("safety", "setu_user_access_control_mode"),
+            "setu_user_access_control_mode",
+            default=self.setu_access_control_mode,
         )
-        mode = str(raw_mode).strip().lower()
-
-        valid_modes = ("none", "blacklist", "whitelist")
-        if mode not in valid_modes:
-            logger.warning(
-                "Invalid access_control_mode %r (normalized: %r), falling back to 'blacklist'",
-                raw_mode,
-                mode,
-            )
-            return "blacklist"
-        return mode
+        return self._normalize_access_mode(value, self.setu_access_control_mode)
 
     @property
-    def blocked_groups(self) -> list[str]:
-        """被屏蔽的群聊列表（黑名单）。
-
-        返回:
-            群聊 ID 列表，这些群聊将禁止使用插件功能
-        """
-        groups = self._read(("safety", "blocked_groups"), "blocked_groups", default=[])
-        if isinstance(groups, list):
-            return [str(g).strip() for g in groups if str(g).strip()]
-        return []
-
-    @property
-    def whitelist_groups(self) -> list[str]:
-        """白名单群聊列表。
-
-        返回:
-            群聊 ID 列表，仅在白名单模式时生效
-        """
-        groups = self._read(
-            ("safety", "whitelist_groups"), "whitelist_groups", default=[]
+    def setu_group_access_control_mode(self) -> str:
+        """色图群组访问控制模式。"""
+        value = self._read(
+            ("safety", "setu_group_access_control_mode"),
+            "setu_group_access_control_mode",
+            default=self.setu_access_control_mode,
         )
-        if isinstance(groups, list):
-            return [str(g).strip() for g in groups if str(g).strip()]
-        return []
-
-    def is_group_blocked(self, group_id: str | None) -> bool:
-        """检查群聊是否被屏蔽。
-
-        根据访问控制模式决定检查逻辑：
-        - none: 所有群组都可用
-        - blacklist: 在黑名单中的群组被屏蔽
-        - whitelist: 不在白名单中的群组被屏蔽
-
-        参数:
-            group_id: 群聊 ID
-
-        返回:
-            如果群聊被屏蔽返回 True，否则返回 False
-        """
-        # 仅当 group_id 为 None 时视为"无群组"，直接返回不屏蔽
-        # 其他 falsy 值（例如 "", 0 等）仍会参与访问控制检查
-        if group_id is None:
-            return False
-
-        mode = self.access_control_mode
-        gid = str(group_id)
-
-        if mode == "none":
-            # 不启用黑白名单，所有群组都可用
-            return False
-
-        if mode == "whitelist":
-            # 白名单模式：不在白名单中的群组被屏蔽
-            whitelist = self.whitelist_groups
-            if not whitelist:
-                # 白名单为空时，所有群组都可用（兼容旧配置）
-                return False
-            return gid not in whitelist
-
-        # 黑名单模式（默认）：在黑名单中的群组被屏蔽
-        return gid in self.blocked_groups
+        return self._normalize_access_mode(value, self.setu_access_control_mode)
 
     @property
-    def blocked_users(self) -> list[str]:
-        """被屏蔽的用户列表（黑名单）。
-
-        返回:
-            用户 ID 列表，这些用户将禁止使用插件功能
-        """
-        users = self._read(("safety", "blocked_users"), "blocked_users", default=[])
-        if isinstance(users, list):
-            return [str(u).strip() for u in users if str(u).strip()]
-        return []
+    def fortune_user_access_control_mode(self) -> str:
+        """运势用户访问控制模式。"""
+        value = self._read(
+            ("safety", "fortune_user_access_control_mode"),
+            "fortune_user_access_control_mode",
+            default=self.fortune_access_control_mode,
+        )
+        return self._normalize_access_mode(value, self.fortune_access_control_mode)
 
     @property
-    def whitelist_users(self) -> list[str]:
-        """白名单用户列表。
-
-        返回:
-            用户 ID 列表，仅在白名单模式时生效
-        """
-        users = self._read(
-            ("safety", "whitelist_users"), "whitelist_users", default=[]
+    def fortune_group_access_control_mode(self) -> str:
+        """运势群组访问控制模式。"""
+        value = self._read(
+            ("safety", "fortune_group_access_control_mode"),
+            "fortune_group_access_control_mode",
+            default=self.fortune_access_control_mode,
         )
-        if isinstance(users, list):
-            return [str(u).strip() for u in users if str(u).strip()]
-        return []
-
-    def is_user_blocked(self, user_id: str | None) -> bool:
-        """检查用户是否被屏蔽。
-
-        用户级黑白名单独立于群组级，优先级如下：
-        1. 如果用户在 blocked_users 中，直接屏蔽（黑名单优先）
-        2. 如果 whitelist_users 不为空且用户不在其中，屏蔽（白名单模式）
-        3. 其他情况不屏蔽
-
-        参数:
-            user_id: 用户 ID
-
-        返回:
-            如果用户被屏蔽返回 True，否则返回 False
-        """
-        if user_id is None:
-            return False
-
-        uid = str(user_id)
-
-        # 1. 检查用户黑名单（优先级最高）
-        if uid in self.blocked_users:
-            return True
-
-        # 2. 检查用户白名单（如果配置了白名单）
-        whitelist = self.whitelist_users
-        if whitelist and uid not in whitelist:
-            # 白名单不为空，且用户不在白名单中
-            return True
-
-        return False
-
-    def check_access(
-        self, user_id: str | None, group_id: str | None
-    ) -> tuple[bool, str]:
-        """统一检查用户和群组的访问权限（全局）。
-
-        同时检查用户级和群组级的访问控制，返回是否允许访问及原因。
-        用户白名单具有最高优先级，白名单用户不受群组级限制影响。
-
-        参数:
-            user_id: 用户 ID
-            group_id: 群组 ID（私聊时为 None）
-
-        返回:
-            (是否被屏蔽, 屏蔽原因)
-            - (False, ""): 允许访问
-            - (True, "用户被禁用"): 用户在黑名单中
-            - (True, "用户不在白名单中"): 配置了用户白名单但用户不在其中
-            - (True, "群组被禁用"): 群组在黑名单中
-            - (True, "群组不在白名单中"): 白名单模式下群组不在白名单中
-        """
-        # 从 core 获取 access_control 并使用全局检查
-        from ..services import AccessControlManager
-        return AccessControlManager.check_global_access(
-            self, user_id, group_id, self.access_control_mode
-        )
+        return self._normalize_access_mode(value, self.fortune_access_control_mode)
 
     @property
     def cache_enabled(self) -> bool:

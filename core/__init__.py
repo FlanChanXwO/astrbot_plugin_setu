@@ -48,7 +48,7 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
         self._cache: UrlImageDiskCache | None = None
         self._image_service: ImageService | None = None
         self._html_renderer: HtmlCardRenderer | None = None
-        self._config_manager = ConfigManager(data_dir)
+        self._config_manager = ConfigManager(data_dir, astrbot_config or plugin.config)
         self._access_control = AccessControlManager(self._config_manager)
 
     async def initialize(self) -> None:
@@ -163,7 +163,9 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
         return get_provider(
             effective_api_type,
             custom_config=cfg.custom_api if effective_api_type == "custom" else None,
-            parser_config=cfg.api_response_parser if effective_api_type == "custom" else None,
+            parser_config=cfg.api_response_parser
+            if effective_api_type == "custom"
+            else None,
             custom_api_configs=cfg.custom_api_configs
             if effective_api_type in ("custom", "all")
             else None,
@@ -256,10 +258,21 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
             logger.exception("html renderer initialize failed")
             return False
 
-    def is_group_blocked(self, event: AstrMessageEvent) -> bool:
+    def is_group_blocked(
+        self, event: AstrMessageEvent, feature: str | None = None
+    ) -> bool:
         """检查群聊或用户是否被屏蔽。
 
-        同时检查用户级和群组级的访问控制。
+        完全独立的功能级黑白名单：setu 和 fortune 有各自独立的黑白名单配置。
+        用户级黑白名单也是分开的：setu 的用户黑白名单只影响色图功能，
+        fortune 的用户黑白名单只影响运势功能。
+
+        参数:
+            event: 消息事件
+            feature: 功能名称，可选值为 "setu" 或 "fortune"
+
+        返回:
+            如果被屏蔽返回 True，否则返回 False
         """
         try:
             # 获取用户 ID
@@ -272,16 +285,60 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
             except AttributeError:
                 pass
 
-            # 使用统一的访问检查（仅全局黑白名单）
-            is_blocked, reason = self._access_control.check_global_access(
-                user_id, group_id, self._config.access_control_mode
-            )
-
-            if is_blocked:
+            # 根据功能类型检查对应的黑白名单
+            if feature == "setu":
+                setu_user_mode = self._config.setu_user_access_control_mode
+                setu_group_mode = self._config.setu_group_access_control_mode
                 logger.debug(
-                    "Access denied for user=%s, group=%s: %s", user_id, group_id, reason
+                    "[setu] Access control mode from SetuConfig: user_mode=%s, group_mode=%s (user=%s, group=%s)",
+                    setu_user_mode,
+                    setu_group_mode,
+                    user_id,
+                    group_id,
                 )
-                return True
+
+                is_blocked, reason = self._access_control.check_setu_access(
+                    user_id,
+                    group_id,
+                    user_access_control_mode=setu_user_mode,
+                    group_access_control_mode=setu_group_mode,
+                )
+                if is_blocked:
+                    logger.info(
+                        "[setu] Access denied for user=%s, group=%s: %s",
+                        user_id,
+                        group_id,
+                        reason,
+                    )
+                    return True
+            elif feature == "fortune":
+                fortune_user_mode = self._config.fortune_user_access_control_mode
+                fortune_group_mode = self._config.fortune_group_access_control_mode
+                logger.debug(
+                    "[fortune] Access control mode from SetuConfig: user_mode=%s, group_mode=%s (user=%s, group=%s)",
+                    fortune_user_mode,
+                    fortune_group_mode,
+                    user_id,
+                    group_id,
+                )
+
+                is_blocked, reason = self._access_control.check_fortune_access(
+                    user_id,
+                    group_id,
+                    user_access_control_mode=fortune_user_mode,
+                    group_access_control_mode=fortune_group_mode,
+                )
+                if is_blocked:
+                    logger.debug(
+                        "[fortune] Access denied for user=%s, group=%s: %s",
+                        user_id,
+                        group_id,
+                        reason,
+                    )
+                    return True
+            else:
+                # 没有指定功能类型，不进行检查
+                logger.debug("No feature specified, skipping access control check")
 
         except AttributeError:
             logger.debug("failed to inspect user/group id for blocked check")

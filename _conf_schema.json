@@ -1,730 +1,647 @@
 {
-  "setu_general": {
-    "description": "色图基础行为",
-    "type": "object",
-    "hint": "色图核心请求和提供者策略设置。",
-    "items": {
-      "api_type": {
-        "type": "string",
-        "description": "API 提供者类型",
-        "hint": "all 同时使用内置 API。",
-        "default": "lolicon",
-        "options": [
-          "lolicon",
-          "atri",
-          "sexnyan",
-          "custom",
-          "all"
-        ]
-      },
-      "multi_api_strategy": {
-        "type": "string",
-        "description": "多 API 策略",
-        "hint": "当 api_type 为 all/custom 时生效。",
-        "default": "round_robin",
-        "options": [
-          "round_robin",
-          "random",
-          "failover"
-        ]
-      },
-      "content_mode": {
-        "type": "string",
-        "description": "内容模式",
-        "hint": "全年龄/成人/混合",
-        "default": "sfw",
-        "options": [
-          "sfw",
-          "r18",
-          "mix"
-        ]
-      },
-      "max_count": {
-        "type": "int",
-        "description": "每次请求最大图片数",
-        "hint": "单次命令的上限。",
-        "default": 10,
-        "slider": {
-          "min": 1,
-          "max": 10,
-          "step": 1
+    "setu_general": {
+        "description": "色图基础行为",
+        "type": "object",
+        "hint": "色图核心请求和提供者策略设置。",
+        "items": {
+            "api_type": {
+                "type": "string",
+                "description": "API 提供者类型",
+                "hint": "all 同时使用内置 API。",
+                "default": "lolicon",
+                "options": ["lolicon", "atri", "sexnyan", "custom", "all"]
+            },
+            "multi_api_strategy": {
+                "type": "string",
+                "description": "多 API 策略",
+                "hint": "当 api_type 为 all/custom 时生效。",
+                "default": "round_robin",
+                "options": ["round_robin", "random", "failover"]
+            },
+            "content_mode": {
+                "type": "string",
+                "description": "内容模式",
+                "hint": "全年龄/成人/混合",
+                "default": "sfw",
+                "options": ["sfw", "r18", "mix"]
+            },
+            "max_count": {
+                "type": "int",
+                "description": "每次请求最大图片数",
+                "hint": "单次命令的上限。",
+                "default": 10,
+                "slider": {"min": 1, "max": 10, "step": 1}
+            },
+            "max_replenish_rounds": {
+                "type": "int",
+                "description": "最大补充轮次",
+                "hint": "部分图片下载失败时的重试轮次。",
+                "default": 3,
+                "slider": {"min": 1, "max": 3, "step": 1}
+            },
+            "tag_alias": {
+                "type": "text",
+                "description": "标签别名映射",
+                "hint": "格式：canonical=alias1,alias2",
+                "default": "",
+                "obvious_hint": true
+            }
         }
-      },
-      "max_replenish_rounds": {
-        "type": "int",
-        "description": "最大补充轮次",
-        "hint": "部分图片下载失败时的重试轮次。",
-        "default": 3,
-        "slider": {
-          "min": 1,
-          "max": 3,
-          "step": 1
-        }
-      },
-      "tag_alias": {
-        "type": "text",
-        "description": "标签别名映射",
-        "hint": "格式：canonical=alias1,alias2",
-        "default": "",
-        "obvious_hint": true
-      }
-    }
-  },
-  "delivery": {
-    "description": "发送模式",
-    "type": "object",
-    "hint": "消息发送和 R18 打包设置。",
-    "items": {
-      "send_mode": {
-        "type": "string",
+    },
+    "delivery": {
         "description": "发送模式",
-        "hint": "auto 在图片数量>1时使用转发。",
-        "default": "image",
-        "options": [
-          "image",
-          "forward",
-          "auto"
-        ]
-      },
-      "r18_docx_mode": {
-        "type": "bool",
-        "description": "R18 Docx 打包模式",
-        "hint": "将 R18 图片打包到 docx 文件中。",
-        "default": true
-      },
-      "auto_handle_send_failure": {
-        "type": "bool",
-        "description": "自动处理消息发送失败",
-        "hint": "当图片发送失败（无法获取message_id）时，自动尝试 HTML 卡片渲染绕过审核。",
-        "default": true
-      },
-      "auto_revoke_r18": {
-        "type": "bool",
-        "description": "自动撤回 R18 图片/文件",
-        "hint": "发送 R18 分级内容后，是否自动撤回消息（mix 模式随机到 r18 也算）。",
-        "default": false
-      },
-      "auto_revoke_delay": {
-        "type": "int",
-        "description": "R18 撤回延迟时间(秒)",
-        "hint": "发送 R18 内容后多久自动撤回，默认 30 秒。",
-        "default": 30
-      },
-      "url_send_mode": {
-        "type": "bool",
-        "description": "URL 发送模式",
-        "hint": "开启后直接发送图片 URL 而不是下载后发送。可显著降低服务器带宽和内存占用，图片由客户端直接加载。",
-        "default": false
-      },
-      "url_send_verify": {
-        "type": "bool",
-        "description": "验证 URL 有效性",
-        "hint": "发送前检查图片 URL 是否可访问（返回 200）。建议开启以避免发送失效链接。",
-        "default": true
-      },
-      "url_send_timeout": {
-        "type": "int",
-        "description": "URL 验证超时(秒)",
-        "hint": "验证 URL 时的 HTTP 请求超时时间。默认 5 秒。",
-        "default": 5,
-        "slider": {
-          "min": 2,
-          "max": 10,
-          "step": 1
-        }
-      }
-    }
-  },
-  "html_card": {
-    "description": "HTML 卡片包装",
-    "type": "object",
-    "hint": "将图片包装为防审查卡片。",
-    "items": {
-      "strategy": {
-        "type": "string",
-        "description": "HTML 卡片策略",
-        "hint": "never=从不使用，fallback=发送失败时降级使用，always=总是使用。",
-        "default": "fallback",
-        "options": [
-          "never",
-          "fallback",
-          "always"
-        ]
-      },
-      "mode": {
-        "type": "string",
-        "description": "卡片模式",
-        "hint": "single=所有图片放入一张卡片，multiple=每张图片一张卡片。",
-        "default": "single",
-        "options": [
-          "single",
-          "multiple"
-        ]
-      },
-      "card_padding": {
-        "type": "int",
-        "description": "卡片内边距",
-        "hint": "值越小卡片越紧凑。",
-        "default": 6,
-        "slider": {
-          "min": 6,
-          "max": 30,
-          "step": 1
-        }
-      },
-      "card_gap": {
-        "type": "int",
-        "description": "卡片间距",
-        "hint": "卡片之间的垂直间距。",
-        "default": 6,
-        "slider": {
-          "min": 6,
-          "max": 30,
-          "step": 1
-        }
-      }
-    }
-  },
-
-  "fortune": {
-    "description": "今日运势",
-    "type": "object",
-    "hint": "基于 Setu 图片源的每日运势功能。",
-    "items": {
-      "enabled": {
-        "type": "bool",
-        "description": "启用今日运势",
-        "hint": "是否启用今日运势功能。",
-        "default": true
-      },
-      "api_type": {
-        "type": "string",
-        "description": "API 提供者类型",
-        "hint": "今日运势独立的图片源配置。inherit 表示使用色图相同的配置。",
-        "default": "inherit",
-        "options": [
-          "inherit",
-          "lolicon",
-          "atri",
-          "sexnyan",
-          "custom"
-        ]
-      },
-      "tags": {
-        "type": "string",
-        "description": "默认标签",
-        "hint": "获取今日运势图片时的默认标签，如'少女,可爱'。留空则不使用标签。",
-        "default": ""
-      },
-      "content_mode": {
-        "type": "string",
-        "description": "内容模式",
-        "hint": "今日运势的图片内容分级。",
-        "default": "sfw",
-        "options": [
-          "sfw",
-          "r18",
-          "mix"
-        ]
-      },
-      "allow_user_refresh": {
-        "type": "bool",
-        "description": "允许用户刷新",
-        "hint": "是否允许普通用户自行刷新运势（否则仅管理员可刷新）。",
-        "default": false
-      },
-      "auto_refresh": {
-        "type": "bool",
-        "description": "自动刷新",
-        "hint": "第二天是否自动重新生成运势（否则保留前一天的运势）。",
-        "default": true
-      }
-    }
-  },
-  "cache": {
-    "description": "图片缓存",
-    "type": "object",
-    "hint": "简单的基于 URL 键值的本地图片缓存，带索引文件。",
-    "items": {
-      "enabled": {
-        "type": "bool",
-        "description": "启用缓存",
-        "hint": "通过 URL 缓存图片以减少重复下载。",
-        "default": true
-      },
-      "ttl_hours": {
-        "type": "int",
-        "description": "缓存 TTL（小时）",
-        "hint": "默认为 2 小时。",
-        "default": 2
-      },
-      "max_items": {
-        "type": "int",
-        "description": "最大缓存图片数",
-        "hint": "默认只保留 200 条图片缓存。",
-        "default": 200
-      },
-      "cleanup_on_start": {
-        "type": "bool",
-        "description": "启动时清理",
-        "hint": "插件启动时自动删除过期和溢出的条目。",
-        "default": true
-      }
-    }
-  },
-  "api": {
-    "description": "提供者详情",
-    "type": "object",
-    "hint": "提供者特定的设置。",
-    "items": {
-      "lolicon": {
-        "description": "Lolicon 选项",
         "type": "object",
-        "hint": "仅用于 lolicon 提供者。",
+        "hint": "消息发送和 R18 打包设置。",
         "items": {
-          "image_size": {
-            "type": "string",
-            "description": "图片尺寸",
-            "default": "original",
-            "options": [
-              "original",
-              "regular",
-              "small",
-              "thumb",
-              "mini"
-            ]
-          },
-          "proxy": {
-            "type": "string",
-            "description": "图片代理主机",
-            "hint": "默认为 i.pixiv.re。",
-            "default": "i.pixiv.re"
-          },
-          "aspect_ratio": {
-            "type": "string",
-            "description": "宽高比过滤",
-            "default": "",
-            "options": [
-              "",
-              "horizontal",
-              "vertical",
-              "square"
-            ]
-          },
-          "uid": {
-            "type": "list",
-            "description": "作者 UID 列表",
-            "hint": "每行一个 UID。",
-            "default": [],
-            "obvious_hint": true
-          },
-          "keyword": {
-            "type": "string",
-            "description": "关键词过滤",
-            "default": ""
-          },
-          "exclude_ai": {
-            "type": "bool",
-            "description": "排除 AI 生成作品",
-            "hint": "排除 AI 生成的图片。",
-            "default": true
-          }
+            "send_mode": {
+                "type": "string",
+                "description": "发送模式",
+                "hint": "auto 在图片数量>1时使用转发。",
+                "default": "image",
+                "options": ["image", "forward", "auto"]
+            },
+            "r18_docx_mode": {
+                "type": "bool",
+                "description": "R18 Docx 打包模式",
+                "hint": "将 R18 图片打包到 docx 文件中。",
+                "default": true
+            },
+            "auto_handle_send_failure": {
+                "type": "bool",
+                "description": "自动处理消息发送失败",
+                "hint": "当图片发送失败（无法获取message_id）时，自动尝试 HTML 卡片渲染绕过审核。",
+                "default": true
+            },
+            "auto_revoke_r18": {
+                "type": "bool",
+                "description": "自动撤回 R18 图片/文件",
+                "hint": "发送 R18 分级内容后，是否自动撤回消息（mix 模式随机到 r18 也算）。",
+                "default": false
+            },
+            "auto_revoke_delay": {
+                "type": "int",
+                "description": "R18 撤回延迟时间(秒)",
+                "hint": "发送 R18 内容后多久自动撤回，默认 30 秒。",
+                "default": 30
+            },
+            "url_send_mode": {
+                "type": "bool",
+                "description": "URL 发送模式",
+                "hint": "开启后直接发送图片 URL 而不是下载后发送。可显著降低服务器带宽和内存占用，图片由客户端直接加载。",
+                "default": false
+            },
+            "url_send_verify": {
+                "type": "bool",
+                "description": "验证 URL 有效性",
+                "hint": "发送前检查图片 URL 是否可访问（返回 200）。建议开启以避免发送失效链接。",
+                "default": true
+            },
+            "url_send_timeout": {
+                "type": "int",
+                "description": "URL 验证超时(秒)",
+                "hint": "验证 URL 时的 HTTP 请求超时时间。默认 5 秒。",
+                "default": 5,
+                "slider": {"min": 2, "max": 10, "step": 1}
+            }
         }
-      },
-      "atri": {
-        "description": "Atri 选项",
+    },
+    "html_card": {
+        "description": "HTML 卡片包装",
         "type": "object",
-        "hint": "仅用于 atri 提供者。",
+        "hint": "将图片包装为防审查卡片。",
         "items": {
-          "image_size": {
-            "type": "string",
-            "description": "图片尺寸",
-            "default": "original",
-            "options": [
-              "original",
-              "regular",
-              "small",
-              "thumb",
-              "mini"
-            ]
-          },
-          "proxy": {
-            "type": "string",
-            "description": "图片代理主机",
-            "hint": "默认为 i.pixiv.re。",
-            "default": "i.pixiv.re"
-          },
-          "aspect_ratio": {
-            "type": "string",
-            "description": "宽高比过滤",
-            "default": "",
-            "options": [
-              "",
-              "horizontal",
-              "vertical",
-              "square"
-            ]
-          },
-          "uid": {
-            "type": "list",
-            "description": "作者 UID 列表",
-            "hint": "每行一个 UID。",
-            "default": [],
-            "obvious_hint": true
-          },
-          "keyword": {
-            "type": "string",
-            "description": "关键词过滤",
-            "default": ""
-          },
-          "exclude_ai": {
-            "type": "bool",
-            "description": "排除 AI 生成作品",
-            "hint": "排除 AI 生成的图片。",
-            "default": true
-          }
+            "strategy": {
+                "type": "string",
+                "description": "HTML 卡片策略",
+                "hint": "never=从不使用，fallback=发送失败时降级使用，always=总是使用。",
+                "default": "fallback",
+                "options": ["never", "fallback", "always"]
+            },
+            "mode": {
+                "type": "string",
+                "description": "卡片模式",
+                "hint": "single=所有图片放入一张卡片，multiple=每张图片一张卡片。",
+                "default": "single",
+                "options": ["single", "multiple"]
+            },
+            "card_padding": {
+                "type": "int",
+                "description": "卡片内边距",
+                "hint": "值越小卡片越紧凑。",
+                "default": 6,
+                "slider": {"min": 6, "max": 30, "step": 1}
+            },
+            "card_gap": {
+                "type": "int",
+                "description": "卡片间距",
+                "hint": "卡片之间的垂直间距。",
+                "default": 6,
+                "slider": {"min": 6, "max": 30, "step": 1}
+            }
         }
-      },
-      "custom_api_configs": {
+    },
+    "fortune": {
+        "description": "今日运势",
+        "type": "object",
+        "hint": "基于 Setu 图片源的每日运势功能。",
+        "items": {
+            "enabled": {
+                "type": "bool",
+                "description": "启用今日运势",
+                "hint": "是否启用今日运势功能。",
+                "default": true
+            },
+            "api_type": {
+                "type": "string",
+                "description": "API 提供者类型",
+                "hint": "今日运势独立的图片源配置。inherit 表示使用色图相同的配置。",
+                "default": "inherit",
+                "options": ["inherit", "lolicon", "atri", "sexnyan", "custom"]
+            },
+            "tags": {
+                "type": "string",
+                "description": "默认标签",
+                "hint": "获取今日运势图片时的默认标签，如'少女,可爱'。留空则不使用标签。",
+                "default": ""
+            },
+            "content_mode": {
+                "type": "string",
+                "description": "内容模式",
+                "hint": "今日运势的图片内容分级。",
+                "default": "sfw",
+                "options": ["sfw", "r18", "mix"]
+            },
+            "allow_user_refresh": {
+                "type": "bool",
+                "description": "允许用户刷新",
+                "hint": "是否允许普通用户自行刷新运势（否则仅管理员可刷新）。",
+                "default": false
+            },
+            "auto_refresh": {
+                "type": "bool",
+                "description": "自动刷新",
+                "hint": "第二天是否自动重新生成运势（否则保留前一天的运势）。",
+                "default": true
+            }
+        }
+    },
+    "cache": {
+        "description": "图片缓存",
+        "type": "object",
+        "hint": "简单的基于 URL 键值的本地图片缓存，带索引文件。",
+        "items": {
+            "enabled": {
+                "type": "bool",
+                "description": "启用缓存",
+                "hint": "通过 URL 缓存图片以减少重复下载。",
+                "default": true
+            },
+            "ttl_hours": {
+                "type": "int",
+                "description": "缓存 TTL（小时）",
+                "hint": "默认为 2 小时。",
+                "default": 2
+            },
+            "max_items": {
+                "type": "int",
+                "description": "最大缓存图片数",
+                "hint": "默认只保留 200 条图片缓存。",
+                "default": 200
+            },
+            "cleanup_on_start": {
+                "type": "bool",
+                "description": "启动时清理",
+                "hint": "插件启动时自动删除过期和溢出的条目。",
+                "default": true
+            }
+        }
+    },
+    "api": {
+        "description": "提供者详情",
+        "type": "object",
+        "hint": "提供者特定的设置。",
+        "items": {
+            "lolicon": {
+                "description": "Lolicon 选项",
+                "type": "object",
+                "hint": "仅用于 lolicon 提供者。",
+                "items": {
+                    "image_size": {
+                        "type": "string",
+                        "description": "图片尺寸",
+                        "default": "original",
+                        "options": ["original", "regular", "small", "thumb", "mini"]
+                    },
+                    "proxy": {
+                        "type": "string",
+                        "description": "图片代理主机",
+                        "hint": "默认为 i.pixiv.re。",
+                        "default": "i.pixiv.re"
+                    },
+                    "aspect_ratio": {
+                        "type": "string",
+                        "description": "宽高比过滤",
+                        "default": "",
+                        "options": ["", "horizontal", "vertical", "square"]
+                    },
+                    "uid": {
+                        "type": "list",
+                        "description": "作者 UID 列表",
+                        "hint": "每行一个 UID。",
+                        "default": [],
+                        "obvious_hint": true
+                    },
+                    "keyword": {
+                        "type": "string",
+                        "description": "关键词过滤",
+                        "default": ""
+                    },
+                    "exclude_ai": {
+                        "type": "bool",
+                        "description": "排除 AI 生成作品",
+                        "hint": "排除 AI 生成的图片。",
+                        "default": true
+                    }
+                }
+            },
+            "atri": {
+                "description": "Atri 选项",
+                "type": "object",
+                "hint": "仅用于 atri 提供者。",
+                "items": {
+                    "image_size": {
+                        "type": "string",
+                        "description": "图片尺寸",
+                        "default": "original",
+                        "options": ["original", "regular", "small", "thumb", "mini"]
+                    },
+                    "proxy": {
+                        "type": "string",
+                        "description": "图片代理主机",
+                        "hint": "默认为 i.pixiv.re。",
+                        "default": "i.pixiv.re"
+                    },
+                    "aspect_ratio": {
+                        "type": "string",
+                        "description": "宽高比过滤",
+                        "default": "",
+                        "options": ["", "horizontal", "vertical", "square"]
+                    },
+                    "uid": {
+                        "type": "list",
+                        "description": "作者 UID 列表",
+                        "hint": "每行一个 UID。",
+                        "default": [],
+                        "obvious_hint": true
+                    },
+                    "keyword": {
+                        "type": "string",
+                        "description": "关键词过滤",
+                        "default": ""
+                    },
+                    "exclude_ai": {
+                        "type": "bool",
+                        "description": "排除 AI 生成作品",
+                        "hint": "排除 AI 生成的图片。",
+                        "default": true
+                    }
+                }
+            },
+            "custom_api_configs": {
+                "type": "template_list",
+                "description": "自定义 API 列表",
+                "hint": "配置一个或多个自定义图片 API。",
+                "default": [],
+                "obvious_hint": true,
+                "templates": {
+                    "api_template": {
+                        "name": "自定义 API",
+                        "hint": "一个自定义 API 配置。",
+                        "items": {
+                            "name": {
+                                "type": "string",
+                                "description": "API 配置名称",
+                                "default": "My custom API"
+                            },
+                            "url": {
+                                "type": "string",
+                                "description": "API 地址",
+                                "hint": "支持 {num}、{r18}、{tags} 占位符。",
+                                "default": "https://api.example.com/images?num={num}&tag={tags}"
+                            },
+                            "method": {
+                                "type": "string",
+                                "description": "HTTP 方法",
+                                "default": "GET",
+                                "options": ["GET", "POST"]
+                            },
+                            "timeout": {
+                                "type": "int",
+                                "description": "超时秒数",
+                                "default": 30
+                            },
+                            "parser_type": {
+                                "type": "string",
+                                "description": "解析器类型",
+                                "hint": "auto/json",
+                                "default": "auto",
+                                "options": ["auto", "json"]
+                            },
+                            "json_path": {
+                                "type": "string",
+                                "description": "JSON 路径",
+                                "hint": "当 parser_type=json 时使用。示例：$.data[*].url",
+                                "default": ""
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "messages": {
+        "description": "提示消息",
+        "type": "object",
+        "hint": "自定义插件发送的提示消息文本。",
+        "items": {
+            "fetching": {
+                "description": "获取图片提示",
+                "type": "object",
+                "hint": "开始获取图片时发送的提示消息。",
+                "items": {
+                    "enabled": {
+                        "type": "bool",
+                        "description": "启用该提示",
+                        "hint": "是否发送此提示消息。",
+                        "default": true
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "提示文本",
+                        "hint": "开始获取图片时显示的文本。",
+                        "default": "正在获取图片，请稍候..."
+                    }
+                }
+            },
+            "found": {
+                "description": "找到图片提示",
+                "type": "object",
+                "hint": "成功找到图片后发送的提示消息。",
+                "items": {
+                    "enabled": {
+                        "type": "bool",
+                        "description": "启用该提示",
+                        "hint": "是否发送此提示消息。",
+                        "default": true
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "提示文本",
+                        "hint": "成功找到图片时显示的文本，{count} 会被替换为实际数量，{revoke_delay} 会被替换为自动撤回延迟（仅在R18自动撤回时生效）。",
+                        "default": "找到 {count} 张符合要求的图片~"
+                    }
+                }
+            },
+            "send_failed": {
+                "description": "发送失败提示",
+                "type": "object",
+                "hint": "图片最终发送失败时的提示消息。",
+                "items": {
+                    "text": {
+                        "type": "string",
+                        "description": "提示文本",
+                        "hint": "自动降级也失败后发送的文本。",
+                        "default": "图片发送失败，请稍后再试。"
+                    }
+                }
+            }
+        }
+    },
+    "safety": {
+        "description": "安全和过滤",
+        "type": "object",
+        "hint": "用户和群组级别的功能访问控制。",
+        "items": {
+            "setu_user_access_control_mode": {
+                "type": "string",
+                "description": "色图用户访问控制模式",
+                "hint": "none=不启用黑白名单，blacklist=仅黑名单模式，whitelist=仅白名单模式",
+                "default": "none",
+                "options": ["none", "blacklist", "whitelist"]
+            },
+            "setu_group_access_control_mode": {
+                "type": "string",
+                "description": "色图群组访问控制模式",
+                "hint": "none=不启用黑白名单，blacklist=仅黑名单模式，whitelist=仅白名单模式",
+                "default": "none",
+                "options": ["none", "blacklist", "whitelist"]
+            },
+            "setu_blocked_users": {
+                "type": "list",
+                "description": "色图黑名单用户列表",
+                "hint": "在黑名单中的用户将无法使用色图功能。每行一个用户 ID。",
+                "default": [],
+                "obvious_hint": true
+            },
+            "setu_whitelist_users": {
+                "type": "list",
+                "description": "色图白名单用户列表",
+                "hint": "仅在白名单中的用户可使用色图功能。每行一个用户 ID。仅在色图用户访问控制模式为 whitelist 时生效。",
+                "default": [],
+                "obvious_hint": true
+            },
+            "setu_blocked_groups": {
+                "type": "list",
+                "description": "色图黑名单群组列表",
+                "hint": "在这些群组中禁用色图功能，但运势功能仍可用。每行一个群组 ID。",
+                "default": [],
+                "obvious_hint": true
+            },
+            "setu_whitelist_groups": {
+                "type": "list",
+                "description": "色图白名单群组列表",
+                "hint": "仅在这些群组中允许使用色图功能（当启用色图群组白名单模式时）。每行一个群组 ID。",
+                "default": [],
+                "obvious_hint": true
+            },
+            "fortune_user_access_control_mode": {
+                "type": "string",
+                "description": "运势用户访问控制模式",
+                "hint": "none=不启用黑白名单，blacklist=仅黑名单模式，whitelist=仅白名单模式",
+                "default": "none",
+                "options": ["none", "blacklist", "whitelist"]
+            },
+            "fortune_group_access_control_mode": {
+                "type": "string",
+                "description": "运势群组访问控制模式",
+                "hint": "none=不启用黑白名单，blacklist=仅黑名单模式，whitelist=仅白名单模式",
+                "default": "none",
+                "options": ["none", "blacklist", "whitelist"]
+            },
+            "fortune_blocked_users": {
+                "type": "list",
+                "description": "运势黑名单用户列表",
+                "hint": "在黑名单中的用户将无法使用运势功能。每行一个用户 ID。",
+                "default": [],
+                "obvious_hint": true
+            },
+            "fortune_whitelist_users": {
+                "type": "list",
+                "description": "运势白名单用户列表",
+                "hint": "仅在白名单中的用户可使用运势功能。每行一个用户 ID。仅在运势用户访问控制模式为 whitelist 时生效。",
+                "default": [],
+                "obvious_hint": true
+            },
+            "fortune_blocked_groups": {
+                "type": "list",
+                "description": "运势黑名单群组列表",
+                "hint": "在这些群组中禁用运势功能，但色图功能仍可用。每行一个群组 ID。",
+                "default": [],
+                "obvious_hint": true
+            },
+            "fortune_whitelist_groups": {
+                "type": "list",
+                "description": "运势白名单群组列表",
+                "hint": "仅在这些群组中允许使用运势功能（当启用运势群组白名单模式时）。每行一个群组 ID。",
+                "default": [],
+                "obvious_hint": true
+            }
+        }
+    },
+    "performance": {
+        "description": "性能配置",
+        "type": "object",
+        "hint": "下载速度和并发设置",
+        "items": {
+            "enable_range_download": {
+                "type": "bool",
+                "description": "启用分段下载",
+                "hint": "将单张大图分成多段并行下载，可显著提升大图片下载速度。推荐在高带宽环境启用。",
+                "default": false
+            },
+            "range_segments": {
+                "type": "int",
+                "description": "分段数",
+                "hint": "单张图片的分段下载数。2-4 段通常效果最佳，太多反而可能降低速度。",
+                "default": 3,
+                "slider": {"min": 2, "max": 6, "step": 1}
+            },
+            "range_download_threshold": {
+                "type": "int",
+                "description": "分段下载阈值(KB)",
+                "hint": "图片大于此值才启用分段下载。太小的图片分段反而慢。",
+                "default": 512,
+                "slider": {"min": 256, "max": 2048, "step": 128}
+            },
+            "download_concurrent_limit": {
+                "type": "int",
+                "description": "并发下载限制",
+                "hint": "同时下载图片的最大并发数。普通服务器建议 10，高带宽服务器可设置 20-30。",
+                "default": 10
+            },
+            "download_timeout_seconds": {
+                "type": "int",
+                "description": "下载超时时间(秒)",
+                "hint": "单个图片下载的最大超时时间。默认 30 秒，网络慢可适当增加。",
+                "default": 30
+            }
+        }
+    },
+    "session_configs": {
         "type": "template_list",
-        "description": "自定义 API 列表",
-        "hint": "配置一个或多个自定义图片 API。",
+        "description": "会话级配置覆盖",
+        "hint": "为特定群聊或私聊设置独立配置，优先于全局配置。可通过命令 /setu_config 在会话中设置。",
         "default": [],
         "obvious_hint": true,
         "templates": {
-          "api_template": {
-            "name": "自定义 API",
-            "hint": "一个自定义 API 配置。",
-            "items": {
-              "name": {
-                "type": "string",
-                "description": "API 配置名称",
-                "default": "My custom API"
-              },
-              "url": {
-                "type": "string",
-                "description": "API 地址",
-                "hint": "支持 {num}、{r18}、{tags} 占位符。",
-                "default": "https://api.example.com/images?num={num}&tag={tags}"
-              },
-              "method": {
-                "type": "string",
-                "description": "HTTP 方法",
-                "default": "GET",
-                "options": [
-                  "GET",
-                  "POST"
-                ]
-              },
-              "timeout": {
-                "type": "int",
-                "description": "超时秒数",
-                "default": 30
-              },
-              "parser_type": {
-                "type": "string",
-                "description": "解析器类型",
-                "hint": "auto/json",
-                "default": "auto",
-                "options": [
-                  "auto",
-                  "json"
-                ]
-              },
-              "json_path": {
-                "type": "string",
-                "description": "JSON 路径",
-                "hint": "当 parser_type=json 时使用。示例：$.data[*].url",
-                "default": ""
-              }
+            "session_template": {
+                "name": "会话配置",
+                "hint": "一个群聊或私聊的独立配置",
+                "items": {
+                    "session_id": {
+                        "type": "string",
+                        "description": "会话 ID",
+                        "hint": "群号或用户 ID",
+                        "default": ""
+                    },
+                    "session_type": {
+                        "type": "string",
+                        "description": "会话类型",
+                        "hint": "group=群聊，private=私聊",
+                        "default": "group",
+                        "options": ["group", "private"]
+                    },
+                    "content_mode": {
+                        "type": "string",
+                        "description": "内容模式",
+                        "hint": "覆盖全局内容模式设置",
+                        "default": "",
+                        "options": ["", "sfw", "r18", "mix"]
+                    },
+                    "r18_docx_mode": {
+                        "type": "string",
+                        "description": "R18 Docx 打包模式",
+                        "hint": "覆盖全局 R18 Docx 打包设置",
+                        "default": "",
+                        "options": ["", "enabled", "disabled"]
+                    },
+                    "auto_revoke_r18": {
+                        "type": "string",
+                        "description": "R18 自动撤回",
+                        "hint": "覆盖全局自动撤回设置",
+                        "default": "",
+                        "options": ["", "enabled", "disabled"]
+                    },
+                    "send_mode": {
+                        "type": "string",
+                        "description": "发送模式",
+                        "hint": "覆盖全局发送模式设置",
+                        "default": "",
+                        "options": ["", "image", "forward", "auto"]
+                    }
+                }
             }
-          }
         }
-      }
-    }
-  },
-  "messages": {
-    "description": "提示消息",
-    "type": "object",
-    "hint": "自定义插件发送的提示消息文本。",
-    "items": {
-      "fetching": {
-        "description": "获取图片提示",
-        "type": "object",
-        "hint": "开始获取图片时发送的提示消息。",
-        "items": {
-          "enabled": {
-            "type": "bool",
-            "description": "启用该提示",
-            "hint": "是否发送此提示消息。",
-            "default": true
-          },
-          "text": {
-            "type": "string",
-            "description": "提示文本",
-            "hint": "开始获取图片时显示的文本。",
-            "default": "正在获取图片，请稍候..."
-          }
-        }
-      },
-      "found": {
-        "description": "找到图片提示",
-        "type": "object",
-        "hint": "成功找到图片后发送的提示消息。",
-        "items": {
-          "enabled": {
-            "type": "bool",
-            "description": "启用该提示",
-            "hint": "是否发送此提示消息。",
-            "default": true
-          },
-          "text": {
-            "type": "string",
-            "description": "提示文本",
-            "hint": "成功找到图片时显示的文本，{count} 会被替换为实际数量，{revoke_delay} 会被替换为自动撤回延迟（仅在R18自动撤回时生效）。",
-            "default": "找到 {count} 张符合要求的图片~"
-          }
-        }
-      },
-      "send_failed": {
-        "description": "发送失败提示",
-        "type": "object",
-        "hint": "图片最终发送失败时的提示消息。",
-        "items": {
-          "text": {
-            "type": "string",
-            "description": "提示文本",
-            "hint": "自动降级也失败后发送的文本。",
-            "default": "图片发送失败，请稍后再试。"
-          }
-        }
-      }
-    }
-  },
-  "safety": {
-    "description": "安全和过滤",
-    "type": "object",
-    "hint": "群组限制和标签规范化。",
-    "items": {
-      "access_control_mode": {
-        "type": "string",
-        "description": "访问控制模式",
-        "hint": "none=不启用黑白名单，blacklist=仅黑名单模式，whitelist=仅白名单模式（仅在白名单中的群组可用）",
-        "default": "blacklist",
-        "options": [
-          "none",
-          "blacklist",
-          "whitelist"
-        ]
-      },
-      "blocked_groups": {
-        "type": "list",
-        "description": "黑名单群组列表",
-        "hint": "在黑名单中的群组将禁用插件。每行一个 ID。仅在黑名单模式或访问控制模式为 blacklist 时生效。",
+    },
+    "fortune_session_configs": {
+        "type": "template_list",
+        "description": "今日运势会话配置覆盖",
+        "hint": "为特定群聊或私聊设置独立的今日运势配置。可通过命令 /jrys_config 在会话中设置。",
         "default": [],
-        "obvious_hint": true
-      },
-      "whitelist_groups": {
-        "type": "list",
-        "description": "白名单群组列表",
-        "hint": "仅在白名单中的群组可使用插件。每行一个 ID。仅在访问控制模式为 whitelist 时生效。",
-        "default": [],
-        "obvious_hint": true
-      },
-      "blocked_users": {
-        "type": "list",
-        "description": "黑名单用户列表",
-        "hint": "在黑名单中的用户将禁用插件（全局生效，不受模式限制）。每行一个用户 ID。",
-        "default": [],
-        "obvious_hint": true
-      },
-      "whitelist_users": {
-        "type": "list",
-        "description": "白名单用户列表",
-        "hint": "仅在白名单中的用户可使用插件（全局生效，不受模式限制）。每行一个用户 ID。",
-        "default": [],
-        "obvious_hint": true
-      },
-      "tag_alias": {
-        "type": "text",
-        "description": "标签别名映射",
-        "hint": "格式：canonical=alias1,alias2",
-        "default": "",
-        "obvious_hint": true
-      }
-    }
-  },
-  "performance": {
-    "description": "性能配置",
-    "type": "object",
-    "hint": "下载速度和并发设置",
-    "items": {
-      "enable_range_download": {
-        "type": "bool",
-        "description": "启用分段下载",
-        "hint": "将单张大图分成多段并行下载，可显著提升大图片下载速度。推荐在高带宽环境启用。",
-        "default": false
-      },
-      "range_segments": {
-        "type": "int",
-        "description": "分段数",
-        "hint": "单张图片的分段下载数。2-4 段通常效果最佳，太多反而可能降低速度。",
-        "default": 3,
-        "slider": {
-          "min": 2,
-          "max": 6,
-          "step": 1
+        "obvious_hint": true,
+        "templates": {
+            "fortune_session_template": {
+                "name": "今日运势会话配置",
+                "hint": "一个群聊或私聊的今日运势独立配置",
+                "items": {
+                    "session_id": {
+                        "type": "string",
+                        "description": "会话 ID",
+                        "hint": "群号或用户 ID",
+                        "default": ""
+                    },
+                    "session_type": {
+                        "type": "string",
+                        "description": "会话类型",
+                        "hint": "group=群聊，private=私聊",
+                        "default": "group",
+                        "options": ["group", "private"]
+                    },
+                    "tags": {
+                        "type": "string",
+                        "description": "标签",
+                        "hint": "获取今日运势图片时的标签，如 '少女,可爱'",
+                        "default": ""
+                    },
+                    "content_mode": {
+                        "type": "string",
+                        "description": "内容模式",
+                        "hint": "覆盖全局内容模式设置",
+                        "default": "",
+                        "options": ["", "sfw", "r18", "mix"]
+                    }
+                }
+            }
         }
-      },
-      "range_download_threshold": {
-        "type": "int",
-        "description": "分段下载阈值(KB)",
-        "hint": "图片大于此值才启用分段下载。太小的图片分段反而慢。",
-        "default": 512,
-        "slider": {
-          "min": 256,
-          "max": 2048,
-          "step": 128
-        }
-      },
-      "download_concurrent_limit": {
-        "type": "int",
-        "description": "并发下载限制",
-        "hint": "同时下载图片的最大并发数。普通服务器建议 10，高带宽服务器可设置 20-30。",
-        "default": 10
-      },
-      "download_timeout_seconds": {
-        "type": "int",
-        "description": "下载超时时间(秒)",
-        "hint": "单个图片下载的最大超时时间。默认 30 秒，网络慢可适当增加。",
-        "default": 30
-      }
     }
-  },
-  "session_configs": {
-    "type": "template_list",
-    "description": "会话级配置覆盖",
-    "hint": "为特定群聊或私聊设置独立配置，优先于全局配置。可通过命令 /setu_config 在会话中设置。",
-    "default": [],
-    "obvious_hint": true,
-    "templates": {
-      "session_template": {
-        "name": "会话配置",
-        "hint": "一个群聊或私聊的独立配置",
-        "items": {
-          "session_id": {
-            "type": "string",
-            "description": "会话 ID",
-            "hint": "群号或用户 ID",
-            "default": ""
-          },
-          "session_type": {
-            "type": "string",
-            "description": "会话类型",
-            "hint": "group=群聊，private=私聊",
-            "default": "group",
-            "options": [
-              "group",
-              "private"
-            ]
-          },
-          "content_mode": {
-            "type": "string",
-            "description": "内容模式",
-            "hint": "覆盖全局内容模式设置",
-            "default": "",
-            "options": [
-              "",
-              "sfw",
-              "r18",
-              "mix"
-            ]
-          },
-          "r18_docx_mode": {
-            "type": "string",
-            "description": "R18 Docx 打包模式",
-            "hint": "覆盖全局 R18 Docx 打包设置",
-            "default": "",
-            "options": [
-              "",
-              "enabled",
-              "disabled"
-            ]
-          },
-          "auto_revoke_r18": {
-            "type": "string",
-            "description": "R18 自动撤回",
-            "hint": "覆盖全局自动撤回设置",
-            "default": "",
-            "options": [
-              "",
-              "enabled",
-              "disabled"
-            ]
-          },
-          "send_mode": {
-            "type": "string",
-            "description": "发送模式",
-            "hint": "覆盖全局发送模式设置",
-            "default": "",
-            "options": [
-              "",
-              "image",
-              "forward",
-              "auto"
-            ]
-          }
-        }
-      }
-    }
-  },
-  "fortune_session_configs": {
-    "type": "template_list",
-    "description": "今日运势会话配置覆盖",
-    "hint": "为特定群聊或私聊设置独立的今日运势配置。可通过命令 /jrys_config 在会话中设置。",
-    "default": [],
-    "obvious_hint": true,
-    "templates": {
-      "fortune_session_template": {
-        "name": "今日运势会话配置",
-        "hint": "一个群聊或私聊的今日运势独立配置",
-        "items": {
-          "session_id": {
-            "type": "string",
-            "description": "会话 ID",
-            "hint": "群号或用户 ID",
-            "default": ""
-          },
-          "session_type": {
-            "type": "string",
-            "description": "会话类型",
-            "hint": "group=群聊，private=私聊",
-            "default": "group",
-            "options": [
-              "group",
-              "private"
-            ]
-          },
-          "tags": {
-            "type": "string",
-            "description": "标签",
-            "hint": "获取今日运势图片时的标签，如 '少女,可爱'",
-            "default": ""
-          },
-          "content_mode": {
-            "type": "string",
-            "description": "内容模式",
-            "hint": "覆盖全局内容模式设置",
-            "default": "",
-            "options": [
-              "",
-              "sfw",
-              "r18",
-              "mix"
-            ]
-          }
-        }
-      }
-    }
-  }
 }
