@@ -68,14 +68,8 @@ class CommandHandler:
         if not match:
             return
 
-        # 使用全局访问检查
-        user_id = event.get_sender_id()
-        group_id = event.get_group_id()
-        is_blocked, reason = self._core.access_control.check_global_access(
-            user_id, group_id, self._config.access_control_mode
-        )
-        if is_blocked:
-            logger.debug("[setu] Access denied: %s", reason)
+        # 检查全局黑白名单和色图功能级黑名单
+        if self._core.is_group_blocked(event, feature="setu"):
             return
 
         num_str = match.group(2)
@@ -109,12 +103,25 @@ class CommandHandler:
                 # URL 模式：获取 URL 并直接发送
                 provider = self._core._get_provider()
                 if provider:
-                    img_urls = await provider.fetch_image_urls(
-                        num=num,
-                        tags=tags,
-                        r18=is_r18,
-                        exclude_ai=self._config.exclude_ai,
-                    )
+                    try:
+                        img_urls = await asyncio.wait_for(
+                            provider.fetch_image_urls(
+                                num=num,
+                                tags=tags,
+                                r18=is_r18,
+                                exclude_ai=self._config.exclude_ai,
+                            ),
+                            timeout=60.0,
+                        )
+                    except asyncio.TimeoutError:
+                        logger.warning(
+                            "url mode fetch_image_urls timeout (>60s), tags=%s, r18=%s",
+                            tags,
+                            is_r18,
+                        )
+                        yield event.plain_result("图片获取超时，请稍后重试。")
+                        return
+
                     async for result in self._core.send_images_by_url(
                         event, img_urls, is_r18, tags
                     ):
@@ -170,7 +177,7 @@ class CommandHandler:
         self, event: AstrMessageEvent, count: str = "1", *, tags: str = ""
     ):
         """处理 /setu 命令的内部逻辑。"""
-        if self._core.is_group_blocked(event):
+        if self._core.is_group_blocked(event, feature="setu"):
             return
 
         max_count = self._config.max_count
@@ -203,12 +210,25 @@ class CommandHandler:
             if self._config.url_send_mode:
                 provider = self._core._get_provider()
                 if provider:
-                    img_urls = await provider.fetch_image_urls(
-                        num=num,
-                        tags=parsed_tags,
-                        r18=is_r18,
-                        exclude_ai=self._config.exclude_ai,
-                    )
+                    try:
+                        img_urls = await asyncio.wait_for(
+                            provider.fetch_image_urls(
+                                num=num,
+                                tags=parsed_tags,
+                                r18=is_r18,
+                                exclude_ai=self._config.exclude_ai,
+                            ),
+                            timeout=60.0,
+                        )
+                    except asyncio.TimeoutError:
+                        logger.warning(
+                            "url mode fetch_image_urls timeout (>60s), tags=%s, r18=%s",
+                            parsed_tags,
+                            is_r18,
+                        )
+                        yield event.plain_result("图片获取超时，请稍后重试。")
+                        return
+
                     async for result in self._core.send_images_by_url(
                         event, img_urls, is_r18, parsed_tags
                     ):
@@ -510,8 +530,8 @@ class CommandHandler:
 
     # ============ 黑白名单管理命令（简化中文版）============
 
-    async def handle_block_user(self, event: AstrMessageEvent, args: str = ""):
-        """处理 /拉黑用户 命令（AT某人加入黑名单）。"""
+    async def handle_setu_block_user(self, event: AstrMessageEvent, args: str = ""):
+        """处理 /拉黑色图用户 命令（AT某人加入Setu黑名单）。"""
         if not self._core:
             yield event.plain_result("插件尚未就绪，请稍后再试。")
             return
@@ -523,8 +543,7 @@ class CommandHandler:
         target_id = self._extract_target_id(event, args)
         if not target_id:
             yield event.plain_result(
-                "❌ 请通过 AT (@) 指定要拉黑的用户。\n"
-                "用法：/拉黑用户 @用户名"
+                "❌ 请通过 AT (@) 指定要拉黑的用户。\n用法：/拉黑色图用户 @用户名"
             )
             return
 
@@ -533,14 +552,14 @@ class CommandHandler:
             yield event.plain_result("❌ 不能将自己加入黑名单。")
             return
 
-        success = self._core.access_control.add_blocked_user(target_id)
+        success = self._core.access_control.add_setu_blocked_user(target_id)
         if success:
-            yield event.plain_result(f"✅ 已将用户 `{target_id}` 加入黑名单。")
+            yield event.plain_result(f"✅ 已将用户 `{target_id}` 加入色图功能黑名单。")
         else:
             yield event.plain_result("❌ 操作失败，请稍后再试。")
 
-    async def handle_unblock_user(self, event: AstrMessageEvent, args: str = ""):
-        """处理 /解除拉黑 命令（AT某人从黑名单移除）。"""
+    async def handle_setu_unblock_user(self, event: AstrMessageEvent, args: str = ""):
+        """处理 /解除色图拉黑 命令（AT某人从Setu黑名单移除）。"""
         if not self._core:
             yield event.plain_result("插件尚未就绪，请稍后再试。")
             return
@@ -552,19 +571,20 @@ class CommandHandler:
         target_id = self._extract_target_id(event, args)
         if not target_id:
             yield event.plain_result(
-                "❌ 请通过 AT (@) 指定要解除拉黑的用户。\n"
-                "用法：/解除拉黑 @用户名"
+                "❌ 请通过 AT (@) 指定要解除拉黑的用户。\n用法：/解除色图拉黑 @用户名"
             )
             return
 
-        success = self._core.access_control.remove_blocked_user(target_id)
+        success = self._core.access_control.remove_setu_blocked_user(target_id)
         if success:
-            yield event.plain_result(f"✅ 已将用户 `{target_id}` 从黑名单移除。")
+            yield event.plain_result(
+                f"✅ 已将用户 `{target_id}` 从色图功能黑名单移除。"
+            )
         else:
             yield event.plain_result("❌ 操作失败，请稍后再试。")
 
-    async def handle_trust_user(self, event: AstrMessageEvent, args: str = ""):
-        """处理 /信任用户 命令（AT某人加入白名单）。"""
+    async def handle_fortune_block_user(self, event: AstrMessageEvent, args: str = ""):
+        """处理 /拉黑运势用户 命令（AT某人加入Fortune黑名单）。"""
         if not self._core:
             yield event.plain_result("插件尚未就绪，请稍后再试。")
             return
@@ -576,19 +596,25 @@ class CommandHandler:
         target_id = self._extract_target_id(event, args)
         if not target_id:
             yield event.plain_result(
-                "❌ 请通过 AT (@) 指定要信任的用户。\n"
-                "用法：/信任用户 @用户名"
+                "❌ 请通过 AT (@) 指定要拉黑的用户。\n用法：/拉黑运势用户 @用户名"
             )
             return
 
-        success = self._core.access_control.add_whitelist_user(target_id)
+        sender_id = event.get_sender_id()
+        if target_id == str(sender_id):
+            yield event.plain_result("❌ 不能将自己加入黑名单。")
+            return
+
+        success = self._core.access_control.add_fortune_blocked_user(target_id)
         if success:
-            yield event.plain_result(f"✅ 已将用户 `{target_id}` 加入白名单。")
+            yield event.plain_result(f"✅ 已将用户 `{target_id}` 加入运势功能黑名单。")
         else:
             yield event.plain_result("❌ 操作失败，请稍后再试。")
 
-    async def handle_untrust_user(self, event: AstrMessageEvent, args: str = ""):
-        """处理 /取消信任 命令（AT某人从白名单移除）。"""
+    async def handle_fortune_unblock_user(
+        self, event: AstrMessageEvent, args: str = ""
+    ):
+        """处理 /解除运势拉黑 命令（AT某人从Fortune黑名单移除）。"""
         if not self._core:
             yield event.plain_result("插件尚未就绪，请稍后再试。")
             return
@@ -600,14 +626,113 @@ class CommandHandler:
         target_id = self._extract_target_id(event, args)
         if not target_id:
             yield event.plain_result(
-                "❌ 请通过 AT (@) 指定要取消信任的用户。\n"
-                "用法：/取消信任 @用户名"
+                "❌ 请通过 AT (@) 指定要解除拉黑的用户。\n用法：/解除运势拉黑 @用户名"
             )
             return
 
-        success = self._core.access_control.remove_whitelist_user(target_id)
+        success = self._core.access_control.remove_fortune_blocked_user(target_id)
         if success:
-            yield event.plain_result(f"✅ 已将用户 `{target_id}` 从白名单移除。")
+            yield event.plain_result(
+                f"✅ 已将用户 `{target_id}` 从运势功能黑名单移除。"
+            )
+        else:
+            yield event.plain_result("❌ 操作失败，请稍后再试。")
+
+    async def handle_setu_trust_user(self, event: AstrMessageEvent, args: str = ""):
+        """处理 /信任色图用户 命令（AT某人加入Setu白名单）。"""
+        if not self._core:
+            yield event.plain_result("插件尚未就绪，请稍后再试。")
+            return
+
+        if not self._check_admin(event):
+            yield event.plain_result("❌ 权限不足：此命令仅限管理员或超级管理员使用。")
+            return
+
+        target_id = self._extract_target_id(event, args)
+        if not target_id:
+            yield event.plain_result(
+                "❌ 请通过 AT (@) 指定要信任的用户。\n用法：/信任色图用户 @用户名"
+            )
+            return
+
+        success = self._core.access_control.add_setu_whitelist_user(target_id)
+        if success:
+            yield event.plain_result(f"✅ 已将用户 `{target_id}` 加入色图功能白名单。")
+        else:
+            yield event.plain_result("❌ 操作失败，请稍后再试。")
+
+    async def handle_setu_untrust_user(self, event: AstrMessageEvent, args: str = ""):
+        """处理 /取消色图信任 命令（AT某人从Setu白名单移除）。"""
+        if not self._core:
+            yield event.plain_result("插件尚未就绪，请稍后再试。")
+            return
+
+        if not self._check_admin(event):
+            yield event.plain_result("❌ 权限不足：此命令仅限管理员或超级管理员使用。")
+            return
+
+        target_id = self._extract_target_id(event, args)
+        if not target_id:
+            yield event.plain_result(
+                "❌ 请通过 AT (@) 指定要取消信任的用户。\n用法：/取消色图信任 @用户名"
+            )
+            return
+
+        success = self._core.access_control.remove_setu_whitelist_user(target_id)
+        if success:
+            yield event.plain_result(
+                f"✅ 已将用户 `{target_id}` 从色图功能白名单移除。"
+            )
+        else:
+            yield event.plain_result("❌ 操作失败，请稍后再试。")
+
+    async def handle_fortune_trust_user(self, event: AstrMessageEvent, args: str = ""):
+        """处理 /信任运势用户 命令（AT某人加入Fortune白名单）。"""
+        if not self._core:
+            yield event.plain_result("插件尚未就绪，请稍后再试。")
+            return
+
+        if not self._check_admin(event):
+            yield event.plain_result("❌ 权限不足：此命令仅限管理员或超级管理员使用。")
+            return
+
+        target_id = self._extract_target_id(event, args)
+        if not target_id:
+            yield event.plain_result(
+                "❌ 请通过 AT (@) 指定要信任的用户。\n用法：/信任运势用户 @用户名"
+            )
+            return
+
+        success = self._core.access_control.add_fortune_whitelist_user(target_id)
+        if success:
+            yield event.plain_result(f"✅ 已将用户 `{target_id}` 加入运势功能白名单。")
+        else:
+            yield event.plain_result("❌ 操作失败，请稍后再试。")
+
+    async def handle_fortune_untrust_user(
+        self, event: AstrMessageEvent, args: str = ""
+    ):
+        """处理 /取消运势信任 命令（AT某人从Fortune白名单移除）。"""
+        if not self._core:
+            yield event.plain_result("插件尚未就绪，请稍后再试。")
+            return
+
+        if not self._check_admin(event):
+            yield event.plain_result("❌ 权限不足：此命令仅限管理员或超级管理员使用。")
+            return
+
+        target_id = self._extract_target_id(event, args)
+        if not target_id:
+            yield event.plain_result(
+                "❌ 请通过 AT (@) 指定要取消信任的用户。\n用法：/取消运势信任 @用户名"
+            )
+            return
+
+        success = self._core.access_control.remove_fortune_whitelist_user(target_id)
+        if success:
+            yield event.plain_result(
+                f"✅ 已将用户 `{target_id}` 从运势功能白名单移除。"
+            )
         else:
             yield event.plain_result("❌ 操作失败，请稍后再试。")
 
@@ -627,9 +752,9 @@ class CommandHandler:
             return
 
         gid = str(group_id)
-        success = self._core.access_control.remove_blocked_group(gid)
+        success = self._core.access_control.remove_setu_blocked_group(gid)
         if success:
-            yield event.plain_result(f"✅ 已在本群开启色图功能。")
+            yield event.plain_result("✅ 已在本群开启色图功能。")
         else:
             yield event.plain_result("❌ 操作失败，请稍后再试。")
 
@@ -649,13 +774,15 @@ class CommandHandler:
             return
 
         gid = str(group_id)
-        success = self._core.access_control.add_blocked_group(gid)
+        success = self._core.access_control.add_setu_blocked_group(gid)
         if success:
-            yield event.plain_result(f"✅ 已在本群关闭色图功能。")
+            yield event.plain_result("✅ 已在本群关闭色图功能。")
         else:
             yield event.plain_result("❌ 操作失败，请稍后再试。")
 
-    async def handle_enable_fortune_group(self, event: AstrMessageEvent, args: str = ""):
+    async def handle_enable_fortune_group(
+        self, event: AstrMessageEvent, args: str = ""
+    ):
         """处理 /开启运势 命令（从运势黑名单移除当前群组）。"""
         if not self._core:
             yield event.plain_result("插件尚未就绪，请稍后再试。")
@@ -671,14 +798,15 @@ class CommandHandler:
             return
 
         gid = str(group_id)
-        # 运势黑名单使用独立的fortune_blocked_groups
         success = self._core.access_control.remove_fortune_blocked_group(gid)
         if success:
-            yield event.plain_result(f"✅ 已在本群开启运势功能。")
+            yield event.plain_result("✅ 已在本群开启运势功能。")
         else:
             yield event.plain_result("❌ 操作失败，请稍后再试。")
 
-    async def handle_disable_fortune_group(self, event: AstrMessageEvent, args: str = ""):
+    async def handle_disable_fortune_group(
+        self, event: AstrMessageEvent, args: str = ""
+    ):
         """处理 /关闭运势 命令（将当前群组加入运势黑名单）。"""
         if not self._core:
             yield event.plain_result("插件尚未就绪，请稍后再试。")
@@ -694,10 +822,9 @@ class CommandHandler:
             return
 
         gid = str(group_id)
-        # 运势黑名单使用独立的fortune_blocked_groups
         success = self._core.access_control.add_fortune_blocked_group(gid)
         if success:
-            yield event.plain_result(f"✅ 已在本群关闭运势功能。")
+            yield event.plain_result("✅ 已在本群关闭运势功能。")
         else:
             yield event.plain_result("❌ 操作失败，请稍后再试。")
 
@@ -709,557 +836,3 @@ class CommandHandler:
                 if target not in ("all", "0"):
                     return target
         return None
-
-        success = self._core.access_control.add_whitelist_user(target_id)
-        if success:
-            yield event.plain_result(f"✅ 已将用户 `{target_id}` 加入白名单。")
-        else:
-            yield event.plain_result("❌ 操作失败，请稍后再试。")
-
-    async def handle_unwhitelist_user(self, event: AstrMessageEvent, args: str = ""):
-        """处理 /unwhitelist_user 命令（从白名单移除用户）。"""
-        if not self._core:
-            yield event.plain_result("插件尚未就绪，请稍后再试。")
-            return
-
-        if not self._check_admin(event):
-            yield event.plain_result("❌ 权限不足：此命令仅限管理员或超级管理员使用。")
-            return
-
-        target_id = self._extract_target_id(event, args)
-        if not target_id:
-            yield event.plain_result(
-                "❌ 请指定要移除的用户。\n"
-                "用法：\n"
-                "  /unwhitelist_user @用户名\n"
-                "  /unwhitelist_user <用户ID>"
-            )
-            return
-
-        success = self._core.access_control.remove_whitelist_user(target_id)
-        if success:
-            yield event.plain_result(f"✅ 已将用户 `{target_id}` 从白名单移除。")
-        else:
-            yield event.plain_result("❌ 操作失败，请稍后再试。")
-
-    # ============ 群组黑名单命令 ============
-
-    async def handle_block_group(self, event: AstrMessageEvent, args: str = ""):
-        """处理 /block_group 命令（添加群组到黑名单）。"""
-        if not self._core:
-            yield event.plain_result("插件尚未就绪，请稍后再试。")
-            return
-
-        if not self._check_admin(event):
-            yield event.plain_result("❌ 权限不足：此命令仅限管理员或超级管理员使用。")
-            return
-
-        target_id = self._extract_group_id(event, args)
-        if not target_id:
-            yield event.plain_result(
-                "❌ 请指定要屏蔽的群组。\n"
-                "用法：\n"
-                "  /block_group <群组ID>\n"
-                "  /block_group（在当前群组中使用）"
-            )
-            return
-
-        success = self._core.access_control.add_blocked_group(target_id)
-        if success:
-            yield event.plain_result(f"✅ 已将群组 `{target_id}` 加入黑名单。")
-        else:
-            yield event.plain_result("❌ 操作失败，请稍后再试。")
-
-    async def handle_unblock_group(self, event: AstrMessageEvent, args: str = ""):
-        """处理 /unblock_group 命令（从黑名单移除群组）。"""
-        if not self._core:
-            yield event.plain_result("插件尚未就绪，请稍后再试。")
-            return
-
-        if not self._check_admin(event):
-            yield event.plain_result("❌ 权限不足：此命令仅限管理员或超级管理员使用。")
-            return
-
-        target_id = self._extract_group_id(event, args)
-        if not target_id:
-            yield event.plain_result(
-                "❌ 请指定要解除屏蔽的群组。\n"
-                "用法：\n"
-                "  /unblock_group <群组ID>"
-            )
-            return
-
-        success = self._core.access_control.remove_blocked_group(target_id)
-        if success:
-            yield event.plain_result(f"✅ 已将群组 `{target_id}` 从黑名单移除。")
-        else:
-            yield event.plain_result("❌ 操作失败，请稍后再试。")
-
-    # ============ 群组白名单命令 ============
-
-    async def handle_whitelist_group(self, event: AstrMessageEvent, args: str = ""):
-        """处理 /whitelist_group 命令（添加群组到白名单）。"""
-        if not self._core:
-            yield event.plain_result("插件尚未就绪，请稍后再试。")
-            return
-
-        if not self._check_admin(event):
-            yield event.plain_result("❌ 权限不足：此命令仅限管理员或超级管理员使用。")
-            return
-
-        target_id = self._extract_group_id(event, args)
-        if not target_id:
-            yield event.plain_result(
-                "❌ 请指定要添加的群组。\n"
-                "用法：\n"
-                "  /whitelist_group <群组ID>\n"
-                "  /whitelist_group（在当前群组中使用）"
-            )
-            return
-
-        success = self._core.access_control.add_whitelist_group(target_id)
-        if success:
-            yield event.plain_result(f"✅ 已将群组 `{target_id}` 加入白名单。")
-        else:
-            yield event.plain_result("❌ 操作失败，请稍后再试。")
-
-    async def handle_unwhitelist_group(self, event: AstrMessageEvent, args: str = ""):
-        """处理 /unwhitelist_group 命令（从白名单移除群组）。"""
-        if not self._core:
-            yield event.plain_result("插件尚未就绪，请稍后再试。")
-            return
-
-        if not self._check_admin(event):
-            yield event.plain_result("❌ 权限不足：此命令仅限管理员或超级管理员使用。")
-            return
-
-        target_id = self._extract_group_id(event, args)
-        if not target_id:
-            yield event.plain_result(
-                "❌ 请指定要移除的群组。\n"
-                "用法：\n"
-                "  /unwhitelist_group <群组ID>"
-            )
-            return
-
-        success = self._core.access_control.remove_whitelist_group(target_id)
-        if success:
-            yield event.plain_result(f"✅ 已将群组 `{target_id}` 从白名单移除。")
-        else:
-            yield event.plain_result("❌ 操作失败，请稍后再试。")
-
-    # ============ 色图功能级黑白名单命令 ============
-
-    async def handle_setu_block_user(self, event: AstrMessageEvent, args: str = ""):
-        """处理 /setu_block_user 命令（添加用户到色图黑名单）。"""
-        if not self._core:
-            yield event.plain_result("插件尚未就绪，请稍后再试。")
-            return
-
-        if not self._check_admin(event):
-            yield event.plain_result("❌ 权限不足：此命令仅限管理员或超级管理员使用。")
-            return
-
-        target_id = self._extract_target_id(event, args)
-        if not target_id:
-            yield event.plain_result(
-                "❌ 请指定要屏蔽的用户。\n"
-                "用法：\n"
-                "  /setu_block_user @用户名\n"
-                "  /setu_block_user <用户ID>"
-            )
-            return
-
-        success = self._core.access_control.add_setu_blocked_user(target_id)
-        if success:
-            yield event.plain_result(f"✅ 已将用户 `{target_id}` 加入色图黑名单。")
-        else:
-            yield event.plain_result("❌ 操作失败，请稍后再试。")
-
-    async def handle_setu_unblock_user(self, event: AstrMessageEvent, args: str = ""):
-        """处理 /setu_unblock_user 命令（从色图黑名单移除用户）。"""
-        if not self._core:
-            yield event.plain_result("插件尚未就绪，请稍后再试。")
-            return
-
-        if not self._check_admin(event):
-            yield event.plain_result("❌ 权限不足：此命令仅限管理员或超级管理员使用。")
-            return
-
-        target_id = self._extract_target_id(event, args)
-        if not target_id:
-            yield event.plain_result(
-                "❌ 请指定要解除屏蔽的用户。\n"
-                "用法：\n"
-                "  /setu_unblock_user @用户名\n"
-                "  /setu_unblock_user <用户ID>"
-            )
-            return
-
-        success = self._core.access_control.remove_setu_blocked_user(target_id)
-        if success:
-            yield event.plain_result(f"✅ 已将用户 `{target_id}` 从色图黑名单移除。")
-        else:
-            yield event.plain_result("❌ 操作失败，请稍后再试。")
-
-    async def handle_setu_whitelist_user(self, event: AstrMessageEvent, args: str = ""):
-        """处理 /setu_whitelist_user 命令（添加用户到色图白名单）。"""
-        if not self._core:
-            yield event.plain_result("插件尚未就绪，请稍后再试。")
-            return
-
-        if not self._check_admin(event):
-            yield event.plain_result("❌ 权限不足：此命令仅限管理员或超级管理员使用。")
-            return
-
-        target_id = self._extract_target_id(event, args)
-        if not target_id:
-            yield event.plain_result(
-                "❌ 请指定要添加的用户。\n"
-                "用法：\n"
-                "  /setu_whitelist_user @用户名\n"
-                "  /setu_whitelist_user <用户ID>"
-            )
-            return
-
-        success = self._core.access_control.add_setu_whitelist_user(target_id)
-        if success:
-            yield event.plain_result(f"✅ 已将用户 `{target_id}` 加入色图白名单。")
-        else:
-            yield event.plain_result("❌ 操作失败，请稍后再试。")
-
-    async def handle_setu_unwhitelist_user(self, event: AstrMessageEvent, args: str = ""):
-        """处理 /setu_unwhitelist_user 命令（从色图白名单移除用户）。"""
-        if not self._core:
-            yield event.plain_result("插件尚未就绪，请稍后再试。")
-            return
-
-        if not self._check_admin(event):
-            yield event.plain_result("❌ 权限不足：此命令仅限管理员或超级管理员使用。")
-            return
-
-        target_id = self._extract_target_id(event, args)
-        if not target_id:
-            yield event.plain_result(
-                "❌ 请指定要移除的用户。\n"
-                "用法：\n"
-                "  /setu_unwhitelist_user @用户名\n"
-                "  /setu_unwhitelist_user <用户ID>"
-            )
-            return
-
-        success = self._core.access_control.remove_setu_whitelist_user(target_id)
-        if success:
-            yield event.plain_result(f"✅ 已将用户 `{target_id}` 从色图白名单移除。")
-        else:
-            yield event.plain_result("❌ 操作失败，请稍后再试。")
-
-    async def handle_setu_block_group(self, event: AstrMessageEvent, args: str = ""):
-        """处理 /setu_block_group 命令（添加群组到色图黑名单）。"""
-        if not self._core:
-            yield event.plain_result("插件尚未就绪，请稍后再试。")
-            return
-
-        if not self._check_admin(event):
-            yield event.plain_result("❌ 权限不足：此命令仅限管理员或超级管理员使用。")
-            return
-
-        target_id = self._extract_group_id(event, args)
-        if not target_id:
-            yield event.plain_result(
-                "❌ 请指定要屏蔽的群组。\n"
-                "用法：\n"
-                "  /setu_block_group <群组ID>\n"
-                "  /setu_block_group（在当前群组中使用）"
-            )
-            return
-
-        success = self._core.access_control.add_setu_blocked_group(target_id)
-        if success:
-            yield event.plain_result(f"✅ 已将群组 `{target_id}` 加入色图黑名单。")
-        else:
-            yield event.plain_result("❌ 操作失败，请稍后再试。")
-
-    async def handle_setu_unblock_group(self, event: AstrMessageEvent, args: str = ""):
-        """处理 /setu_unblock_group 命令（从色图黑名单移除群组）。"""
-        if not self._core:
-            yield event.plain_result("插件尚未就绪，请稍后再试。")
-            return
-
-        if not self._check_admin(event):
-            yield event.plain_result("❌ 权限不足：此命令仅限管理员或超级管理员使用。")
-            return
-
-        target_id = self._extract_group_id(event, args)
-        if not target_id:
-            yield event.plain_result(
-                "❌ 请指定要解除屏蔽的群组。\n"
-                "用法：\n"
-                "  /setu_unblock_group <群组ID>"
-            )
-            return
-
-        success = self._core.access_control.remove_setu_blocked_group(target_id)
-        if success:
-            yield event.plain_result(f"✅ 已将群组 `{target_id}` 从色图黑名单移除。")
-        else:
-            yield event.plain_result("❌ 操作失败，请稍后再试。")
-
-    async def handle_setu_whitelist_group(self, event: AstrMessageEvent, args: str = ""):
-        """处理 /setu_whitelist_group 命令（添加群组到色图白名单）。"""
-        if not self._core:
-            yield event.plain_result("插件尚未就绪，请稍后再试。")
-            return
-
-        if not self._check_admin(event):
-            yield event.plain_result("❌ 权限不足：此命令仅限管理员或超级管理员使用。")
-            return
-
-        target_id = self._extract_group_id(event, args)
-        if not target_id:
-            yield event.plain_result(
-                "❌ 请指定要添加的群组。\n"
-                "用法：\n"
-                "  /setu_whitelist_group <群组ID>\n"
-                "  /setu_whitelist_group（在当前群组中使用）"
-            )
-            return
-
-        success = self._core.access_control.add_setu_whitelist_group(target_id)
-        if success:
-            yield event.plain_result(f"✅ 已将群组 `{target_id}` 加入色图白名单。")
-        else:
-            yield event.plain_result("❌ 操作失败，请稍后再试。")
-
-    async def handle_setu_unwhitelist_group(self, event: AstrMessageEvent, args: str = ""):
-        """处理 /setu_unwhitelist_group 命令（从色图白名单移除群组）。"""
-        if not self._core:
-            yield event.plain_result("插件尚未就绪，请稍后再试。")
-            return
-
-        if not self._check_admin(event):
-            yield event.plain_result("❌ 权限不足：此命令仅限管理员或超级管理员使用。")
-            return
-
-        target_id = self._extract_group_id(event, args)
-        if not target_id:
-            yield event.plain_result(
-                "❌ 请指定要移除的群组。\n"
-                "用法：\n"
-                "  /setu_unwhitelist_group <群组ID>"
-            )
-            return
-
-        success = self._core.access_control.remove_setu_whitelist_group(target_id)
-        if success:
-            yield event.plain_result(f"✅ 已将群组 `{target_id}` 从色图白名单移除。")
-        else:
-            yield event.plain_result("❌ 操作失败，请稍后再试。")
-
-    # ============ 今日运势功能级黑白名单命令 ============
-
-    async def handle_fortune_block_user(self, event: AstrMessageEvent, args: str = ""):
-        """处理 /fortune_block_user 命令（添加用户到今日运势黑名单）。"""
-        if not self._core:
-            yield event.plain_result("插件尚未就绪，请稍后再试。")
-            return
-
-        if not self._check_admin(event):
-            yield event.plain_result("❌ 权限不足：此命令仅限管理员或超级管理员使用。")
-            return
-
-        target_id = self._extract_target_id(event, args)
-        if not target_id:
-            yield event.plain_result(
-                "❌ 请指定要屏蔽的用户。\n"
-                "用法：\n"
-                "  /fortune_block_user @用户名\n"
-                "  /fortune_block_user <用户ID>"
-            )
-            return
-
-        success = self._core.access_control.add_fortune_blocked_user(target_id)
-        if success:
-            yield event.plain_result(f"✅ 已将用户 `{target_id}` 加入今日运势黑名单。")
-        else:
-            yield event.plain_result("❌ 操作失败，请稍后再试。")
-
-    async def handle_fortune_unblock_user(self, event: AstrMessageEvent, args: str = ""):
-        """处理 /fortune_unblock_user 命令（从今日运势黑名单移除用户）。"""
-        if not self._core:
-            yield event.plain_result("插件尚未就绪，请稍后再试。")
-            return
-
-        if not self._check_admin(event):
-            yield event.plain_result("❌ 权限不足：此命令仅限管理员或超级管理员使用。")
-            return
-
-        target_id = self._extract_target_id(event, args)
-        if not target_id:
-            yield event.plain_result(
-                "❌ 请指定要解除屏蔽的用户。\n"
-                "用法：\n"
-                "  /fortune_unblock_user @用户名\n"
-                "  /fortune_unblock_user <用户ID>"
-            )
-            return
-
-        success = self._core.access_control.remove_fortune_blocked_user(target_id)
-        if success:
-            yield event.plain_result(f"✅ 已将用户 `{target_id}` 从今日运势黑名单移除。")
-        else:
-            yield event.plain_result("❌ 操作失败，请稍后再试。")
-
-    async def handle_fortune_whitelist_user(self, event: AstrMessageEvent, args: str = ""):
-        """处理 /fortune_whitelist_user 命令（添加用户到今日运势白名单）。"""
-        if not self._core:
-            yield event.plain_result("插件尚未就绪，请稍后再试。")
-            return
-
-        if not self._check_admin(event):
-            yield event.plain_result("❌ 权限不足：此命令仅限管理员或超级管理员使用。")
-            return
-
-        target_id = self._extract_target_id(event, args)
-        if not target_id:
-            yield event.plain_result(
-                "❌ 请指定要添加的用户。\n"
-                "用法：\n"
-                "  /fortune_whitelist_user @用户名\n"
-                "  /fortune_whitelist_user <用户ID>"
-            )
-            return
-
-        success = self._core.access_control.add_fortune_whitelist_user(target_id)
-        if success:
-            yield event.plain_result(f"✅ 已将用户 `{target_id}` 加入今日运势白名单。")
-        else:
-            yield event.plain_result("❌ 操作失败，请稍后再试。")
-
-    async def handle_fortune_unwhitelist_user(self, event: AstrMessageEvent, args: str = ""):
-        """处理 /fortune_unwhitelist_user 命令（从今日运势白名单移除用户）。"""
-        if not self._core:
-            yield event.plain_result("插件尚未就绪，请稍后再试。")
-            return
-
-        if not self._check_admin(event):
-            yield event.plain_result("❌ 权限不足：此命令仅限管理员或超级管理员使用。")
-            return
-
-        target_id = self._extract_target_id(event, args)
-        if not target_id:
-            yield event.plain_result(
-                "❌ 请指定要移除的用户。\n"
-                "用法：\n"
-                "  /fortune_unwhitelist_user @用户名\n"
-                "  /fortune_unwhitelist_user <用户ID>"
-            )
-            return
-
-        success = self._core.access_control.remove_fortune_whitelist_user(target_id)
-        if success:
-            yield event.plain_result(f"✅ 已将用户 `{target_id}` 从今日运势白名单移除。")
-        else:
-            yield event.plain_result("❌ 操作失败，请稍后再试。")
-
-    async def handle_fortune_block_group(self, event: AstrMessageEvent, args: str = ""):
-        """处理 /fortune_block_group 命令（添加群组到今日运势黑名单）。"""
-        if not self._core:
-            yield event.plain_result("插件尚未就绪，请稍后再试。")
-            return
-
-        if not self._check_admin(event):
-            yield event.plain_result("❌ 权限不足：此命令仅限管理员或超级管理员使用。")
-            return
-
-        target_id = self._extract_group_id(event, args)
-        if not target_id:
-            yield event.plain_result(
-                "❌ 请指定要屏蔽的群组。\n"
-                "用法：\n"
-                "  /fortune_block_group <群组ID>\n"
-                "  /fortune_block_group（在当前群组中使用）"
-            )
-            return
-
-        success = self._core.access_control.add_fortune_blocked_group(target_id)
-        if success:
-            yield event.plain_result(f"✅ 已将群组 `{target_id}` 加入今日运势黑名单。")
-        else:
-            yield event.plain_result("❌ 操作失败，请稍后再试。")
-
-    async def handle_fortune_unblock_group(self, event: AstrMessageEvent, args: str = ""):
-        """处理 /fortune_unblock_group 命令（从今日运势黑名单移除群组）。"""
-        if not self._core:
-            yield event.plain_result("插件尚未就绪，请稍后再试。")
-            return
-
-        if not self._check_admin(event):
-            yield event.plain_result("❌ 权限不足：此命令仅限管理员或超级管理员使用。")
-            return
-
-        target_id = self._extract_group_id(event, args)
-        if not target_id:
-            yield event.plain_result(
-                "❌ 请指定要解除屏蔽的群组。\n"
-                "用法：\n"
-                "  /fortune_unblock_group <群组ID>"
-            )
-            return
-
-        success = self._core.access_control.remove_fortune_blocked_group(target_id)
-        if success:
-            yield event.plain_result(f"✅ 已将群组 `{target_id}` 从今日运势黑名单移除。")
-        else:
-            yield event.plain_result("❌ 操作失败，请稍后再试。")
-
-    async def handle_fortune_whitelist_group(self, event: AstrMessageEvent, args: str = ""):
-        """处理 /fortune_whitelist_group 命令（添加群组到今日运势白名单）。"""
-        if not self._core:
-            yield event.plain_result("插件尚未就绪，请稍后再试。")
-            return
-
-        if not self._check_admin(event):
-            yield event.plain_result("❌ 权限不足：此命令仅限管理员或超级管理员使用。")
-            return
-
-        target_id = self._extract_group_id(event, args)
-        if not target_id:
-            yield event.plain_result(
-                "❌ 请指定要添加的群组。\n"
-                "用法：\n"
-                "  /fortune_whitelist_group <群组ID>\n"
-                "  /fortune_whitelist_group（在当前群组中使用）"
-            )
-            return
-
-        success = self._core.access_control.add_fortune_whitelist_group(target_id)
-        if success:
-            yield event.plain_result(f"✅ 已将群组 `{target_id}` 加入今日运势白名单。")
-        else:
-            yield event.plain_result("❌ 操作失败，请稍后再试。")
-
-    async def handle_fortune_unwhitelist_group(self, event: AstrMessageEvent, args: str = ""):
-        """处理 /fortune_unwhitelist_group 命令（从今日运势白名单移除群组）。"""
-        if not self._core:
-            yield event.plain_result("插件尚未就绪，请稍后再试。")
-            return
-
-        if not self._check_admin(event):
-            yield event.plain_result("❌ 权限不足：此命令仅限管理员或超级管理员使用。")
-            return
-
-        target_id = self._extract_group_id(event, args)
-        if not target_id:
-            yield event.plain_result(
-                "❌ 请指定要移除的群组。\n"
-                "用法：\n"
-                "  /fortune_unwhitelist_group <群组ID>"
-            )
-            return
-
-        success = self._core.access_control.remove_fortune_whitelist_group(target_id)
-        if success:
-            yield event.plain_result(f"✅ 已将群组 `{target_id}` 从今日运势白名单移除。")
-        else:
-            yield event.plain_result("❌ 操作失败，请稍后再试。")

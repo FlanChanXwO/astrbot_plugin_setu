@@ -55,11 +55,19 @@ class SessionRequestLimiter:
                 )
                 return False
 
-            # 创建新锁并获取
             self._locks[key] = asyncio.Lock()
+            lock = self._locks[key]
 
-        # 在全局锁外获取用户锁，避免长时间持有全局锁
-        await self._locks[key].acquire()
+        try:
+            # 新锁理论上不会阻塞，但这里是可取消的 await 点
+            await lock.acquire()
+        except asyncio.CancelledError:
+            async with self._global_lock:
+                current = self._locks.get(key)
+                if current is lock:
+                    del self._locks[key]
+            raise
+
         logger.debug(
             "[rate_limit] Request acquired for user %s in session %s",
             user_id,

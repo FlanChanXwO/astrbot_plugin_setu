@@ -128,22 +128,13 @@ class FortuneCommandHandler:
 
     async def handle_fortune(self, event: AstrMessageEvent):
         """处理 /jrys 或 /今日运势 命令。"""
+        # 检查全局黑白名单和运势功能级黑名单
+        if self._core.is_group_blocked(event, feature="fortune"):
+            return
+
         user_id = event.get_sender_id()
         username = event.get_sender_name() or user_id
         group_id = event.get_group_id()
-
-        # 检查全局黑白名单
-        is_blocked, reason = self._core.access_control.check_global_access(
-            user_id, group_id, self._core._config.access_control_mode
-        )
-        if is_blocked:
-            logger.debug("[fortune] Access denied by global: %s", reason)
-            return
-
-        # 检查运势独立的群组黑名单
-        if group_id and self._core.access_control.is_fortune_group_blocked(str(group_id)):
-            logger.debug("[fortune] Access denied: fortune group blocked")
-            return
 
         # 获取今日运势数据
         fortune = await self._fortune_core.get_today_fortune(

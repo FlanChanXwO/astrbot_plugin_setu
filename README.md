@@ -250,6 +250,7 @@
   "whitelist_users": [],
   "blocked_groups": [],
   "whitelist_groups": [],
+  "setu_blocked_groups": [],
   "fortune_blocked_groups": []
 }
 ```
@@ -259,17 +260,19 @@
 - `whitelist_users`: 全局白名单用户（仅白名单用户可用）
 - `blocked_groups`: 全局黑名单群组（所有功能都禁用）
 - `whitelist_groups`: 全局白名单群组（仅在白名单中的群组可用）
+- `setu_blocked_groups`: 色图独立黑名单（仅禁用色图，运势仍可用）
 - `fortune_blocked_groups`: 运势独立黑名单（仅禁用运势，色图仍可用）
 
 **访问控制优先级**：
 
 1. 检查用户黑名单（最高优先级）
 2. 检查用户白名单（如果配置了白名单）
-3. 检查功能级群组黑名单（仅运势有此独立控制）
+3. 检查功能级群组黑名单（`setu_blocked_groups` 或 `fortune_blocked_groups`）
 4. 检查全局群组黑白名单
 
 **使用场景示例**：
 - 某用户违规：将其加入黑名单，所有功能都禁用
+- 某群只想禁用色图但保留运势：`/关闭色图`
 - 某群只想禁用运势但保留色图：`/关闭运势`
 - 仅限白名单用户使用：配置 `whitelist_users` 后只有白名单用户可用
 
