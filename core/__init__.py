@@ -337,8 +337,14 @@ class SetuCore(RevokeTaskMixin, SendWithRevokeMixin):
                     )
                     return True
             else:
-                # 没有指定功能类型，不进行检查
-                logger.debug("No feature specified, skipping access control check")
+                # 失败关闭：未指定/非法 feature 时，避免静默绕过访问控制。
+                logger.warning(
+                    "[access_control] Missing or invalid feature=%s, deny by default (user=%s, group=%s)",
+                    feature,
+                    user_id,
+                    group_id,
+                )
+                return True
 
         except AttributeError:
             logger.debug("failed to inspect user/group id for blocked check")

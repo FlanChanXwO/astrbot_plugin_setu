@@ -103,15 +103,25 @@ class CommandHandler:
                 # URL 模式：获取 URL 并直接发送
                 provider = self._core._get_provider()
                 if provider:
-                    img_urls = await asyncio.wait_for(
-                        provider.fetch_image_urls(
-                            num=num,
-                            tags=tags,
-                            r18=is_r18,
-                            exclude_ai=self._config.exclude_ai,
-                        ),
-                        timeout=60.0,
-                    )
+                    try:
+                        img_urls = await asyncio.wait_for(
+                            provider.fetch_image_urls(
+                                num=num,
+                                tags=tags,
+                                r18=is_r18,
+                                exclude_ai=self._config.exclude_ai,
+                            ),
+                            timeout=60.0,
+                        )
+                    except asyncio.TimeoutError:
+                        logger.warning(
+                            "url mode fetch_image_urls timeout (>60s), tags=%s, r18=%s",
+                            tags,
+                            is_r18,
+                        )
+                        yield event.plain_result("图片获取超时，请稍后重试。")
+                        return
+
                     async for result in self._core.send_images_by_url(
                         event, img_urls, is_r18, tags
                     ):
@@ -200,15 +210,25 @@ class CommandHandler:
             if self._config.url_send_mode:
                 provider = self._core._get_provider()
                 if provider:
-                    img_urls = await asyncio.wait_for(
-                        provider.fetch_image_urls(
-                            num=num,
-                            tags=parsed_tags,
-                            r18=is_r18,
-                            exclude_ai=self._config.exclude_ai,
-                        ),
-                        timeout=60.0,
-                    )
+                    try:
+                        img_urls = await asyncio.wait_for(
+                            provider.fetch_image_urls(
+                                num=num,
+                                tags=parsed_tags,
+                                r18=is_r18,
+                                exclude_ai=self._config.exclude_ai,
+                            ),
+                            timeout=60.0,
+                        )
+                    except asyncio.TimeoutError:
+                        logger.warning(
+                            "url mode fetch_image_urls timeout (>60s), tags=%s, r18=%s",
+                            parsed_tags,
+                            is_r18,
+                        )
+                        yield event.plain_result("图片获取超时，请稍后重试。")
+                        return
+
                     async for result in self._core.send_images_by_url(
                         event, img_urls, is_r18, parsed_tags
                     ):
@@ -557,7 +577,9 @@ class CommandHandler:
 
         success = self._core.access_control.remove_setu_blocked_user(target_id)
         if success:
-            yield event.plain_result(f"✅ 已将用户 `{target_id}` 从色图功能黑名单移除。")
+            yield event.plain_result(
+                f"✅ 已将用户 `{target_id}` 从色图功能黑名单移除。"
+            )
         else:
             yield event.plain_result("❌ 操作失败，请稍后再试。")
 
@@ -589,7 +611,9 @@ class CommandHandler:
         else:
             yield event.plain_result("❌ 操作失败，请稍后再试。")
 
-    async def handle_fortune_unblock_user(self, event: AstrMessageEvent, args: str = ""):
+    async def handle_fortune_unblock_user(
+        self, event: AstrMessageEvent, args: str = ""
+    ):
         """处理 /解除运势拉黑 命令（AT某人从Fortune黑名单移除）。"""
         if not self._core:
             yield event.plain_result("插件尚未就绪，请稍后再试。")
@@ -608,7 +632,9 @@ class CommandHandler:
 
         success = self._core.access_control.remove_fortune_blocked_user(target_id)
         if success:
-            yield event.plain_result(f"✅ 已将用户 `{target_id}` 从运势功能黑名单移除。")
+            yield event.plain_result(
+                f"✅ 已将用户 `{target_id}` 从运势功能黑名单移除。"
+            )
         else:
             yield event.plain_result("❌ 操作失败，请稍后再试。")
 
@@ -654,7 +680,9 @@ class CommandHandler:
 
         success = self._core.access_control.remove_setu_whitelist_user(target_id)
         if success:
-            yield event.plain_result(f"✅ 已将用户 `{target_id}` 从色图功能白名单移除。")
+            yield event.plain_result(
+                f"✅ 已将用户 `{target_id}` 从色图功能白名单移除。"
+            )
         else:
             yield event.plain_result("❌ 操作失败，请稍后再试。")
 
@@ -681,7 +709,9 @@ class CommandHandler:
         else:
             yield event.plain_result("❌ 操作失败，请稍后再试。")
 
-    async def handle_fortune_untrust_user(self, event: AstrMessageEvent, args: str = ""):
+    async def handle_fortune_untrust_user(
+        self, event: AstrMessageEvent, args: str = ""
+    ):
         """处理 /取消运势信任 命令（AT某人从Fortune白名单移除）。"""
         if not self._core:
             yield event.plain_result("插件尚未就绪，请稍后再试。")
@@ -700,7 +730,9 @@ class CommandHandler:
 
         success = self._core.access_control.remove_fortune_whitelist_user(target_id)
         if success:
-            yield event.plain_result(f"✅ 已将用户 `{target_id}` 从运势功能白名单移除。")
+            yield event.plain_result(
+                f"✅ 已将用户 `{target_id}` 从运势功能白名单移除。"
+            )
         else:
             yield event.plain_result("❌ 操作失败，请稍后再试。")
 
@@ -804,4 +836,3 @@ class CommandHandler:
                 if target not in ("all", "0"):
                     return target
         return None
-

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -60,6 +61,10 @@ class ConfigManager:
         self._config_file = plugin_data_dir / "config.json"
         self._cache: dict[str, Any] = {}
         self._astrbot_config = astrbot_config
+        self._main_config_cache: dict[str, Any] | None = None
+        self._main_config_cache_mtime: float | None = None
+        self._main_config_cache_path: Path | None = None
+        self._main_config_cache_lock = threading.Lock()
 
     async def initialize(self) -> None:
         """初始化，加载现有配置。"""
@@ -99,6 +104,13 @@ class ConfigManager:
             logger.error("Failed to save config file: %s", e)
             return False
 
+    def _invalidate_main_config_cache(self) -> None:
+        """失效主配置缓存。"""
+        with self._main_config_cache_lock:
+            self._main_config_cache = None
+            self._main_config_cache_mtime = None
+            self._main_config_cache_path = None
+
     def _iter_main_config_candidates(self) -> list[Path]:
         """构造可能的主配置文件路径候选。"""
         config_file_name = "astrbot_plugin_setu_config.json"
@@ -112,59 +124,96 @@ class ConfigManager:
         )
         return candidates
 
-    def _get_safety_value_from_file(self, key: str) -> Any:
-        """从主配置文件读取单个 safety 配置值。"""
+    def _load_main_config_with_cache(self) -> dict[str, Any] | None:
+        """加载主配置并基于 mtime 进行缓存。"""
+        config_path: Path | None = None
+        for candidate in self._iter_main_config_candidates():
+            if candidate.is_file():
+                config_path = candidate
+                break
+
+        if config_path is None:
+            return None
+
         try:
-            for config_file in self._iter_main_config_candidates():
-                if not config_file.exists():
-                    continue
+            mtime = config_path.stat().st_mtime
+        except OSError:
+            return None
+
+        with self._main_config_cache_lock:
+            if (
+                self._main_config_cache_path == config_path
+                and self._main_config_cache_mtime == mtime
+                and self._main_config_cache is not None
+            ):
+                return self._main_config_cache
+
+            try:
                 # AstrBot 主配置在 Windows 上可能带 BOM，使用 utf-8-sig 兼容读取。
-                with open(config_file, encoding="utf-8-sig") as f:
-                    config = json.load(f)
-                safety_config = config.get("safety", {})
-                if not isinstance(safety_config, dict):
-                    continue
+                with open(config_path, encoding="utf-8-sig") as f:
+                    data = json.load(f)
+            except (OSError, json.JSONDecodeError) as e:
+                logger.warning("Failed to load main config %s: %s", config_path, e)
+                return None
 
-                # 兼容旧键：请求新键时可回退到旧键。
-                if key not in safety_config:
-                    if (
-                        key
-                        in (
-                            "setu_user_access_control_mode",
-                            "setu_group_access_control_mode",
-                        )
-                        and "setu_access_control_mode" in safety_config
-                    ):
-                        value = safety_config["setu_access_control_mode"]
-                    elif (
-                        key
-                        in (
-                            "fortune_user_access_control_mode",
-                            "fortune_group_access_control_mode",
-                        )
-                        and "fortune_access_control_mode" in safety_config
-                    ):
-                        value = safety_config["fortune_access_control_mode"]
-                    else:
-                        continue
-                else:
-                    value = safety_config[key]
+            if not isinstance(data, dict):
+                return None
 
-                if key in self.SAFETY_LIST_KEYS:
-                    if not isinstance(value, list):
-                        return []
-                    return [str(v).strip() for v in value if str(v).strip()]
+            self._main_config_cache = data
+            self._main_config_cache_mtime = mtime
+            self._main_config_cache_path = config_path
+            return data
 
-                if key in self.SAFETY_MODE_KEYS:
-                    return (
-                        value if value in {"none", "blacklist", "whitelist"} else None
-                    )
+    def _get_safety_section(self) -> dict[str, Any] | None:
+        """从主配置中获取 safety 配置段（带缓存）。"""
+        main_cfg = self._load_main_config_with_cache()
+        if not main_cfg:
+            return None
+        safety = main_cfg.get("safety")
+        if not isinstance(safety, dict):
+            return None
+        return safety
 
-                return value
-        except Exception:
-            pass
+    def _get_safety_value_from_file(self, key: str, default: Any = None) -> Any:
+        """从主配置文件读取单个 safety 配置值（带缓存）。"""
+        safety_config = self._get_safety_section()
+        if safety_config is None:
+            return default
 
-        return None
+        # 兼容旧键：请求新键时可回退到旧键。
+        if key not in safety_config:
+            if (
+                key
+                in (
+                    "setu_user_access_control_mode",
+                    "setu_group_access_control_mode",
+                )
+                and "setu_access_control_mode" in safety_config
+            ):
+                value = safety_config["setu_access_control_mode"]
+            elif (
+                key
+                in (
+                    "fortune_user_access_control_mode",
+                    "fortune_group_access_control_mode",
+                )
+                and "fortune_access_control_mode" in safety_config
+            ):
+                value = safety_config["fortune_access_control_mode"]
+            else:
+                return default
+        else:
+            value = safety_config[key]
+
+        if key in self.SAFETY_LIST_KEYS:
+            if not isinstance(value, list):
+                return []
+            return [str(v).strip() for v in value if str(v).strip()]
+
+        if key in self.SAFETY_MODE_KEYS:
+            return value if value in {"none", "blacklist", "whitelist"} else default
+
+        return value
 
     def _sync_to_astrbot_config(self) -> None:
         """将本地配置同步到 AstrBot 配置供 webui 显示。
@@ -213,6 +262,7 @@ class ConfigManager:
                 and callable(getattr(self._astrbot_config, "save_config"))
             ):
                 self._astrbot_config.save_config()
+                self._invalidate_main_config_cache()
                 logger.debug(
                     "[config_manager] Synced config to AstrBot safety (top-level) and saved"
                 )
@@ -290,16 +340,12 @@ class ConfigManager:
             return False
 
     def get(self, key: str, default: Any = None) -> Any:
-        """获取配置值。
-
-        安全配置优先从主配置文件读取（webui 持久化来源），避免内存配置滞后。
-        """
+        """获取配置值。"""
         if key in self.SAFETY_LIST_KEYS or key in self.SAFETY_MODE_KEYS:
-            file_value = self._get_safety_value_from_file(key)
+            file_value = self._get_safety_value_from_file(key, None)
             if file_value is not None:
                 return file_value
 
-            # 回退到 webui/AstrBotConfig 当前值。
             if self._astrbot_config is not None:
                 try:
                     safety_config = self._astrbot_config.get("safety", {})
@@ -308,65 +354,18 @@ class ConfigManager:
                 except Exception:
                     pass
 
-        # 访问控制模式：兜底从配置文件读取
-        if key in self.SAFETY_MODE_KEYS:
-            return self._get_access_control_mode_from_file(
-                key, self._cache.get(key, default)
-            )
+            if key in self._cache:
+                return self._cache[key]
+            return default
 
-        # 本地缓存
         if key in self._cache:
             return self._cache[key]
 
         return default
 
     def _get_access_control_mode_from_file(self, key: str, default: Any = None) -> Any:
-        """从配置文件读取访问控制模式。"""
-        try:
-            for config_file in self._iter_main_config_candidates():
-                if not config_file.exists():
-                    continue
-                # AstrBot 主配置在 Windows 上可能带 BOM，使用 utf-8-sig 兼容读取。
-                with open(config_file, encoding="utf-8-sig") as f:
-                    config = json.load(f)
-                safety_config = config.get("safety", {})
-                if not isinstance(safety_config, dict):
-                    continue
-                if key in safety_config:
-                    return safety_config[key]
-
-                # 兼容旧键
-                if (
-                    key
-                    in (
-                        "setu_user_access_control_mode",
-                        "setu_group_access_control_mode",
-                    )
-                    and "setu_access_control_mode" in safety_config
-                ):
-                    return safety_config["setu_access_control_mode"]
-                if (
-                    key
-                    in (
-                        "fortune_user_access_control_mode",
-                        "fortune_group_access_control_mode",
-                    )
-                    and "fortune_access_control_mode" in safety_config
-                ):
-                    return safety_config["fortune_access_control_mode"]
-        except Exception:
-            pass
-
-        # 回退：尝试从 AstrBotConfig 读取
-        if self._astrbot_config is not None:
-            try:
-                safety_config = self._astrbot_config.get("safety", {})
-                if isinstance(safety_config, dict) and key in safety_config:
-                    return safety_config[key]
-            except Exception:
-                pass
-
-        return default
+        """兼容方法：访问控制模式读取统一复用 safety 读取路径。"""
+        return self._get_safety_value_from_file(key, default)
 
     def set(self, key: str, value: Any) -> bool:
         """设置配置值。"""

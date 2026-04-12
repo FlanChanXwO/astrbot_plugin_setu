@@ -55,9 +55,8 @@ class SessionRequestLimiter:
                 )
                 return False
 
-            # 先登记，若中途取消会在异常分支回滚
-            lock = asyncio.Lock()
-            self._locks[key] = lock
+            self._locks[key] = asyncio.Lock()
+            lock = self._locks[key]
 
         try:
             # 新锁理论上不会阻塞，但这里是可取消的 await 点
