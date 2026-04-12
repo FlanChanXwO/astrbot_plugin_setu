@@ -325,21 +325,27 @@ class SetuPlugin(Star):
     async def disable_setu_group_command(self, event, args: str = ""):
         """处理 /关闭色图 命令（在当前群组关闭色图）。"""
         if self._cmd_handler:
-            async for result in self._cmd_handler.handle_disable_setu_group(event, args):
+            async for result in self._cmd_handler.handle_disable_setu_group(
+                event, args
+            ):
                 yield result
 
     @filter.command("开启运势")
     async def enable_fortune_group_command(self, event, args: str = ""):
         """处理 /开启运势 命令（在当前群组开启运势）。"""
         if self._cmd_handler:
-            async for result in self._cmd_handler.handle_enable_fortune_group(event, args):
+            async for result in self._cmd_handler.handle_enable_fortune_group(
+                event, args
+            ):
                 yield result
 
     @filter.command("关闭运势")
     async def disable_fortune_group_command(self, event, args: str = ""):
         """处理 /关闭运势 命令（在当前群组关闭运势）。"""
         if self._cmd_handler:
-            async for result in self._cmd_handler.handle_disable_fortune_group(event, args):
+            async for result in self._cmd_handler.handle_disable_fortune_group(
+                event, args
+            ):
                 yield result
 
     # ----- 色图功能用户黑白名单 -----
