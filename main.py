@@ -8,6 +8,7 @@ HTML 卡片包装、LLM 工具调用、以及自定义 API 支持。
 from __future__ import annotations
 
 from pathlib import Path
+from typing import AsyncGenerator, Any
 
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, StarTools
@@ -232,6 +233,21 @@ class SetuPlugin(Star):
                 return comp.text.strip().startswith("/")
         return False
 
+    def _mark_event_handled(self, event: AstrMessageEvent, key: str) -> bool:
+        """Mark a plugin flow as handled for this event."""
+        extra_key = f"setu_{key}_handled"
+        if event.get_extra(extra_key):
+            return False
+        event.set_extra(extra_key, True)
+        return True
+
+    async def _run_fortune(self, event: AstrMessageEvent) -> AsyncGenerator[Any, None]:
+        if not self._mark_event_handled(event, "fortune"):
+            return
+        if self._fortune_manager and self._fortune_manager.cmd_handler:
+            async for result in self._fortune_manager.cmd_handler.handle_fortune(event):
+                yield result
+
     # ==================== Setu 命令 ====================
 
     @filter.regex(COMMAND_PATTERN)
@@ -265,16 +281,14 @@ class SetuPlugin(Star):
         # Avoid duplicate handling when user sends /今日运势 or /jrys.
         if self._is_explicit_slash_command(event):
             return
-        if self._fortune_manager and self._fortune_manager.cmd_handler:
-            async for result in self._fortune_manager.cmd_handler.handle_fortune(event):
-                yield result
+        async for result in self._run_fortune(event):
+            yield result
 
     @filter.command(command_name="今日运势", alias={"jrys"})
     async def fortune_command(self, event):
         """处理今日运势命令 (/今日运势, /jrys)。"""
-        if self._fortune_manager and self._fortune_manager.cmd_handler:
-            async for result in self._fortune_manager.cmd_handler.handle_fortune(event):
-                yield result
+        async for result in self._run_fortune(event):
+            yield result
 
     @filter.command("刷新今日运势", alias={"刷新jrys", "flush_jrys"})
     async def refresh_fortune_command(self, event):
