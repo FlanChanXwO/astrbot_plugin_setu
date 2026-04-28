@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from astrbot.api import logger
 
-from ..constants import DEFAULT_TAG_ALIAS
+from ..domain import DEFAULT_TAG_ALIAS
 from .helpers import safe_bool, safe_int
 
 if TYPE_CHECKING:

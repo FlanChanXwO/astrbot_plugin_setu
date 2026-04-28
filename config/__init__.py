@@ -14,6 +14,8 @@ from .helpers import parse_count
 from .html_card import HtmlCardConfigMixin
 from .messages import MessagesConfigMixin
 from .safety import SafetyConfigMixin
+from .session import SessionConfigManager
+from .session_base import SessionConfigBase
 
 
 class SetuConfig(
@@ -45,4 +47,4 @@ class SetuConfig(
         super().__init__(config)
 
 
-__all__ = ["SetuConfig", "parse_count"]
+__all__ = ["SetuConfig", "parse_count", "SessionConfigManager", "SessionConfigBase"]

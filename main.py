@@ -7,8 +7,9 @@ HTML 卡片包装、LLM 工具调用、以及自定义 API 支持。
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 from pathlib import Path
-from typing import AsyncGenerator, Any
+from typing import Any
 
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, StarTools
@@ -17,10 +18,10 @@ from astrbot.core.message.components import Plain
 from astrbot.core.provider.register import llm_tools
 
 from .config import SetuConfig
-from .constants import COMMAND_PATTERN, FORTUNE_PATTERN
 from .core import SetuCore
-from .fortune import FortuneManager
-from .handlers import CommandHandler, LlmHandlers
+from .domain import COMMAND_PATTERN, FORTUNE_PATTERN
+from .services.fortune import FortuneManager
+from .services.setu import CommandHandler, LlmHandlers
 
 
 class SetuPlugin(Star):
@@ -241,6 +242,15 @@ class SetuPlugin(Star):
         event.set_extra(extra_key, True)
         return True
 
+    def _should_skip_fortune_regex(self, event: AstrMessageEvent) -> bool:
+        if self._is_explicit_slash_command(event):
+            return True
+        if getattr(event, "is_at_or_wake_command", False):
+            message_text = event.get_message_str().strip()
+            if message_text in {"今日运势", "jrys"}:
+                return True
+        return False
+
     async def _run_fortune(self, event: AstrMessageEvent) -> AsyncGenerator[Any, None]:
         if not self._mark_event_handled(event, "fortune"):
             return
@@ -278,8 +288,7 @@ class SetuPlugin(Star):
     @filter.regex(FORTUNE_PATTERN)
     async def fortune_regex(self, event):
         """处理纯文本今日运势触发（今日运势, jrys）。"""
-        # Avoid duplicate handling when user sends /今日运势 or /jrys.
-        if self._is_explicit_slash_command(event):
+        if self._should_skip_fortune_regex(event):
             return
         async for result in self._run_fortune(event):
             yield result
