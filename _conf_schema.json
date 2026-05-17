@@ -84,24 +84,12 @@
                 "hint": "发送 R18 内容后多久自动撤回，默认 30 秒。",
                 "default": 30
             },
-            "url_send_mode": {
-                "type": "bool",
-                "description": "URL 发送模式",
-                "hint": "开启后直接发送图片 URL 而不是下载后发送。可显著降低服务器带宽和内存占用，图片由客户端直接加载。",
-                "default": false
-            },
-            "url_send_verify": {
-                "type": "bool",
-                "description": "验证 URL 有效性",
-                "hint": "发送前检查图片 URL 是否可访问（返回 200）。建议开启以避免发送失效链接。",
-                "default": true
-            },
-            "url_send_timeout": {
-                "type": "int",
-                "description": "URL 验证超时(秒)",
-                "hint": "验证 URL 时的 HTTP 请求超时时间。默认 5 秒。",
-                "default": 5,
-                "slider": {"min": 2, "max": 10, "step": 1}
+            "napcat_stream_mode": {
+                "type": "string",
+                "description": "NapCat 流式上传",
+                "hint": "disabled=不用流式上传，fallback=普通发送失败后流式重试，always=发送前优先流式上传。",
+                "default": "fallback",
+                "options": ["disabled", "fallback", "always"]
             }
         }
     },
@@ -186,14 +174,14 @@
         }
     },
     "cache": {
-        "description": "图片缓存",
+        "description": "发送缓存",
         "type": "object",
-        "hint": "简单的基于 URL 键值的本地图片缓存，带索引文件。",
+        "hint": "图片会先流式下载到插件数据目录，再从本地文件发送，避免 original 大图进入内存。",
         "items": {
             "enabled": {
                 "type": "bool",
                 "description": "启用缓存",
-                "hint": "通过 URL 缓存图片以减少重复下载。",
+                "hint": "开启后复用未过期的本地发送缓存；关闭后仍会落盘发送，但不复用旧文件。",
                 "default": true
             },
             "ttl_hours": {
@@ -544,103 +532,6 @@
                 "description": "下载超时时间(秒)",
                 "hint": "单个图片下载的最大超时时间。默认 30 秒，网络慢可适当增加。",
                 "default": 30
-            }
-        }
-    },
-    "session_configs": {
-        "type": "template_list",
-        "description": "会话级配置覆盖",
-        "hint": "为特定群聊或私聊设置独立配置，优先于全局配置。可通过命令 /setu_config 在会话中设置。",
-        "default": [],
-        "obvious_hint": true,
-        "templates": {
-            "session_template": {
-                "name": "会话配置",
-                "hint": "一个群聊或私聊的独立配置",
-                "items": {
-                    "session_id": {
-                        "type": "string",
-                        "description": "会话 ID",
-                        "hint": "群号或用户 ID",
-                        "default": ""
-                    },
-                    "session_type": {
-                        "type": "string",
-                        "description": "会话类型",
-                        "hint": "group=群聊，private=私聊",
-                        "default": "group",
-                        "options": ["group", "private"]
-                    },
-                    "content_mode": {
-                        "type": "string",
-                        "description": "内容模式",
-                        "hint": "覆盖全局内容模式设置",
-                        "default": "",
-                        "options": ["", "sfw", "r18", "mix"]
-                    },
-                    "r18_docx_mode": {
-                        "type": "string",
-                        "description": "R18 Docx 打包模式",
-                        "hint": "覆盖全局 R18 Docx 打包设置",
-                        "default": "",
-                        "options": ["", "enabled", "disabled"]
-                    },
-                    "auto_revoke_r18": {
-                        "type": "string",
-                        "description": "R18 自动撤回",
-                        "hint": "覆盖全局自动撤回设置",
-                        "default": "",
-                        "options": ["", "enabled", "disabled"]
-                    },
-                    "send_mode": {
-                        "type": "string",
-                        "description": "发送模式",
-                        "hint": "覆盖全局发送模式设置",
-                        "default": "",
-                        "options": ["", "image", "forward", "auto"]
-                    }
-                }
-            }
-        }
-    },
-    "fortune_session_configs": {
-        "type": "template_list",
-        "description": "今日运势会话配置覆盖",
-        "hint": "为特定群聊或私聊设置独立的今日运势配置。可通过命令 /jrys_config 在会话中设置。",
-        "default": [],
-        "obvious_hint": true,
-        "templates": {
-            "fortune_session_template": {
-                "name": "今日运势会话配置",
-                "hint": "一个群聊或私聊的今日运势独立配置",
-                "items": {
-                    "session_id": {
-                        "type": "string",
-                        "description": "会话 ID",
-                        "hint": "群号或用户 ID",
-                        "default": ""
-                    },
-                    "session_type": {
-                        "type": "string",
-                        "description": "会话类型",
-                        "hint": "group=群聊，private=私聊",
-                        "default": "group",
-                        "options": ["group", "private"]
-                    },
-                    "tags": {
-                        "type": "string",
-                        "description": "标签",
-                        "hint": "获取今日运势图片时的标签，如 '少女,可爱'",
-                        "default": ""
-                    },
-                    "content_mode": {
-                        "type": "string",
-                        "description": "内容模式",
-                        "hint": "覆盖全局内容模式设置",
-                        "default": "",
-                        "options": ["", "sfw", "r18", "mix"]
-                    }
-                }
             }
         }
     }

@@ -1,0 +1,403 @@
+"""Setu command handler - all Setu-related commands."""
+
+from __future__ import annotations
+
+import asyncio
+import random
+import re
+import time
+from collections.abc import AsyncGenerator
+from typing import Any
+
+from astrbot.api.event import AstrMessageEvent
+from astrbot.core.provider.register import llm_tools
+
+from ....application.session_config import SessionConfigService
+from ....application.setu.get_images import GetSetuImagesUseCase
+from ....domain.access_control import AccessPolicy
+from ....domain.access_control.service import AccessControlService
+from ....domain.setu import SetuRequest
+from ....shared import get_logger
+from ... import get_access_control_repo, get_provider
+from ...persistence import get_session_config_repo
+from ..config import get_config
+from ..session_identity import get_event_session_identity
+from ...providers import init_provider_from_config
+
+logger = get_logger()
+
+# Regex pattern directly in decorator (not in constants)
+SETU_REGEX_PATTERN = r"^/?(来\s*(.*?)(份|个|张|点))(.*?)(?:福利|色|瑟|涩|塞)?图$"
+
+
+class RateLimiter:
+    """Simple rate limiter to prevent concurrent requests from same user."""
+
+    MAX_LOCKS = 1000
+    LOCK_TTL = 120  # Auto-release locks after 120s
+
+    def __init__(self) -> None:
+        self._locks: dict[str, asyncio.Lock] = {}
+        self._lock_times: dict[str, float] = {}
+
+    async def acquire(self, event: AstrMessageEvent) -> bool:
+        """Acquire lock for event. Returns True if acquired, False if already processing."""
+        key = f"user:{event.get_sender_id()}"
+        lock = self._locks.setdefault(key, asyncio.Lock())
+
+        # Auto-release stale locks (safety net for leaked locks)
+        if lock.locked():
+            acquire_time = self._lock_times.get(key, 0)
+            if time.monotonic() - acquire_time > self.LOCK_TTL:
+                try:
+                    lock.release()
+                except RuntimeError:
+                    pass
+
+        if lock.locked():
+            return False
+        await lock.acquire()
+        self._lock_times[key] = time.monotonic()
+        return True
+
+    async def release(self, event: AstrMessageEvent) -> None:
+        """Release lock for event and evict stale entries."""
+        key = f"user:{event.get_sender_id()}"
+        if key in self._locks:
+            self._locks[key].release()
+            self._lock_times.pop(key, None)
+        if len(self._locks) > self.MAX_LOCKS:
+            stale = [k for k, v in self._locks.items() if not v.locked()]
+            for k in stale[: len(stale) // 2]:
+                del self._locks[k]
+                self._lock_times.pop(k, None)
+
+
+# Module-level rate limiter singleton
+_rate_limiter = RateLimiter()
+
+
+class SetuCommandHandler:
+    """Handles all Setu-related commands.
+
+    Uses singleton pattern for config, provider, and access control repo.
+    Commands are auto-registered by AstrBot decorators.
+    """
+
+    # ==================== Command Handlers ====================
+
+    async def get_random_picture(
+        self, event: AstrMessageEvent
+    ) -> AsyncGenerator[Any, None]:
+        """Handle natural language setu requests (regex trigger)."""
+        if not await _rate_limiter.acquire(event):
+            yield event.plain_result("你有一个请求正在处理中，请稍后再试~")
+            return
+
+        try:
+            async for result in self._handle_random_picture_internal(event):
+                yield result
+        finally:
+            await _rate_limiter.release(event)
+
+    async def _handle_random_picture_internal(
+        self, event: AstrMessageEvent
+    ) -> AsyncGenerator[Any, None]:
+        """Internal handler for regex-triggered setu requests."""
+        config = get_config()
+        if not config:
+            yield event.plain_result("配置未加载")
+            return
+
+        match = re.match(SETU_REGEX_PATTERN, event.message_str.strip())
+        if not match:
+            return
+
+        has_perm, msg = await self._check_access(event, config)
+        if not has_perm:
+            yield event.plain_result(msg)
+            return
+
+        num_str = match.group(2)
+        num = self._parse_count(num_str)
+        max_count = config.max_count or 10
+
+        if num < 1 or num > max_count:
+            if num == -1:
+                yield event.plain_result(
+                    f"数量解析失败，图片数量必须在1-{max_count}之间"
+                )
+            elif num > max_count:
+                yield event.plain_result(f"一次最多只能获取{max_count}张哦~")
+            else:
+                yield event.plain_result(f"图片数量必须在1-{max_count}之间哦~")
+            return
+
+        tag_str = match.group(4).strip()
+        tags = tag_str.replace(",", " ").split() if tag_str else []
+
+        effective_mode = await self._get_effective_content_mode(event)
+        is_r18 = self._mode_requires_r18(effective_mode)
+
+        try:
+            async for result in self._fetch_and_send_images(
+                event, num, tags, is_r18, config
+            ):
+                yield result
+        except asyncio.TimeoutError:
+            logger.warning("get_random_picture timeout (>60s)")
+            yield event.plain_result("获取图片超时，网络可能不稳定，请稍后再试。")
+        except Exception:
+            logger.exception("get_random_picture failed")
+            yield event.plain_result("获取图片失败，请稍后再试")
+
+    async def setu_command(
+        self, event: AstrMessageEvent, count: str = "1", *, tags: str = ""
+    ) -> AsyncGenerator[Any, None]:
+        """Handle /setu command.
+
+        Usage: /setu [count] [tags...]
+        Example: /setu 3 girl cute
+        """
+        if not await _rate_limiter.acquire(event):
+            yield event.plain_result("你有一个请求正在处理中，请稍后再试~")
+            return
+
+        try:
+            async for result in self._handle_setu_command_internal(event, count, tags):
+                yield result
+        finally:
+            await _rate_limiter.release(event)
+
+    async def _handle_setu_command_internal(
+        self, event: AstrMessageEvent, count: str, tags: str
+    ) -> AsyncGenerator[Any, None]:
+        """Internal handler for /setu command."""
+        config = get_config()
+        if not config:
+            yield event.plain_result("配置未加载")
+            return
+
+        has_perm, msg = await self._check_access(event, config)
+        if not has_perm:
+            yield event.plain_result(msg)
+            return
+
+        max_count = config.max_count or 10
+        num = self._parse_count(count)
+        extra_tag = ""
+
+        if num == -1:
+            num = 1
+            extra_tag = count
+
+        all_tags = tags
+        if extra_tag:
+            all_tags = f"{extra_tag} {all_tags}".strip()
+
+        if num > max_count:
+            yield event.plain_result(f"一次最多只能获取{max_count}张哦~")
+            return
+
+        parsed_tags = [t.strip() for t in all_tags.split() if t.strip()]
+
+        effective_mode = await self._get_effective_content_mode(event)
+        is_r18 = self._mode_requires_r18(effective_mode)
+
+        try:
+            async for result in self._fetch_and_send_images(
+                event, num, parsed_tags, is_r18, config
+            ):
+                yield result
+        except asyncio.TimeoutError:
+            logger.warning("setu command timeout (>60s)")
+            yield event.plain_result("获取图片超时，网络可能不稳定，请稍后再试。")
+        except Exception:
+            logger.exception("setu command failed")
+            yield event.plain_result("获取图片失败，网络或服务异常，请稍后再试。")
+
+    # ==================== LLM Tool Handlers ====================
+
+    async def _llm_get_setu_handler(
+        self, event: AstrMessageEvent, count: int = 1, tags: list[str] | None = None
+    ) -> str:
+        """LLM tool handler for getting Setu images."""
+        config = get_config()
+        if not config:
+            return "配置未加载"
+
+        has_perm, msg = await self._check_access(event, config)
+        if not has_perm:
+            return msg
+
+        try:
+            init_provider_from_config(config)
+            provider = get_provider()
+            effective_mode = await self._get_effective_content_mode(event)
+            request = SetuRequest.from_user_input(
+                count=count,
+                tags=tags or [],
+                r18=self._mode_requires_r18(effective_mode),
+                exclude_ai=config.exclude_ai,
+            )
+            payload = await provider.fetch_and_download(request)
+            from ...sending import ImageSender
+
+            sender = ImageSender(config, logger)
+            async for _ in sender.send_images(payload, event):
+                pass
+            return f"Successfully fetched {payload.count} images"
+        except Exception:
+            return "获取图片失败，请稍后再试"
+
+    # ==================== Helper Methods ====================
+
+    async def _check_access(self, event: AstrMessageEvent, config) -> tuple[bool, str]:
+        """Check if user/group has access to Setu feature."""
+        repo = get_access_control_repo()
+        user_id = event.get_sender_id()
+        group_id = event.get_group_id()
+        policy = AccessPolicy.for_session(
+            user_id=user_id,
+            group_id=group_id,
+            user_mode=config.setu_user_access_control_mode,
+            group_mode=config.setu_group_access_control_mode,
+        )
+        return await AccessControlService(repo).check_setu_access(policy)
+
+    async def _fetch_and_send_images(
+        self, event: AstrMessageEvent, num: int, tags: list[str], is_r18: bool, config
+    ) -> AsyncGenerator[Any, None]:
+        """Fetch images and send to user."""
+        init_provider_from_config(config)
+        provider = get_provider()
+        use_case = GetSetuImagesUseCase(provider)
+
+        try:
+            result = await use_case.execute(num, tags, is_r18)
+        except asyncio.TimeoutError:
+            logger.warning("image fetch timeout (>60s)")
+            yield event.plain_result("获取图片超时，网络可能不稳定，请稍后再试。")
+            return
+
+        if result.notice:
+            yield event.plain_result(result.notice)
+            return
+
+        payload = result.payload
+        if payload is None:
+            yield event.plain_result("未找到符合要求的图片~")
+            return
+
+        from ...sending import ImageSender
+
+        sender = ImageSender(config, logger)
+        async for send_result in sender.send_images(payload, event):
+            yield send_result
+
+    async def _get_effective_content_mode(self, event: AstrMessageEvent) -> str:
+        """Get effective content mode for session."""
+        config = get_config()
+        global_mode = (config.content_mode if config else None) or "sfw"
+        try:
+            identity = get_event_session_identity(event)
+            service = SessionConfigService(get_session_config_repo())
+            value = await service.get_effective_value(
+                identity.session_id,
+                "setu.content_mode",
+                identity.session_type,
+                identity.display_name,
+            )
+            return str(value)
+        except Exception as exc:
+            logger.debug("Failed to read session content mode: %s", exc)
+            return global_mode
+
+    @staticmethod
+    def _mode_requires_r18(mode: str) -> bool:
+        """Resolve content mode to the provider R18 flag."""
+        if mode == "r18":
+            return True
+        if mode == "mix":
+            return random.random() > 0.5
+        return False
+
+    def _parse_count(self, count_str: str) -> int:
+        """Parse count from string, handling Chinese numbers."""
+        if not count_str:
+            return 1
+
+        try:
+            return int(count_str)
+        except ValueError:
+            pass
+
+        chinese_nums = {
+            "一": 1,
+            "二": 2,
+            "三": 3,
+            "四": 4,
+            "五": 5,
+            "六": 6,
+            "七": 7,
+            "八": 8,
+            "九": 9,
+            "十": 10,
+        }
+        if count_str in chinese_nums:
+            return chinese_nums[count_str]
+
+        if count_str.startswith("十"):
+            if len(count_str) == 1:
+                return 10
+            try:
+                return 10 + int(count_str[1])
+            except ValueError:
+                return 10
+
+        return -1
+
+
+# ==================== LLM Tools Registration ====================
+
+
+def register_llm_tools() -> None:
+    """Register Setu LLM tools."""
+    _handler = SetuCommandHandler()
+    tools = [
+        (
+            "get_setu_image",
+            _handler._llm_get_setu_handler,
+            [
+                {
+                    "name": "count",
+                    "type": "integer",
+                    "description": "Number of images.",
+                },
+                {"name": "tags", "type": "array", "items": {"type": "string"}},
+            ],
+            "Fetch random anime images.",
+        ),
+    ]
+
+    for name, handler, args, desc in tools:
+        try:
+            llm_tools.add_func(name=name, func_args=args, desc=desc, handler=handler)
+            tool = llm_tools.get_func(name)
+            if tool:
+                tool.handler_module_path = __name__
+        except (AttributeError, RuntimeError):
+            pass
+
+
+def unregister_llm_tools() -> None:
+    """Unregister Setu LLM tools."""
+    tool_names = [
+        "get_setu_image",
+    ]
+
+    for name in tool_names:
+        try:
+            llm_tools.remove_func(name)
+        except (AttributeError, RuntimeError):
+            pass
