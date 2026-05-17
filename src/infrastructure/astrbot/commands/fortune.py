@@ -44,7 +44,7 @@ class FortuneCommandHandler:
         """Handle /今日运势 command (/今日运势, /jrys)."""
         config = get_config()
         if not config:
-            yield event.result("配置未加载")
+            yield event.result(self._message("fortune_config_not_loaded"))
             return
 
         has_perm, msg = await self._check_access(event, config)
@@ -60,7 +60,7 @@ class FortuneCommandHandler:
             result = await service.get_or_create_fortune(request)
             yield event.result(self._format_fortune(result))
         except Exception as e:
-            yield event.result(f"获取运势失败: {e}")
+            yield event.result(self._message("fortune_get_failed", error=e))
 
     async def refresh_fortune_command(
         self, event: AstrMessageEvent
@@ -73,7 +73,7 @@ class FortuneCommandHandler:
 
         config = get_config()
         if not config:
-            yield event.result("配置未加载")
+            yield event.result(self._message("fortune_config_not_loaded"))
             return
 
         request = self._build_fortune_request(event)
@@ -84,7 +84,7 @@ class FortuneCommandHandler:
             result = await service.refresh_fortune(request)
             yield event.result(self._format_fortune(result))
         except Exception as e:
-            yield event.result(f"刷新运势失败: {e}")
+            yield event.result(self._message("fortune_refresh_failed", error=e))
 
     async def refresh_group_fortune_command(
         self, event: AstrMessageEvent
@@ -97,21 +97,23 @@ class FortuneCommandHandler:
 
         group_id = event.get_group_id()
         if not group_id:
-            yield event.result("此命令仅支持群聊")
+            yield event.result(self._message("fortune_group_only"))
             return
 
         config = get_config()
         if not config:
-            yield event.result("配置未加载")
+            yield event.result(self._message("fortune_config_not_loaded"))
             return
 
         try:
             repo = get_fortune_repo()
             service = FortuneService(repo=repo)
             refreshed_count = await service.pregenerate_active_users()
-            yield event.result(f"已刷新本群 {refreshed_count} 位用户的今日运势")
+            yield event.result(
+                self._message("fortune_refresh_group_done", count=refreshed_count)
+            )
         except Exception as e:
-            yield event.result(f"刷新群运势失败: {e}")
+            yield event.result(self._message("fortune_refresh_group_failed", error=e))
 
     async def refresh_all_fortune_command(
         self, event: AstrMessageEvent
@@ -124,16 +126,18 @@ class FortuneCommandHandler:
 
         config = get_config()
         if not config:
-            yield event.result("配置未加载")
+            yield event.result(self._message("fortune_config_not_loaded"))
             return
 
         try:
             repo = get_fortune_repo()
             service = FortuneService(repo=repo)
             refreshed_count = await service.pregenerate_active_users()
-            yield event.result(f"已刷新全局 {refreshed_count} 位用户的今日运势")
+            yield event.result(
+                self._message("fortune_refresh_all_done", count=refreshed_count)
+            )
         except Exception as e:
-            yield event.result(f"刷新全局运势失败: {e}")
+            yield event.result(self._message("fortune_refresh_all_failed", error=e))
 
     async def enable_fortune_group_command(
         self, event: AstrMessageEvent, args: str = ""
@@ -146,12 +150,12 @@ class FortuneCommandHandler:
 
         group_id = event.get_group_id()
         if not group_id:
-            yield event.result("此命令仅支持群聊")
+            yield event.result(self._message("fortune_group_only"))
             return
 
         repo = get_access_control_repo()
         await repo.remove_fortune_blocked_group(str(group_id))
-        yield event.result("运势功能已开启")
+        yield event.result(self._message("fortune_enabled_group_done"))
 
     async def disable_fortune_group_command(
         self, event: AstrMessageEvent, args: str = ""
@@ -164,12 +168,12 @@ class FortuneCommandHandler:
 
         group_id = event.get_group_id()
         if not group_id:
-            yield event.result("此命令仅支持群聊")
+            yield event.result(self._message("fortune_group_only"))
             return
 
         repo = get_access_control_repo()
         await repo.add_fortune_blocked_group(str(group_id))
-        yield event.result("运势功能已关闭")
+        yield event.result(self._message("fortune_disabled_group_done"))
 
     async def block_fortune_user_command(
         self, event: AstrMessageEvent, args: str = ""
@@ -182,12 +186,12 @@ class FortuneCommandHandler:
 
         target_id = args.strip() or event.get_sender_id()
         if not target_id:
-            yield event.result("请指定用户ID")
+            yield event.result(self._message("fortune_missing_user_id"))
             return
 
         repo = get_access_control_repo()
         await repo.add_fortune_blocked_user(str(target_id))
-        yield event.result(f"用户 {target_id} 已添加到运势黑名单")
+        yield event.result(self._message("fortune_block_user_done", user_id=target_id))
 
     async def unblock_fortune_user_command(
         self, event: AstrMessageEvent, args: str = ""
@@ -200,12 +204,14 @@ class FortuneCommandHandler:
 
         target_id = args.strip()
         if not target_id:
-            yield event.result("请指定用户ID")
+            yield event.result(self._message("fortune_missing_user_id"))
             return
 
         repo = get_access_control_repo()
         await repo.remove_fortune_blocked_user(str(target_id))
-        yield event.result(f"用户 {target_id} 已从运势黑名单移除")
+        yield event.result(
+            self._message("fortune_unblock_user_done", user_id=target_id)
+        )
 
     async def trust_fortune_user_command(
         self, event: AstrMessageEvent, args: str = ""
@@ -218,12 +224,12 @@ class FortuneCommandHandler:
 
         target_id = args.strip() or event.get_sender_id()
         if not target_id:
-            yield event.result("请指定用户ID")
+            yield event.result(self._message("fortune_missing_user_id"))
             return
 
         repo = get_access_control_repo()
         await repo.add_fortune_whitelist_user(str(target_id))
-        yield event.result(f"用户 {target_id} 已添加到运势白名单")
+        yield event.result(self._message("fortune_trust_user_done", user_id=target_id))
 
     async def untrust_fortune_user_command(
         self, event: AstrMessageEvent, args: str = ""
@@ -236,12 +242,14 @@ class FortuneCommandHandler:
 
         target_id = args.strip()
         if not target_id:
-            yield event.result("请指定用户ID")
+            yield event.result(self._message("fortune_missing_user_id"))
             return
 
         repo = get_access_control_repo()
         await repo.remove_fortune_whitelist_user(str(target_id))
-        yield event.result(f"用户 {target_id} 已从运势白名单移除")
+        yield event.result(
+            self._message("fortune_untrust_user_done", user_id=target_id)
+        )
 
     # ==================== LLM Tool Handlers ====================
 
@@ -249,7 +257,7 @@ class FortuneCommandHandler:
         """LLM tool handler for getting today's fortune."""
         config = get_config()
         if not config:
-            return "配置未加载"
+            return self._message("fortune_config_not_loaded")
 
         has_perm, msg = await self._check_access(event, config)
         if not has_perm:
@@ -263,7 +271,7 @@ class FortuneCommandHandler:
             result = await service.get_or_create_fortune(request)
             return f"今日运势: {result.title}, 星级: {result.star_count}/{result.max_stars}"
         except Exception as e:
-            return f"获取运势失败: {e}"
+            return self._message("fortune_get_failed", error=e)
 
     async def _llm_refresh_fortune(self, event: AstrMessageEvent) -> str:
         """LLM tool handler for refreshing today's fortune."""
@@ -273,7 +281,7 @@ class FortuneCommandHandler:
 
         config = get_config()
         if not config:
-            return "配置未加载"
+            return self._message("fortune_config_not_loaded")
 
         request = self._build_fortune_request(event)
 
@@ -283,7 +291,7 @@ class FortuneCommandHandler:
             result = await service.refresh_fortune(request)
             return f"今日运势已刷新: {result.title}"
         except Exception as e:
-            return f"刷新运势失败: {e}"
+            return self._message("fortune_refresh_failed", error=e)
 
     async def _llm_refresh_group_fortune(self, event: AstrMessageEvent) -> str:
         """LLM tool handler for refreshing group fortunes."""
@@ -293,19 +301,19 @@ class FortuneCommandHandler:
 
         group_id = event.get_group_id()
         if not group_id:
-            return "此命令仅支持群聊"
+            return self._message("fortune_group_only")
 
         config = get_config()
         if not config:
-            return "配置未加载"
+            return self._message("fortune_config_not_loaded")
 
         try:
             repo = get_fortune_repo()
             service = FortuneService(repo=repo)
             refreshed_count = await service.pregenerate_active_users()
-            return f"已刷新本群 {refreshed_count} 位用户的今日运势"
+            return self._message("fortune_refresh_group_done", count=refreshed_count)
         except Exception as e:
-            return f"刷新群运势失败: {e}"
+            return self._message("fortune_refresh_group_failed", error=e)
 
     async def _llm_refresh_all_fortune(self, event: AstrMessageEvent) -> str:
         """LLM tool handler for refreshing all fortunes."""
@@ -315,15 +323,15 @@ class FortuneCommandHandler:
 
         config = get_config()
         if not config:
-            return "配置未加载"
+            return self._message("fortune_config_not_loaded")
 
         try:
             repo = get_fortune_repo()
             service = FortuneService(repo=repo)
             refreshed_count = await service.pregenerate_active_users()
-            return f"已刷新全局 {refreshed_count} 位用户的今日运势"
+            return self._message("fortune_refresh_all_done", count=refreshed_count)
         except Exception as e:
-            return f"刷新全局运势失败: {e}"
+            return self._message("fortune_refresh_all_failed", error=e)
 
     # ==================== Helper Methods ====================
 
@@ -373,6 +381,34 @@ class FortuneCommandHandler:
             f"⭐ {'★' * result.star_count}{'☆' * (result.max_stars - result.star_count)}\n"
             f"💬 {result.description}"
         )
+
+    def _message(self, key: str, **kwargs: Any) -> str:
+        config = get_config()
+        if config and hasattr(config, "resolve_message"):
+            text = config.resolve_message(key, **kwargs)
+            if text:
+                return text
+        defaults = {
+            "fortune_config_not_loaded": "配置未加载",
+            "fortune_group_only": "此命令仅支持群聊",
+            "fortune_missing_user_id": "请指定用户ID",
+            "fortune_get_failed": "获取运势失败: {error}",
+            "fortune_refresh_failed": "刷新运势失败: {error}",
+            "fortune_refresh_group_failed": "刷新群运势失败: {error}",
+            "fortune_refresh_all_failed": "刷新全局运势失败: {error}",
+            "fortune_refresh_group_done": "已刷新本群 {count} 位用户的今日运势",
+            "fortune_refresh_all_done": "已刷新全局 {count} 位用户的今日运势",
+            "fortune_enabled_group_done": "运势功能已开启",
+            "fortune_disabled_group_done": "运势功能已关闭",
+            "fortune_block_user_done": "用户 {user_id} 已添加到运势黑名单",
+            "fortune_unblock_user_done": "用户 {user_id} 已从运势黑名单移除",
+            "fortune_trust_user_done": "用户 {user_id} 已添加到运势白名单",
+            "fortune_untrust_user_done": "用户 {user_id} 已从运势白名单移除",
+        }
+        msg = defaults.get(key, "")
+        for k, v in kwargs.items():
+            msg = msg.replace(f"{{{k}}}", str(v))
+        return msg
 
 
 # ==================== LLM Tools Registration ====================

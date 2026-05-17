@@ -395,6 +395,12 @@
                 "type": "object",
                 "hint": "图片最终发送失败时的提示消息。",
                 "items": {
+                    "enabled": {
+                        "type": "bool",
+                        "description": "启用该提示",
+                        "hint": "是否发送此提示消息。",
+                        "default": true
+                    },
                     "text": {
                         "type": "string",
                         "description": "提示文本",
@@ -402,6 +408,102 @@
                         "default": "图片发送失败，请稍后再试。"
                     }
                 }
+            },
+            "rate_limited": {
+                "description": "并发限流提示",
+                "type": "object",
+                "items": {
+                    "enabled": {"type": "bool", "description": "启用该提示", "default": true},
+                    "text": {"type": "string", "description": "提示文本", "default": "你有一个请求正在处理中，请稍后再试~"}
+                }
+            },
+            "config_not_loaded": {
+                "description": "配置未加载提示",
+                "type": "object",
+                "items": {
+                    "enabled": {"type": "bool", "description": "启用该提示", "default": true},
+                    "text": {"type": "string", "description": "提示文本", "default": "配置未加载"}
+                }
+            },
+            "invalid_count": {
+                "description": "数量解析失败提示",
+                "type": "object",
+                "items": {
+                    "enabled": {"type": "bool", "description": "启用该提示", "default": true},
+                    "text": {"type": "string", "description": "提示文本", "hint": "{min_count}/{max_count} 占位符可用。", "default": "数量解析失败，图片数量必须在{min_count}-{max_count}之间"}
+                }
+            },
+            "max_count_exceeded": {
+                "description": "超出上限提示",
+                "type": "object",
+                "items": {
+                    "enabled": {"type": "bool", "description": "启用该提示", "default": true},
+                    "text": {"type": "string", "description": "提示文本", "hint": "{max_count} 占位符可用。", "default": "一次最多只能获取{max_count}张哦~"}
+                }
+            },
+            "count_out_of_range": {
+                "description": "数量越界提示",
+                "type": "object",
+                "items": {
+                    "enabled": {"type": "bool", "description": "启用该提示", "default": true},
+                    "text": {"type": "string", "description": "提示文本", "hint": "{min_count}/{max_count} 占位符可用。", "default": "图片数量必须在{min_count}-{max_count}之间哦~"}
+                }
+            },
+            "fetch_timeout": {
+                "description": "获取超时提示",
+                "type": "object",
+                "items": {
+                    "enabled": {"type": "bool", "description": "启用该提示", "default": true},
+                    "text": {"type": "string", "description": "提示文本", "default": "获取图片超时，网络可能不稳定，请稍后再试。"}
+                }
+            },
+            "fetch_failed": {
+                "description": "获取失败提示",
+                "type": "object",
+                "items": {
+                    "enabled": {"type": "bool", "description": "启用该提示", "default": true},
+                    "text": {"type": "string", "description": "提示文本", "default": "获取图片失败，请稍后再试"}
+                }
+            },
+            "no_result": {
+                "description": "无结果提示",
+                "type": "object",
+                "items": {
+                    "enabled": {"type": "bool", "description": "启用该提示", "default": true},
+                    "text": {"type": "string", "description": "提示文本", "hint": "{tags_info} 占位符可用。", "default": "未找到{tags_info}符合要求的图片~"}
+                }
+            },
+            "empty_payload": {
+                "description": "空负载提示",
+                "type": "object",
+                "items": {
+                    "enabled": {"type": "bool", "description": "启用该提示", "default": true},
+                    "text": {"type": "string", "description": "提示文本", "default": "运气不好，一张图都没拿到..."}
+                }
+            },
+            "r18_docx_failed": {
+                "description": "R18 Docx 封装失败提示",
+                "type": "object",
+                "items": {
+                    "enabled": {"type": "bool", "description": "启用该提示", "default": true},
+                    "text": {"type": "string", "description": "提示文本", "default": "R18 Docx 封装失败，请稍后再试或联系管理员。"}
+                }
+            },
+            "fortune_config_not_loaded": {"description": "运势配置未加载提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "default": "配置未加载"}}},
+            "fortune_group_only": {"description": "运势群聊限制提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "default": "此命令仅支持群聊"}}},
+            "fortune_missing_user_id": {"description": "运势用户ID缺失提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "default": "请指定用户ID"}}},
+            "fortune_get_failed": {"description": "运势获取失败提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "hint": "{error} 占位符可用。", "default": "获取运势失败: {error}"}}},
+            "fortune_refresh_failed": {"description": "运势刷新失败提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "hint": "{error} 占位符可用。", "default": "刷新运势失败: {error}"}}},
+            "fortune_refresh_group_failed": {"description": "群运势刷新失败提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "hint": "{error} 占位符可用。", "default": "刷新群运势失败: {error}"}}},
+            "fortune_refresh_all_failed": {"description": "全局运势刷新失败提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "hint": "{error} 占位符可用。", "default": "刷新全局运势失败: {error}"}}},
+            "fortune_refresh_group_done": {"description": "群运势刷新成功提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "hint": "{count} 占位符可用。", "default": "已刷新本群 {count} 位用户的今日运势"}}},
+            "fortune_refresh_all_done": {"description": "全局运势刷新成功提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "hint": "{count} 占位符可用。", "default": "已刷新全局 {count} 位用户的今日运势"}}},
+            "fortune_enabled_group_done": {"description": "开启运势成功提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "default": "运势功能已开启"}}},
+            "fortune_disabled_group_done": {"description": "关闭运势成功提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "default": "运势功能已关闭"}}},
+            "fortune_block_user_done": {"description": "运势黑名单添加成功提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "hint": "{user_id} 占位符可用。", "default": "用户 {user_id} 已添加到运势黑名单"}}},
+            "fortune_unblock_user_done": {"description": "运势黑名单移除成功提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "hint": "{user_id} 占位符可用。", "default": "用户 {user_id} 已从运势黑名单移除"}}},
+            "fortune_trust_user_done": {"description": "运势白名单添加成功提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "hint": "{user_id} 占位符可用。", "default": "用户 {user_id} 已添加到运势白名单"}}},
+            "fortune_untrust_user_done": {"description": "运势白名单移除成功提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "hint": "{user_id} 占位符可用。", "default": "用户 {user_id} 已从运势白名单移除"}}}
             }
         }
     },

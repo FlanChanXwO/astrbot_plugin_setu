@@ -195,7 +195,7 @@ def sample_config_dict() -> dict[str, Any]:
         "messages": {
             "fetching": {"enabled": True, "text": "正在获取图片，请稍候..."},
             "found": {"enabled": True, "text": "找到 {count} 张符合要求的图片~"},
-            "send_failed": {"text": "图片发送失败，请稍后再试。"},
+            "send_failed": {"enabled": True, "text": "图片发送失败，请稍后再试。"},
         },
         "safety": {
             "setu_user_access_control_mode": "none",

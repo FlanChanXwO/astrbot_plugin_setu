@@ -120,7 +120,9 @@ class ImageSender:
                 ",".join(payload.tags) or "-",
                 len(payload.urls),
             )
-            yield event.plain_result("运气不好，一张图都没拿到...")
+            empty_message = self._resolve_message("empty_payload")
+            if empty_message:
+                yield event.plain_result(empty_message)
             return
 
         if payload.r18 and options.r18_docx_mode:
@@ -154,7 +156,9 @@ class ImageSender:
                 event, chain, options, payload.r18
             )
             if not success:
-                yield event.plain_result(self._send_failed_message())
+                fail_message = self._send_failed_message()
+                if fail_message:
+                    yield event.plain_result(fail_message)
             else:
                 yield {"send_success": True, "image_count": payload.count}
             schedule_send_cache_cleanup()
@@ -226,7 +230,9 @@ class ImageSender:
                 options.html_card_strategy,
                 options.napcat_stream_mode,
             )
-            yield event.plain_result(self._send_failed_message())
+            fail_message = self._send_failed_message()
+            if fail_message:
+                yield event.plain_result(fail_message)
         else:
             self._log.info(
                 "[send] completed: session=%s, count=%d, mode=%s",
@@ -338,7 +344,9 @@ class ImageSender:
                 [Comp.File(file=str(docx_path), name=docx_path.name)]
             )
         else:
-            yield event.plain_result("R18 Docx 封装失败，请稍后再试或联系管理员。")
+            docx_failed_message = self._resolve_message("r18_docx_failed")
+            if docx_failed_message:
+                yield event.plain_result(docx_failed_message)
 
     async def _try_html_card_fallback(
         self,
@@ -571,17 +579,26 @@ class ImageSender:
     ) -> str | None:
         """Format found message with optional revoke delay."""
         config = self._config
+        if config and not getattr(config, "msg_found_enabled", True):
+            return None
         if config and hasattr(config, "format_found_message"):
             return config.format_found_message(count, revoke_delay)
         if revoke_delay and revoke_delay > 0:
             return f"找到 {count} 张图，将在 {revoke_delay} 秒后撤回"
         return f"找到 {count} 张图"
 
-    def _send_failed_message(self) -> str:
+    def _send_failed_message(self) -> str | None:
         config = self._config
-        if config and getattr(config, "msg_send_failed_text", None):
-            return str(config.msg_send_failed_text)
+        if config and hasattr(config, "resolve_message"):
+            return config.resolve_message("send_failed")
         return "图片发送失败，请稍后再试。"
+
+    def _resolve_message(self, key: str, **kwargs: Any) -> str | None:
+        """Resolve configured message text with graceful fallback."""
+        config = self._config
+        if config and hasattr(config, "resolve_message"):
+            return config.resolve_message(key, **kwargs)
+        return None
 
     def _log_send_summary(
         self,
