@@ -119,16 +119,22 @@ class DirectSendStrategy(SendStrategy):
     ) -> bool:
         platform_name = getattr(getattr(event, "platform", None), "name", "") or ""
         return "aiocqhttp" in platform_name.lower() and any(
-            self._is_onebot_image_ref(comp) for comp in chain if isinstance(comp, Comp.Image)
+            self._is_onebot_image_ref(comp)
+            for comp in chain
+            if isinstance(comp, Comp.Image)
         )
 
     def _is_onebot_image_ref(self, comp: Comp.Image) -> bool:
         file_value = getattr(comp, "file", None)
-        return isinstance(file_value, str) and "://" in file_value and not (
-            file_value.startswith("file:///")
-            or file_value.startswith("http://")
-            or file_value.startswith("https://")
-            or file_value.startswith("base64://")
+        return (
+            isinstance(file_value, str)
+            and "://" in file_value
+            and not (
+                file_value.startswith("file:///")
+                or file_value.startswith("http://")
+                or file_value.startswith("https://")
+                or file_value.startswith("base64://")
+            )
         )
 
     async def _send_onebot_image_chain(

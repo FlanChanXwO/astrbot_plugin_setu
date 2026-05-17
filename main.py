@@ -136,9 +136,7 @@ def _resolve_fortune_toggle_action(event: AstrMessageEvent, args: str) -> str:
     raise ValueError("用法：/运势开关 <开|关>")
 
 
-def _resolve_fortune_user_action(
-    event: AstrMessageEvent, args: str
-) -> tuple[str, str]:
+def _resolve_fortune_user_action(event: AstrMessageEvent, args: str) -> tuple[str, str]:
     command = _get_invoked_command(event)
     if command in FORTUNE_USER_COMMANDS:
         return FORTUNE_USER_COMMANDS[command], args

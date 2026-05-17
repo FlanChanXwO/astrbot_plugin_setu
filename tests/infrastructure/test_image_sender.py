@@ -57,7 +57,11 @@ async def test_send_images_streams_on_fallback(
     async def call_action(action: str, **params: Any) -> dict[str, Any]:
         assert action == "upload_file_stream"
         if params.get("is_complete"):
-            return {"status": "ok", "retcode": 0, "data": {"file_path": "stream://image"}}
+            return {
+                "status": "ok",
+                "retcode": 0,
+                "data": {"file_path": "stream://image"},
+            }
         return {"status": "ok", "retcode": 0, "data": {}}
 
     mock_event.bot.call_action = AsyncMock(side_effect=call_action)
@@ -72,7 +76,9 @@ async def test_send_images_streams_on_fallback(
         tags=(),
     )
 
-    results = [item async for item in ImageSender(config).send_images(payload, mock_event)]
+    results = [
+        item async for item in ImageSender(config).send_images(payload, mock_event)
+    ]
 
     assert results == [{"send_success": True, "image_count": 1}]
     assert len(sent_results) == 3
@@ -99,7 +105,10 @@ async def test_send_images_materializes_local_files_before_direct_send(
     set_plugin_context(context)
 
     config_dict = sample_config_dict.copy()
-    config_dict["delivery"] = {**sample_config_dict["delivery"], "napcat_stream_mode": "disabled"}
+    config_dict["delivery"] = {
+        **sample_config_dict["delivery"],
+        "napcat_stream_mode": "disabled",
+    }
     config = SetuPluginConfig(**config_dict)
     payload = ImagePayload(
         urls=(),
@@ -110,7 +119,9 @@ async def test_send_images_materializes_local_files_before_direct_send(
         tags=(),
     )
 
-    results = [item async for item in ImageSender(config).send_images(payload, mock_event)]
+    results = [
+        item async for item in ImageSender(config).send_images(payload, mock_event)
+    ]
 
     assert results == [{"send_success": True, "image_count": 1}]
     image_comp = sent_results[-1].result_chain[0]

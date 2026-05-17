@@ -87,7 +87,9 @@ async def upload_file_stream(
     """Upload one local file through NapCat's stream action."""
     bot_client = _get_bot_client(event)
     if not bot_client or not _supports_call_action(bot_client):
-        logger.debug("[send] NapCat stream unavailable: missing bot call_action support")
+        logger.debug(
+            "[send] NapCat stream unavailable: missing bot call_action support"
+        )
         return None
 
     path = Path(file_path)

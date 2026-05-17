@@ -194,7 +194,9 @@ class SetuImageProvider:
             netloc = proxy_host
         else:
             netloc = proxy_host
-        return urlunsplit((parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment))
+        return urlunsplit(
+            (parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment)
+        )
 
     def _apply_proxy_to_urls(
         self, urls: list[str], proxy: str | None, provider_name: str
@@ -203,7 +205,9 @@ class SetuImageProvider:
             return urls
 
         rewritten = [self._apply_proxy_to_url(url, proxy) for url in urls]
-        changed = sum(1 for old, new in zip(urls, rewritten, strict=False) if old != new)
+        changed = sum(
+            1 for old, new in zip(urls, rewritten, strict=False) if old != new
+        )
         if changed:
             logger.info(
                 "[provider] proxy rewritten: provider=%s, proxy=%s, changed=%d",

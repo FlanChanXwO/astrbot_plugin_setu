@@ -381,7 +381,9 @@ class ImageSender:
                 chain.append(Comp.Image.fromFileSystem(str(item)))
         return chain
 
-    async def _read_image_bytes(self, images: tuple[ImageItem, ...]) -> tuple[bytes, ...]:
+    async def _read_image_bytes(
+        self, images: tuple[ImageItem, ...]
+    ) -> tuple[bytes, ...]:
         """Materialize image items as bytes for DOCX/HTML-only paths."""
         result: list[bytes] = []
         for item in images:

@@ -12,7 +12,9 @@ async def test_initialize_uses_plugin_config_not_context_config(
     monkeypatch, sample_config_dict
 ) -> None:
     context = MagicMock()
-    context.get_config.return_value = {"api": {"lolicon": {"proxy": "wrong.example.com"}}}
+    context.get_config.return_value = {
+        "api": {"lolicon": {"proxy": "wrong.example.com"}}
+    }
     config = MagicMock()
     config.items.return_value = sample_config_dict.items()
 
@@ -44,17 +46,36 @@ async def test_initialize_uses_plugin_config_not_context_config(
         )
 
     monkeypatch.setattr("astrbot_plugin_setu.main.init_config", fake_init_config)
-    monkeypatch.setattr("astrbot_plugin_setu.main.set_plugin_context", lambda _ctx: None)
-    monkeypatch.setattr("astrbot_plugin_setu.main.StarTools.get_data_dir", lambda _name: "/tmp")
-    monkeypatch.setattr("astrbot_plugin_setu.main.init_provider_from_config", lambda _cfg: None)
-    monkeypatch.setattr("astrbot_plugin_setu.main.init_access_control_repo", AsyncMock())
+    monkeypatch.setattr(
+        "astrbot_plugin_setu.main.set_plugin_context", lambda _ctx: None
+    )
+    monkeypatch.setattr(
+        "astrbot_plugin_setu.main.StarTools.get_data_dir", lambda _name: "/tmp"
+    )
+    monkeypatch.setattr(
+        "astrbot_plugin_setu.main.init_provider_from_config", lambda _cfg: None
+    )
+    monkeypatch.setattr(
+        "astrbot_plugin_setu.main.init_access_control_repo", AsyncMock()
+    )
     monkeypatch.setattr("astrbot_plugin_setu.main.init_fortune_repo", AsyncMock())
-    monkeypatch.setattr("astrbot_plugin_setu.main.init_session_config_repo", AsyncMock())
+    monkeypatch.setattr(
+        "astrbot_plugin_setu.main.init_session_config_repo", AsyncMock()
+    )
     monkeypatch.setattr("astrbot_plugin_setu.main.init_send_cache", AsyncMock())
-    monkeypatch.setattr("astrbot_plugin_setu.main.register_setu_llm_tools", lambda: None)
-    monkeypatch.setattr("astrbot_plugin_setu.main.register_fortune_llm_tools", lambda: None)
-    monkeypatch.setattr("astrbot_plugin_setu.main.register_session_config_llm_tools", lambda: None)
+    monkeypatch.setattr(
+        "astrbot_plugin_setu.main.register_setu_llm_tools", lambda: None
+    )
+    monkeypatch.setattr(
+        "astrbot_plugin_setu.main.register_fortune_llm_tools", lambda: None
+    )
+    monkeypatch.setattr(
+        "astrbot_plugin_setu.main.register_session_config_llm_tools", lambda: None
+    )
 
     await plugin.initialize()
 
-    assert captured["raw_config"]["api"]["lolicon"]["proxy"] == sample_config_dict["api"]["lolicon"]["proxy"]
+    assert (
+        captured["raw_config"]["api"]["lolicon"]["proxy"]
+        == sample_config_dict["api"]["lolicon"]["proxy"]
+    )
