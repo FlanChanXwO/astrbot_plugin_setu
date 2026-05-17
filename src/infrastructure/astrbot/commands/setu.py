@@ -133,7 +133,9 @@ class SetuCommandHandler:
                 )
             else:
                 yield event.plain_result(
-                    self._message("count_out_of_range", min_count=1, max_count=max_count)
+                    self._message(
+                        "count_out_of_range", min_count=1, max_count=max_count
+                    )
                 )
             return
 

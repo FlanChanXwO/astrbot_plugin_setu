@@ -241,7 +241,9 @@ class MessagesConfig(BaseModel):
         )
     )
     max_count_exceeded: MessageTextConfig = Field(
-        default_factory=lambda: MessageTextConfig(text="一次最多只能获取{max_count}张哦~")
+        default_factory=lambda: MessageTextConfig(
+            text="一次最多只能获取{max_count}张哦~"
+        )
     )
     count_out_of_range: MessageTextConfig = Field(
         default_factory=lambda: MessageTextConfig(
@@ -257,7 +259,9 @@ class MessagesConfig(BaseModel):
         default_factory=lambda: MessageTextConfig(text="获取图片失败，请稍后再试")
     )
     no_result: MessageTextConfig = Field(
-        default_factory=lambda: MessageTextConfig(text="未找到{tags_info}符合要求的图片~")
+        default_factory=lambda: MessageTextConfig(
+            text="未找到{tags_info}符合要求的图片~"
+        )
     )
     empty_payload: MessageTextConfig = Field(
         default_factory=lambda: MessageTextConfig(text="运气不好，一张图都没拿到...")
@@ -305,16 +309,24 @@ class MessagesConfig(BaseModel):
         default_factory=lambda: MessageTextConfig(text="运势功能已关闭")
     )
     fortune_block_user_done: MessageTextConfig = Field(
-        default_factory=lambda: MessageTextConfig(text="用户 {user_id} 已添加到运势黑名单")
+        default_factory=lambda: MessageTextConfig(
+            text="用户 {user_id} 已添加到运势黑名单"
+        )
     )
     fortune_unblock_user_done: MessageTextConfig = Field(
-        default_factory=lambda: MessageTextConfig(text="用户 {user_id} 已从运势黑名单移除")
+        default_factory=lambda: MessageTextConfig(
+            text="用户 {user_id} 已从运势黑名单移除"
+        )
     )
     fortune_trust_user_done: MessageTextConfig = Field(
-        default_factory=lambda: MessageTextConfig(text="用户 {user_id} 已添加到运势白名单")
+        default_factory=lambda: MessageTextConfig(
+            text="用户 {user_id} 已添加到运势白名单"
+        )
     )
     fortune_untrust_user_done: MessageTextConfig = Field(
-        default_factory=lambda: MessageTextConfig(text="用户 {user_id} 已从运势白名单移除")
+        default_factory=lambda: MessageTextConfig(
+            text="用户 {user_id} 已从运势白名单移除"
+        )
     )
 
 
