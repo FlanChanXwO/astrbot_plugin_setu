@@ -1,3 +1,5 @@
 python-docx>=1.0.0
 playwright>=1.45.0
 httpx[http2]>=0.28.0
+pydantic>=2.0
+aiosqlite>=0.19.0

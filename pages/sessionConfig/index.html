@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>sessionConfig</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f6f8fb;
+      --panel: #ffffff;
+      --text: #18212f;
+      --muted: #657386;
+      --line: #dbe3ee;
+      --primary: #2563eb;
+      --danger: #dc2626;
+      --soft: #eef4ff;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #12161d;
+        --panel: #1b222d;
+        --text: #eef3f8;
+        --muted: #98a6b8;
+        --line: #2b3646;
+        --soft: #17233a;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    [v-cloak] { display: none !important; }
+    #boot-mask {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      display: grid;
+      place-items: center;
+      background: var(--bg);
+      color: var(--muted);
+    }
+    body.ready #boot-mask { display: none; }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(240px, 320px) 1fr;
+      min-height: 100vh;
+    }
+    aside, main { padding: 20px; }
+    aside {
+      border-right: 1px solid var(--line);
+      background: color-mix(in srgb, var(--panel) 82%, var(--bg));
+    }
+    h1, h2 { margin: 0; line-height: 1.2; }
+    h1 { font-size: 20px; }
+    h2 { font-size: 16px; }
+    .topbar, .panel-head, .row, .actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .session-list { display: grid; gap: 8px; margin-top: 16px; }
+    .session-card {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: var(--panel);
+      color: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+    .session-card.active { border-color: var(--primary); background: var(--soft); }
+    .session-title { font-weight: 650; word-break: break-all; }
+    .session-meta, .key-name, .hint { color: var(--muted); font-size: 12px; }
+    .editor {
+      max-width: 1060px;
+      display: grid;
+      gap: 16px;
+    }
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+      background: var(--panel);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    label { display: grid; gap: 6px; font-weight: 600; }
+    input, select {
+      width: 100%;
+      min-height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 7px 9px;
+      background: var(--panel);
+      color: var(--text);
+      font: inherit;
+    }
+    button {
+      min-height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 7px 12px;
+      background: var(--panel);
+      color: var(--text);
+      cursor: pointer;
+      font: inherit;
+    }
+    button.primary { border-color: var(--primary); background: var(--primary); color: white; }
+    button.danger { border-color: var(--danger); color: var(--danger); }
+    button:disabled { cursor: not-allowed; opacity: .55; }
+    .keys { display: grid; gap: 12px; }
+    .key-card {
+      display: grid;
+      grid-template-columns: 180px 1fr 160px 160px;
+      gap: 12px;
+      align-items: center;
+      border-top: 1px solid var(--line);
+      padding-top: 12px;
+    }
+    .key-card:first-child { border-top: 0; padding-top: 0; }
+    .toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 500;
+    }
+    .toggle input { width: auto; min-height: auto; }
+    .toast {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      max-width: min(420px, calc(100vw - 36px));
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: var(--panel);
+      box-shadow: 0 14px 36px rgba(0,0,0,.16);
+    }
+    .toast.error { border-color: var(--danger); }
+    @media (max-width: 840px) {
+      .layout { grid-template-columns: 1fr; }
+      aside { border-right: 0; border-bottom: 1px solid var(--line); }
+      .grid, .key-card { grid-template-columns: 1fr; }
+      .topbar, .panel-head, .actions { align-items: stretch; flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div id="boot-mask">正在加载会话配置...</div>
+  <div id="app" class="layout" v-scope v-cloak>
+    <aside>
+      <div class="topbar">
+        <h1>sessionConfig</h1>
+        <button class="primary" @click="newSession()">新建</button>
+      </div>
+      <div class="session-list">
+        <button
+          class="session-card"
+          v-for="session in sessions"
+          :key="session.session_id"
+          :class="{ active: form.session_id === session.session_id }"
+          @click="selectSession(session)"
+        >
+          <div class="session-title">{{ session.display_name || session.session_id }}</div>
+          <div class="session-meta">{{ session.session_type }} · {{ Object.keys(session.overrides || {}).length }} 项覆盖</div>
+        </button>
+        <div class="hint" v-if="sessions.length === 0">暂无会话配置</div>
+      </div>
+    </aside>
+    <main>
+      <section class="editor">
+        <div class="panel">
+          <div class="panel-head">
+            <h2>会话</h2>
+            <div class="actions">
+              <button @click="reload()" :disabled="loading">刷新</button>
+              <button class="danger" @click="deleteSession()" :disabled="!form.session_id">删除</button>
+              <button class="primary" @click="save()" :disabled="loading">保存</button>
+            </div>
+          </div>
+          <div class="grid" style="margin-top: 14px;">
+            <label>session_id
+              <input v-model="form.session_id" placeholder="aiocqhttp:GroupMessage:123456">
+            </label>
+            <label>session_type
+              <select v-model="form.session_type">
+                <option value="group">group</option>
+                <option value="private">private</option>
+              </select>
+            </label>
+            <label>display_name
+              <input v-model="form.display_name" placeholder="测试群">
+            </label>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head">
+            <h2>配置覆盖</h2>
+            <button @click="clearAll()" :disabled="!form.session_id">清空覆盖</button>
+          </div>
+          <div class="keys" style="margin-top: 14px;">
+            <div class="key-card" v-for="item in keys" :key="item.key">
+              <div>
+                <strong>{{ item.label }}</strong>
+                <div class="key-name">{{ item.key }}</div>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" :checked="hasOverride(item.key)" @change="toggleOverride(item.key, $event.target.checked)">
+                会话覆盖
+              </label>
+              <div>
+                <div class="key-name">全局配置</div>
+                <strong>{{ displayValue(globalValues[item.key]) }}</strong>
+              </div>
+              <div>
+                <div class="key-name">生效值</div>
+                <strong>{{ displayValue(effectiveValue(item.key)) }}</strong>
+              </div>
+              <div style="grid-column: 2 / -1;" v-if="hasOverride(item.key)">
+                <select v-if="item.type === 'enum'" v-model="form.overrides[item.key]">
+                  <option v-for="option in item.options" :value="option">{{ option }}</option>
+                </select>
+                <label class="toggle" v-else-if="item.type === 'bool'">
+                  <input type="checkbox" v-model="form.overrides[item.key]">
+                  {{ displayValue(form.overrides[item.key]) }}
+                </label>
+                <input v-else v-model="form.overrides[item.key]">
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+    <div class="toast" :class="{ error: toast.type === 'error' }" v-if="toast.show">
+      {{ toast.message }}
+    </div>
+  </div>
+  <script src="./lib/petite-vue.iife.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

@@ -8,11 +8,11 @@
 
 <img src="https://count.getloli.com/@astrbot_plugin_setu?name=astrbot_plugin_setu&theme=rule34&padding=7&offset=0&align=top&scale=1&pixelated=1&darkmode=auto" alt="Moe Counter">
 
-**一个支持多平台、可自定义、带防审核机制的随机色图插件，支持多 API、HTML 卡片包装、LLM 工具调用。**
+**一个支持多平台、可自定义、带防审核机制的随机色图插件，支持多 API、会话级配置、LLM 工具调用。**
 
 [![License: APGL](https://img.shields.io/badge/License-APGL-blue.svg)](https://opensource.org/licenses/agpl-3.0)
 ![Python Version](https://img.shields.io/badge/Python-3.10%2B-blue)
-![AstrBot](https://img.shields.io/badge/AstrBot-%E2%89%A54.10.4-green)
+![AstrBot](https://img.shields.io/badge/AstrBot-%E2%89%A54.24.0-green)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey)
 
 </div>
@@ -55,11 +55,12 @@
 ## ✨ 功能特性
 
 - 🎨 **多 API 支持** - Lolicon、SexNyan、自定义 API 等
+- 🧩 **分层架构** - `application` / `domain` / `infrastructure` / `shared` 清晰分离
 - 🖼️ **HTML 卡片包装** - 防止平台审核，支持自定义样式
 - 🤖 **LLM 工具调用** - 可通过大模型自动获取色图
 - 🏷️ **标签搜索** - 支持多标签、中文标签、模糊匹配
 - 🔄 **多种发送模式** - 直接发送、合并转发、文件封装
-- 🛡️ **防审核机制** - 图片混淆、延迟撤回、Docx 封装
+- 🛡️ **防审核机制** - HTML 卡片 fallback、NapCat 流式上传、延迟撤回、Docx 封装
 - ⚡ **性能优化** - 并发下载、磁盘缓存、自动补图、httpx、分段下载
 - 🌐 **多平台适配** - 兼容 AstrBot 支持的所有平台
 
@@ -90,11 +91,11 @@
 
 | 配置项 | 类型 | 说明 | 可选值 | 默认值 |
 |--------|------|------|--------|--------|
-| `api_type` | 字符串 | API 类型 | `lolicon` / `sexnyan` / `custom` / `all` | `lolicon` |
+| `api_type` | 字符串 | API 类型 | `lolicon` / `atri` / `sexnyan` / `custom` / `all` | `lolicon` |
 | `send_mode` | 字符串 | 发送模式 | `auto` / `image` / `forward` | `auto` |
 | `content_mode` | 字符串 | 内容模式 | `sfw` / `r18` / `mix` | `sfw` |
 | `max_count` | 整数 | 单次最大图片数 | 1-20 | `10` |
-| `cache_enabled` | 布尔值 | 是否启用图片磁盘缓存 | `true` / `false` | `true` |
+| `cache_enabled` | 布尔值 | 是否复用本地发送缓存 | `true` / `false` | `true` |
 | `exclude_ai` | 布尔值 | 是否排除 AI 生成图片 | `true` / `false` | `false` |
 
 ### HTML 卡片与防审核配置
@@ -102,6 +103,7 @@
 | 配置项 | 类型 | 说明 | 可选值 | 默认值 |
 |--------|------|------|--------|--------|
 | `html_card_strategy` | 字符串 | HTML 卡片策略 | `never` / `fallback` / `always` | `fallback` |
+| `napcat_stream_mode` | 字符串 | NapCat 流式上传策略 | `disabled` / `fallback` / `always` | `fallback` |
 | `auto_revoke_r18` | 布尔值 | R18 图片是否自动撤回 | `true` / `false` | `false` |
 | `r18_docx_mode` | 布尔值 | R18 是否使用 Docx 封装 | `true` / `false` | `true` |
 
@@ -115,7 +117,7 @@
 | `download_concurrent_limit` | 整数 | 并发下载限制 | 1-50 | `10` |
 | `download_timeout_seconds` | 整数 | 下载超时时间（秒） | 5-300 | `30` |
 
-### 访问控制配置（1.3.0+）
+### 访问控制配置（2.0.0）
 
 > 安全配置统一位于 `safety` 下，且 `setu` / `fortune` 完全独立。
 
@@ -154,7 +156,7 @@
 - `safety.setu_access_control_mode` -> `safety.setu_user_access_control_mode` + `safety.setu_group_access_control_mode`
 - `safety.fortune_access_control_mode` -> `safety.fortune_user_access_control_mode` + `safety.fortune_group_access_control_mode`
 
-> 旧键当前仍兼容读取，建议在 WebUI 中显式配置新键，后续版本更稳。
+> 旧键当前仍兼容读取，但 `v2.0.0` 起主实现已完全转到新键。
 
 ### 配置示例
 
@@ -211,12 +213,38 @@
 /setu 白丝 萝莉
 /setu 3 白丝
 /setu 4 白丝 萝莉
-/setu_mode r18
+/session_config set setu.content_mode r18
 ```
 
 - 数量范围支持中文数字
 - 标签支持空格、逗号、顿号分隔
-- `/setu_mode` 可切换内容模式
+- `/session_config` 统一管理当前会话的覆盖配置
+
+### v2.0.0 更新摘要
+
+- 运势管理命令收敛为更少的统一入口，旧命令保留兼容别名
+- provider / sender / fallback 日志补全，方便定位“有 URL 但发不出去”或“provider 无结果”的问题
+- 反代配置读取、provider 重建、插件配置来源修正，减少 WebUI 改配置后不生效的问题
+
+### 会话配置命令（管理员设置）
+
+会话覆盖配置会写入插件数据目录下的 `session_overrides.json`，不会修改全局 WebUI 配置。
+也可以在插件 WebUI 的 `sessionConfig` 页面集中管理所有群聊/私聊会话覆盖。
+
+```
+/session_config get
+/session_config get setu.content_mode
+/session_config get json
+/session_config set setu.content_mode r18
+/session_config set setu.r18_docx true
+/session_config set setu.auto_revoke false
+/session_config set setu.send_mode forward
+/session_config set fortune.tags 白丝,猫耳
+/session_config clear setu.send_mode
+/session_config clear
+```
+
+可用配置项：`setu.content_mode`、`setu.r18_docx`、`setu.auto_revoke`、`setu.send_mode`、`fortune.tags`、`fortune.content_mode`。
 
 ### 黑白名单管理命令（管理员）
 
@@ -235,10 +263,10 @@
 
 | 命令 | 说明 | 示例 |
 |------|------|------|
-| `/拉黑运势用户 @用户` | 将用户加入运势黑名单（必须AT） | `/拉黑运势用户 @小明` |
-| `/解除运势拉黑 @用户` | 将用户从运势黑名单移除（必须AT） | `/解除运势拉黑 @小明` |
-| `/信任运势用户 @用户` | 将用户加入运势白名单（必须AT） | `/信任运势用户 @小明` |
-| `/取消运势信任 @用户` | 将用户从运势白名单移除（必须AT） | `/取消运势信任 @小明` |
+| `/运势用户 拉黑 @用户` | 将用户加入运势黑名单（必须AT） | `/运势用户 拉黑 @小明` |
+| `/运势用户 解黑 @用户` | 将用户从运势黑名单移除（必须AT） | `/运势用户 解黑 @小明` |
+| `/运势用户 信任 @用户` | 将用户加入运势白名单（必须AT） | `/运势用户 信任 @小明` |
+| `/运势用户 取消信任 @用户` | 将用户从运势白名单移除（必须AT） | `/运势用户 取消信任 @小明` |
 
 #### 群组功能开关
 
@@ -246,14 +274,23 @@
 |------|------|------|
 | `/开启色图` | 在本群开启色图功能（移出色图群组黑名单） | `/开启色图` |
 | `/关闭色图` | 在本群关闭色图功能（加入色图群组黑名单） | `/关闭色图` |
-| `/开启运势` | 在本群开启运势功能（移出运势群组黑名单） | `/开启运势` |
-| `/关闭运势` | 在本群关闭运势功能（加入运势群组黑名单） | `/关闭运势` |
+| `/运势开关 开` | 在本群开启运势功能（移出运势群组黑名单） | `/运势开关 开` |
+| `/运势开关 关` | 在本群关闭运势功能（加入运势群组黑名单） | `/运势开关 关` |
+
+#### 运势刷新
+
+| 命令 | 说明 | 示例 |
+|------|------|------|
+| `/运势刷新` | 刷新自己的今日运势 | `/运势刷新` |
+| `/运势刷新 本群` | 刷新当前群今日运势 | `/运势刷新 本群` |
+| `/运势刷新 全局` | 刷新全局今日运势 | `/运势刷新 全局` |
 
 **注意：**
 - 以上命令仅限管理员或超级管理员使用。
 - 用户类命令必须通过 `@` 指定目标用户，不支持直接输入用户 ID。
 - 群组命令仅作用于当前群。
 - 白名单/黑名单会自动保持互斥（同一功能下不会同时存在）。
+- 旧命令 `/开启运势`、`/关闭运势`、`/拉黑运势用户`、`/解除运势拉黑`、`/信任运势用户`、`/取消运势信任`、`/刷新今日运势`、`/刷新本群今日运势`、`/刷新全局今日运势` 仍可继续使用。
 
 #### 安全配置示例（`safety`）
 
@@ -289,11 +326,14 @@
 | 工具名 | 作用 | 参数 | 权限 |
 |---|---|---|---|
 | `get_setu_image` | 获取并发送随机图片 | `count: integer`（数量）, `tags: string[]`（标签） | 普通用户可用 |
-| `get_setu_content_mode` | 查看当前会话生效的内容模式 | 无 | 普通用户可用 |
-| `set_setu_content_mode` | 设置当前会话内容模式 | `mode: string`，可选 `sfw/r18/mix/clear` | 管理员/超级管理员 |
-| `set_setu_r18_docx_mode` | 设置当前会话 R18 Docx 封装开关 | `enabled: boolean`（部分场景支持 clear 语义） | 管理员/超级管理员 |
-| `set_setu_auto_revoke` | 设置当前会话 R18 自动撤回开关 | `enabled: boolean`（部分场景支持 clear 语义） | 管理员/超级管理员 |
-| `set_setu_send_mode` | 设置当前会话发送模式 | `mode: string`，可选 `image/forward/auto/clear` | 管理员/超级管理员 |
+
+##### 会话配置工具
+
+| 工具名 | 作用 | 参数 | 权限 |
+|---|---|---|---|
+| `get_session_config` | 查看当前会话全部配置或单个 key 的生效值 | `key?: string` | 普通用户可用 |
+| `set_session_config` | 设置当前会话一个覆盖配置 | `key: string`, `value: string` | 管理员/超级管理员 |
+| `clear_session_config` | 清除当前会话一个覆盖配置，或清空全部覆盖 | `key?: string` | 管理员/超级管理员 |
 
 ##### 今日运势工具
 
@@ -303,13 +343,11 @@
 | `refresh_my_fortune` | 刷新"我的"今日运势 | 无 | 管理员 |
 | `refresh_group_fortune` | 刷新当前群今日运势 | 无 | 管理员 |
 | `refresh_all_fortune` | 刷新全局今日运势 | 无 | 超级管理员 |
-| `get_fortune_config` | 查看当前会话运势配置 | 无 | 普通用户可用 |
-| `set_fortune_config` | 设置当前会话运势配置 | `tags: string`, `mode: string(sfw/r18/mix)` | 管理员 |
 
 ##### 调用建议
 
-- 需要"仅查看状态"时优先调用查询类工具（如 `get_setu_content_mode`、`get_fortune_config`）。
-- 需要会话级覆写时使用 `set_*` 工具；希望回到全局配置时可使用 `clear` 语义参数（支持的工具见上表）。
+- 需要"仅查看状态"时优先调用 `get_session_config`。
+- 需要会话级覆写时使用 `set_session_config`；希望回到全局配置时使用 `clear_session_config`。
 - 对于发送类工具，插件会直接把结果发送到当前会话，工具返回文本用于说明执行结果。
 
 ### 高级用法
@@ -317,8 +355,8 @@
 | 功能 | 说明 | 配置方式 |
 |------|------|----------|
 | **自定义 API** | 设置 `api_type` 为 `custom`，填写自定义 API 地址和解析规则，实现对接任意第三方色图接口 | 配置面板 |
-| **图片混淆** | 如遇平台审核拦截，插件会自动尝试对图片进行字节级混淆重发 | 自动触发 |
-| **磁盘缓存** | 通过 `cache_enabled` 启用图片磁盘缓存，提升多次请求同一图片的响应速度 | 配置面板 |
+| **NapCat 流式上传** | 通过 `napcat_stream_mode` 控制本地图片文件的流式上传，默认普通发送失败后自动重试 | 配置面板 |
+| **发送缓存** | 图片先落盘再发送；`cache_enabled` 控制是否复用未过期的本地文件，降低 original 大图内存压力 | 配置面板 |
 | **多 API 策略** | 支持 `all` 模式自动切换多 API，提升获取成功率 | 设置 `api_type` 为 `all` |
 | **标签与过滤** | 支持多标签、中文标签、AI 过滤（`exclude_ai`），可灵活组合搜索条件 | 配置面板 |
 
@@ -334,6 +372,8 @@
 
 | 参数 | 说明 | 推荐值 |
 |------|------|--------|
+| `napcat_stream_mode` | NapCat/OneBot 图片传输策略：`fallback` 先普通发送，失败后流式上传；`always` 发送前先流式上传；`disabled` 不使用流式上传 | `fallback` |
+| `cache_enabled` | 是否复用发送缓存。即使关闭复用，运行时仍会优先落盘发送，避免大图长期停留在内存中 | `true` |
 | `enable_range_download` | 启用分段下载，将大图片分多段并行下载，适合高带宽服务器 | `false`（一般）/ `true`（高带宽） |
 | `range_segments` | 分段数 | 2-4 |
 | `range_download_threshold` | 分段下载阈值（KB），大于此值才启用分段 | 512 |
@@ -343,9 +383,9 @@
 ---
 
 ## 未来更新
-- [ ] 更好的自定义API
-- [x] 新增一个作者自己的图库内置API，该图库的更新速度会比目前的图库API更快，并且跟随了当前版本潮流！
-- [x] 一些基于色图的额外插件功能 (今日运势)
+- [ ] 更好的自定义 API
+- [ ] 更细粒度的 provider 健康检查与降级策略
+- [ ] 继续补全 WebUI 配置与诊断能力
 ---
 
 ## 📄 开源协议
