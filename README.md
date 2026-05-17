@@ -8,11 +8,11 @@
 
 <img src="https://count.getloli.com/@astrbot_plugin_setu?name=astrbot_plugin_setu&theme=rule34&padding=7&offset=0&align=top&scale=1&pixelated=1&darkmode=auto" alt="Moe Counter">
 
-**一个支持多平台、可自定义、带防审核机制的随机色图插件，支持多 API、HTML 卡片包装、LLM 工具调用。**
+**一个支持多平台、可自定义、带防审核机制的随机色图插件，支持多 API、会话级配置、LLM 工具调用。**
 
 [![License: APGL](https://img.shields.io/badge/License-APGL-blue.svg)](https://opensource.org/licenses/agpl-3.0)
 ![Python Version](https://img.shields.io/badge/Python-3.10%2B-blue)
-![AstrBot](https://img.shields.io/badge/AstrBot-%E2%89%A54.10.4-green)
+![AstrBot](https://img.shields.io/badge/AstrBot-%E2%89%A54.24.0-green)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey)
 
 </div>
@@ -55,11 +55,12 @@
 ## ✨ 功能特性
 
 - 🎨 **多 API 支持** - Lolicon、SexNyan、自定义 API 等
+- 🧩 **分层架构** - `application` / `domain` / `infrastructure` / `shared` 清晰分离
 - 🖼️ **HTML 卡片包装** - 防止平台审核，支持自定义样式
 - 🤖 **LLM 工具调用** - 可通过大模型自动获取色图
 - 🏷️ **标签搜索** - 支持多标签、中文标签、模糊匹配
 - 🔄 **多种发送模式** - 直接发送、合并转发、文件封装
-- 🛡️ **防审核机制** - HTML 卡片 fallback、延迟撤回、Docx 封装
+- 🛡️ **防审核机制** - HTML 卡片 fallback、NapCat 流式上传、延迟撤回、Docx 封装
 - ⚡ **性能优化** - 并发下载、磁盘缓存、自动补图、httpx、分段下载
 - 🌐 **多平台适配** - 兼容 AstrBot 支持的所有平台
 
@@ -90,7 +91,7 @@
 
 | 配置项 | 类型 | 说明 | 可选值 | 默认值 |
 |--------|------|------|--------|--------|
-| `api_type` | 字符串 | API 类型 | `lolicon` / `sexnyan` / `custom` / `all` | `lolicon` |
+| `api_type` | 字符串 | API 类型 | `lolicon` / `atri` / `sexnyan` / `custom` / `all` | `lolicon` |
 | `send_mode` | 字符串 | 发送模式 | `auto` / `image` / `forward` | `auto` |
 | `content_mode` | 字符串 | 内容模式 | `sfw` / `r18` / `mix` | `sfw` |
 | `max_count` | 整数 | 单次最大图片数 | 1-20 | `10` |
@@ -116,7 +117,7 @@
 | `download_concurrent_limit` | 整数 | 并发下载限制 | 1-50 | `10` |
 | `download_timeout_seconds` | 整数 | 下载超时时间（秒） | 5-300 | `30` |
 
-### 访问控制配置（1.3.0+）
+### 访问控制配置（2.0.0）
 
 > 安全配置统一位于 `safety` 下，且 `setu` / `fortune` 完全独立。
 
@@ -155,7 +156,7 @@
 - `safety.setu_access_control_mode` -> `safety.setu_user_access_control_mode` + `safety.setu_group_access_control_mode`
 - `safety.fortune_access_control_mode` -> `safety.fortune_user_access_control_mode` + `safety.fortune_group_access_control_mode`
 
-> 旧键当前仍兼容读取，建议在 WebUI 中显式配置新键，后续版本更稳。
+> 旧键当前仍兼容读取，但 `v2.0.0` 起主实现已完全转到新键。
 
 ### 配置示例
 
@@ -218,6 +219,12 @@
 - 数量范围支持中文数字
 - 标签支持空格、逗号、顿号分隔
 - `/session_config` 统一管理当前会话的覆盖配置
+
+### v2.0.0 更新摘要
+
+- 运势管理命令收敛为更少的统一入口，旧命令保留兼容别名
+- provider / sender / fallback 日志补全，方便定位“有 URL 但发不出去”或“provider 无结果”的问题
+- 反代配置读取、provider 重建、插件配置来源修正，减少 WebUI 改配置后不生效的问题
 
 ### 会话配置命令（管理员设置）
 
@@ -376,9 +383,9 @@
 ---
 
 ## 未来更新
-- [ ] 更好的自定义API
-- [x] 新增一个作者自己的图库内置API，该图库的更新速度会比目前的图库API更快，并且跟随了当前版本潮流！
-- [x] 一些基于色图的额外插件功能 (今日运势)
+- [ ] 更好的自定义 API
+- [ ] 更细粒度的 provider 健康检查与降级策略
+- [ ] 继续补全 WebUI 配置与诊断能力
 ---
 
 ## 📄 开源协议
