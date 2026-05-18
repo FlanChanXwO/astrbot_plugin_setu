@@ -7,6 +7,7 @@ registration discovers them. Business logic is delegated to handler helpers.
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+import re
 from typing import Any
 
 from astrbot.api import logger
@@ -39,6 +40,7 @@ from .src.shared.send_cache import clear_send_cache, init_send_cache
 
 # Regex patterns for command triggers
 SETU_REGEX_PATTERN = r"^/?(来\s*(.*?)(份|个|张|点))(.*?)(?:福利|色|瑟|涩|塞)?图$"
+FORTUNE_REGEX_PATTERN = r"^(?!/)(今日运势|jrys)$"
 
 # Module-level handler singletons
 _setu_handler: SetuCommandHandler | None = None
@@ -103,15 +105,25 @@ FORTUNE_USER_ARG_ALIASES = {
     "untrust": "untrust",
 }
 
+_LEADING_COMMAND_PREFIX_PATTERN = re.compile(r"^[^\w\u4e00-\u9fff]+")
+
 
 def _get_invoked_command(event: AstrMessageEvent) -> str:
     raw_message = getattr(event, "message_str", None)
     if not raw_message and hasattr(event, "get_message_str"):
         raw_message = event.get_message_str()
     text = str(raw_message or "").strip()
-    if text.startswith("/"):
-        text = text[1:].strip()
-    return text.split(maxsplit=1)[0] if text else ""
+    if not text:
+        return ""
+    first_token = text.split(maxsplit=1)[0]
+    return _LEADING_COMMAND_PREFIX_PATTERN.sub("", first_token).strip()
+
+
+def _is_fortune_command_invocation(event: AstrMessageEvent) -> bool:
+    """Return True when the message is already handled by fortune command routing."""
+    if not getattr(event, "is_at_or_wake_command", False):
+        return False
+    return _get_invoked_command(event) in {"今日运势", "jrys"}
 
 
 def _resolve_fortune_refresh_target(event: AstrMessageEvent, args: str) -> str:
@@ -281,6 +293,19 @@ class SetuPlugin(Star):
         self, event: AstrMessageEvent
     ) -> AsyncGenerator[Any, None]:
         """今日运势 / jrys"""
+        if _fortune_handler is None:
+            yield event.plain_result("插件未初始化")
+            return
+        async for result in _fortune_handler.fortune_command(event):
+            yield result
+
+    @filter.regex(FORTUNE_REGEX_PATTERN)
+    async def fortune_regex_command(
+        self, event: AstrMessageEvent
+    ) -> AsyncGenerator[Any, None]:
+        """纯文本今日运势/jrys入口（不带命令前缀）。"""
+        if _is_fortune_command_invocation(event):
+            return
         if _fortune_handler is None:
             yield event.plain_result("插件未初始化")
             return

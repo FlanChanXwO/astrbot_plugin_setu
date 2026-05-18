@@ -91,7 +91,7 @@ class SetuCommandHandler:
     ) -> AsyncGenerator[Any, None]:
         """Handle natural language setu requests (regex trigger)."""
         if not await _rate_limiter.acquire(event):
-            yield event.plain_result("你有一个请求正在处理中，请稍后再试~")
+            yield event.plain_result(self._message("rate_limited"))
             return
 
         try:
@@ -125,12 +125,18 @@ class SetuCommandHandler:
         if num < 1 or num > max_count:
             if num == -1:
                 yield event.plain_result(
-                    f"数量解析失败，图片数量必须在1-{max_count}之间"
+                    self._message("invalid_count", min_count=1, max_count=max_count)
                 )
             elif num > max_count:
-                yield event.plain_result(f"一次最多只能获取{max_count}张哦~")
+                yield event.plain_result(
+                    self._message("max_count_exceeded", max_count=max_count)
+                )
             else:
-                yield event.plain_result(f"图片数量必须在1-{max_count}之间哦~")
+                yield event.plain_result(
+                    self._message(
+                        "count_out_of_range", min_count=1, max_count=max_count
+                    )
+                )
             return
 
         tag_str = match.group(4).strip()
@@ -146,10 +152,10 @@ class SetuCommandHandler:
                 yield result
         except asyncio.TimeoutError:
             logger.warning("get_random_picture timeout (>60s)")
-            yield event.plain_result("获取图片超时，网络可能不稳定，请稍后再试。")
+            yield event.plain_result(self._message("fetch_timeout"))
         except Exception:
             logger.exception("get_random_picture failed")
-            yield event.plain_result("获取图片失败，请稍后再试")
+            yield event.plain_result(self._message("fetch_failed"))
 
     async def setu_command(
         self, event: AstrMessageEvent, count: str = "1", *, tags: str = ""
@@ -160,7 +166,7 @@ class SetuCommandHandler:
         Example: /setu 3 girl cute
         """
         if not await _rate_limiter.acquire(event):
-            yield event.plain_result("你有一个请求正在处理中，请稍后再试~")
+            yield event.plain_result(self._message("rate_limited"))
             return
 
         try:
@@ -196,7 +202,9 @@ class SetuCommandHandler:
             all_tags = f"{extra_tag} {all_tags}".strip()
 
         if num > max_count:
-            yield event.plain_result(f"一次最多只能获取{max_count}张哦~")
+            yield event.plain_result(
+                self._message("max_count_exceeded", max_count=max_count)
+            )
             return
 
         parsed_tags = [t.strip() for t in all_tags.split() if t.strip()]
@@ -211,10 +219,10 @@ class SetuCommandHandler:
                 yield result
         except asyncio.TimeoutError:
             logger.warning("setu command timeout (>60s)")
-            yield event.plain_result("获取图片超时，网络可能不稳定，请稍后再试。")
+            yield event.plain_result(self._message("fetch_timeout"))
         except Exception:
             logger.exception("setu command failed")
-            yield event.plain_result("获取图片失败，网络或服务异常，请稍后再试。")
+            yield event.plain_result(self._message("fetch_failed"))
 
     # ==================== LLM Tool Handlers ====================
 
@@ -224,7 +232,7 @@ class SetuCommandHandler:
         """LLM tool handler for getting Setu images."""
         config = get_config()
         if not config:
-            return "配置未加载"
+            return self._message("config_not_loaded")
 
         has_perm, msg = await self._check_access(event, config)
         if not has_perm:
@@ -248,7 +256,7 @@ class SetuCommandHandler:
                 pass
             return f"Successfully fetched {payload.count} images"
         except Exception:
-            return "获取图片失败，请稍后再试"
+            return self._message("fetch_failed")
 
     # ==================== Helper Methods ====================
 
@@ -269,6 +277,10 @@ class SetuCommandHandler:
         self, event: AstrMessageEvent, num: int, tags: list[str], is_r18: bool, config
     ) -> AsyncGenerator[Any, None]:
         """Fetch images and send to user."""
+        fetching_message = self._message("fetching")
+        if fetching_message:
+            yield event.plain_result(fetching_message)
+
         init_provider_from_config(config)
         provider = get_provider()
         use_case = GetSetuImagesUseCase(provider)
@@ -277,16 +289,13 @@ class SetuCommandHandler:
             result = await use_case.execute(num, tags, is_r18)
         except asyncio.TimeoutError:
             logger.warning("image fetch timeout (>60s)")
-            yield event.plain_result("获取图片超时，网络可能不稳定，请稍后再试。")
-            return
-
-        if result.notice:
-            yield event.plain_result(result.notice)
+            yield event.plain_result(self._message("fetch_timeout"))
             return
 
         payload = result.payload
         if payload is None:
-            yield event.plain_result("未找到符合要求的图片~")
+            tags_info = f"标签: {', '.join(tags)}" if tags else ""
+            yield event.plain_result(self._message("no_result", tags_info=tags_info))
             return
 
         from ...sending import ImageSender
@@ -356,6 +365,15 @@ class SetuCommandHandler:
                 return 10
 
         return -1
+
+    def _message(self, key: str, **kwargs: Any) -> str:
+        """Resolve configured message text."""
+        config = get_config()
+        if config and hasattr(config, "resolve_message"):
+            text = config.resolve_message(key, **kwargs)
+            if text is not None:
+                return text
+        return ""
 
 
 # ==================== LLM Tools Registration ====================

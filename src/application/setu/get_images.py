@@ -32,8 +32,5 @@ class GetSetuImagesUseCase:
         )
 
         if payload.is_empty:
-            tags_info = f"标签: {', '.join(tags)}" if tags else ""
-            return SetuImagesResult(
-                payload=None, notice=f"未找到{tags_info}符合要求的图片~"
-            )
+            return SetuImagesResult(payload=None)
         return SetuImagesResult(payload=payload)

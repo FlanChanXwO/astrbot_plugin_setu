@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import re
+
 from astrbot_plugin_setu.main import (
+    FORTUNE_REGEX_PATTERN,
+    _is_fortune_command_invocation,
     _resolve_fortune_refresh_target,
     _resolve_fortune_toggle_action,
     _resolve_fortune_user_action,
@@ -35,3 +39,25 @@ def test_resolve_fortune_user_action_from_new_command(mock_event) -> None:
 def test_resolve_fortune_user_action_from_legacy_alias(mock_event) -> None:
     mock_event.message_str = "/取消运势信任 12345"
     assert _resolve_fortune_user_action(mock_event, "12345") == ("untrust", "12345")
+
+
+def test_fortune_regex_pattern_matches_plain_jrys() -> None:
+    assert re.match(FORTUNE_REGEX_PATTERN, "jrys")
+    assert re.match(FORTUNE_REGEX_PATTERN, "今日运势")
+    assert not re.match(FORTUNE_REGEX_PATTERN, "/jrys")
+
+
+def test_fortune_regex_dedup_skips_command_invocation(mock_event) -> None:
+    mock_event.is_at_or_wake_command = True
+    mock_event.message_str = "/jrys"
+    assert _is_fortune_command_invocation(mock_event) is True
+    mock_event.message_str = "/今日运势"
+    assert _is_fortune_command_invocation(mock_event) is True
+    mock_event.message_str = "!jrys"
+    assert _is_fortune_command_invocation(mock_event) is True
+    mock_event.message_str = "。今日运势"
+    assert _is_fortune_command_invocation(mock_event) is True
+
+    mock_event.is_at_or_wake_command = False
+    mock_event.message_str = "jrys"
+    assert _is_fortune_command_invocation(mock_event) is False

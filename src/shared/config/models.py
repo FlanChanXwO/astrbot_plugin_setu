@@ -208,7 +208,15 @@ class MessagesFoundConfig(BaseModel):
 class MessagesSendFailedConfig(BaseModel):
     """Send failed message configuration."""
 
+    enabled: bool = True
     text: str = "图片发送失败，请稍后再试。"
+
+
+class MessageTextConfig(BaseModel):
+    """Generic user-facing message configuration."""
+
+    enabled: bool = True
+    text: str = ""
 
 
 class MessagesConfig(BaseModel):
@@ -218,6 +226,104 @@ class MessagesConfig(BaseModel):
     found: MessagesFoundConfig = Field(default_factory=MessagesFoundConfig)
     send_failed: MessagesSendFailedConfig = Field(
         default_factory=MessagesSendFailedConfig
+    )
+    rate_limited: MessageTextConfig = Field(
+        default_factory=lambda: MessageTextConfig(
+            text="你有一个请求正在处理中，请稍后再试~"
+        )
+    )
+    config_not_loaded: MessageTextConfig = Field(
+        default_factory=lambda: MessageTextConfig(text="配置未加载")
+    )
+    invalid_count: MessageTextConfig = Field(
+        default_factory=lambda: MessageTextConfig(
+            text="数量解析失败，图片数量必须在{min_count}-{max_count}之间"
+        )
+    )
+    max_count_exceeded: MessageTextConfig = Field(
+        default_factory=lambda: MessageTextConfig(
+            text="一次最多只能获取{max_count}张哦~"
+        )
+    )
+    count_out_of_range: MessageTextConfig = Field(
+        default_factory=lambda: MessageTextConfig(
+            text="图片数量必须在{min_count}-{max_count}之间哦~"
+        )
+    )
+    fetch_timeout: MessageTextConfig = Field(
+        default_factory=lambda: MessageTextConfig(
+            text="获取图片超时，网络可能不稳定，请稍后再试。"
+        )
+    )
+    fetch_failed: MessageTextConfig = Field(
+        default_factory=lambda: MessageTextConfig(text="获取图片失败，请稍后再试")
+    )
+    no_result: MessageTextConfig = Field(
+        default_factory=lambda: MessageTextConfig(
+            text="未找到{tags_info}符合要求的图片~"
+        )
+    )
+    empty_payload: MessageTextConfig = Field(
+        default_factory=lambda: MessageTextConfig(text="运气不好，一张图都没拿到...")
+    )
+    r18_docx_failed: MessageTextConfig = Field(
+        default_factory=lambda: MessageTextConfig(
+            text="R18 Docx 封装失败，请稍后再试或联系管理员。"
+        )
+    )
+    fortune_group_only: MessageTextConfig = Field(
+        default_factory=lambda: MessageTextConfig(text="此命令仅支持群聊")
+    )
+    fortune_missing_user_id: MessageTextConfig = Field(
+        default_factory=lambda: MessageTextConfig(text="请指定用户ID")
+    )
+    fortune_get_failed: MessageTextConfig = Field(
+        default_factory=lambda: MessageTextConfig(text="获取运势失败: {error}")
+    )
+    fortune_refresh_failed: MessageTextConfig = Field(
+        default_factory=lambda: MessageTextConfig(text="刷新运势失败: {error}")
+    )
+    fortune_refresh_group_failed: MessageTextConfig = Field(
+        default_factory=lambda: MessageTextConfig(text="刷新群运势失败: {error}")
+    )
+    fortune_refresh_all_failed: MessageTextConfig = Field(
+        default_factory=lambda: MessageTextConfig(text="刷新全局运势失败: {error}")
+    )
+    fortune_refresh_group_done: MessageTextConfig = Field(
+        default_factory=lambda: MessageTextConfig(
+            text="已刷新本群 {count} 位用户的今日运势"
+        )
+    )
+    fortune_refresh_all_done: MessageTextConfig = Field(
+        default_factory=lambda: MessageTextConfig(
+            text="已刷新全局 {count} 位用户的今日运势"
+        )
+    )
+    fortune_enabled_group_done: MessageTextConfig = Field(
+        default_factory=lambda: MessageTextConfig(text="运势功能已开启")
+    )
+    fortune_disabled_group_done: MessageTextConfig = Field(
+        default_factory=lambda: MessageTextConfig(text="运势功能已关闭")
+    )
+    fortune_block_user_done: MessageTextConfig = Field(
+        default_factory=lambda: MessageTextConfig(
+            text="用户 {user_id} 已添加到运势黑名单"
+        )
+    )
+    fortune_unblock_user_done: MessageTextConfig = Field(
+        default_factory=lambda: MessageTextConfig(
+            text="用户 {user_id} 已从运势黑名单移除"
+        )
+    )
+    fortune_trust_user_done: MessageTextConfig = Field(
+        default_factory=lambda: MessageTextConfig(
+            text="用户 {user_id} 已添加到运势白名单"
+        )
+    )
+    fortune_untrust_user_done: MessageTextConfig = Field(
+        default_factory=lambda: MessageTextConfig(
+            text="用户 {user_id} 已从运势白名单移除"
+        )
     )
 
 
@@ -559,6 +665,38 @@ class SetuPluginConfig(BaseModel):
     def msg_send_failed_text(self) -> str:
         """Get send failed message text."""
         return self.messages.send_failed.text
+
+    @property
+    def msg_send_failed_enabled(self) -> bool:
+        """Get send failed message enabled."""
+        return self.messages.send_failed.enabled
+
+    def resolve_message(self, key: str, **kwargs: Any) -> str | None:
+        """Resolve configured message text by key with placeholder substitution."""
+        if key == "fetching":
+            if not self.msg_fetching_enabled:
+                return None
+            text = self.msg_fetching_text
+        elif key == "found":
+            if not self.msg_found_enabled:
+                return None
+            text = self.msg_found_text
+        elif key == "send_failed":
+            if not self.msg_send_failed_enabled:
+                return None
+            text = self.msg_send_failed_text
+        else:
+            item = getattr(self.messages, key, None)
+            if not item or not getattr(item, "enabled", True):
+                return None
+            text = str(getattr(item, "text", "") or "")
+
+        result = str(text)
+        for k, v in kwargs.items():
+            result = result.replace(f"{{{k}}}", str(v))
+        if not result:
+            return None
+        return result
 
     @property
     def setu_user_access_control_mode(self) -> str:

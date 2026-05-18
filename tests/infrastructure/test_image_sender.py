@@ -148,3 +148,72 @@ async def test_direct_send_strategy_passthroughs_onebot_stream_refs(mock_event) 
         group_id=123456,
         message=[{"type": "image", "data": {"file": "stream://image"}}],
     )
+
+
+@pytest.mark.asyncio
+async def test_send_images_respects_found_message_toggle(
+    tmp_path: Path, mock_event, sample_config_dict
+) -> None:
+    image_path = tmp_path / "image.jpg"
+    image_path.write_bytes(b"image-data")
+
+    context = MagicMock()
+    context.send_message = AsyncMock(return_value={"message_id": "ok"})
+    set_plugin_context(context)
+
+    config_dict = sample_config_dict.copy()
+    config_dict["messages"] = {
+        **sample_config_dict["messages"],
+        "found": {"enabled": False, "text": "找到 {count} 张符合要求的图片~"},
+    }
+    config = SetuPluginConfig(**config_dict)
+    payload = ImagePayload(
+        urls=("https://example.com/image.jpg",),
+        raw_bytes=(),
+        file_paths=(image_path,),
+        items=(image_path,),
+        r18=False,
+        tags=(),
+    )
+
+    results = [
+        item async for item in ImageSender(config).send_images(payload, mock_event)
+    ]
+
+    assert results == [{"send_success": True, "image_count": 1}]
+    assert context.send_message.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_send_images_respects_send_failed_toggle(
+    tmp_path: Path, mock_event, sample_config_dict
+) -> None:
+    image_path = tmp_path / "image.jpg"
+    image_path.write_bytes(b"image-data")
+
+    context = MagicMock()
+    context.send_message = AsyncMock(side_effect=RuntimeError("send failed"))
+    set_plugin_context(context)
+
+    mock_event.platform.name = "unknown-platform"
+    config_dict = sample_config_dict.copy()
+    config_dict["messages"] = {
+        "fetching": {"enabled": False, "text": "正在获取图片，请稍候..."},
+        "found": {"enabled": False, "text": "找到 {count} 张符合要求的图片~"},
+        "send_failed": {"enabled": False, "text": "图片发送失败，请稍后再试。"},
+    }
+    config = SetuPluginConfig(**config_dict)
+    payload = ImagePayload(
+        urls=("https://example.com/image.jpg",),
+        raw_bytes=(),
+        file_paths=(image_path,),
+        items=(image_path,),
+        r18=False,
+        tags=(),
+    )
+
+    results = [
+        item async for item in ImageSender(config).send_images(payload, mock_event)
+    ]
+
+    assert results == []
