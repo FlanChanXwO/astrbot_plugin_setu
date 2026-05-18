@@ -105,14 +105,34 @@ class FortuneRenderer:
             html = html.replace(f"{{{{ {key} }}}}", str(value))
         return html
 
+    def build_template_data(
+        self, fortune: dict[str, Any], image_base64: str | None = None
+    ) -> dict[str, Any]:
+        """Build Jinja template data for legacy fortune template."""
+        username = self._truncate_username(fortune.get("username", "用户"))
+        return {
+            "fonts_css": self._get_embedded_fonts_css(),
+            "username": username,
+            "date_str": fortune.get("date_str", ""),
+            "title": fortune.get("title", "未知"),
+            "stars_display": self._format_stars(
+                fortune.get("star_count", 3), fortune.get("max_stars", 7)
+            ),
+            "description": fortune.get("description", ""),
+            "extra_message": fortune.get("extra_message", ""),
+            "theme_color": fortune.get("theme_color", "theme-gray"),
+            "image_base64": image_base64 or "",
+        }
+
     async def render_to_image(
         self, fortune: dict[str, Any], image_base64: str | None = None
     ) -> bytes | None:
         try:
-            html = self.render(fortune, image_base64=image_base64)
+            template = self._get_template()
+            tmpl_data = self.build_template_data(fortune, image_base64=image_base64)
             output = await html_renderer.render_custom_template(
-                tmpl_str=html,
-                tmpl_data={},
+                tmpl_str=template,
+                tmpl_data=tmpl_data,
                 return_url=False,
                 options={"full_page": True, "type": "png", "scale": "device"},
             )
