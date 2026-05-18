@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+import base64
+import random
+from pathlib import Path
 from typing import Any
 
+import astrbot.api.message_components as Comp
 from astrbot.api.event import AstrMessageEvent
 from astrbot.core.provider.register import llm_tools
 
@@ -13,12 +17,14 @@ from ....domain.fortune import (
     FortuneGenerationRequest,
     FortuneRecord,
 )
+from ....domain.setu import SetuRequest
 from ....domain.fortune.service import FortuneService
 from ....shared import get_logger
-from ... import get_access_control_repo
+from ... import get_access_control_repo, get_provider
 from ...permission_service import PermissionService
 from ...persistence import get_fortune_repo
-from ..config import get_config
+from ...providers import init_provider_from_config
+from ..config import get_config, get_plugin_context
 
 logger = get_logger()
 
@@ -58,7 +64,11 @@ class FortuneCommandHandler:
             repo = get_fortune_repo()
             service = FortuneService(repository=repo)
             result = await service.get_or_create_fortune(request)
-            yield event.plain_result(self._format_fortune(result))
+            fortune_image = await self._render_fortune_image(event, result, service)
+            if fortune_image:
+                yield event.chain_result([Comp.Image.fromBytes(fortune_image)])
+            else:
+                yield event.plain_result(self._format_fortune(result))
         except Exception as e:
             yield event.plain_result(self._message("fortune_get_failed", error=e))
 
@@ -389,6 +399,121 @@ class FortuneCommandHandler:
             f"⭐ {'★' * result.star_count}{'☆' * (result.max_stars - result.star_count)}\n"
             f"💬 {result.description}"
         )
+
+    async def _render_fortune_image(
+        self, event: AstrMessageEvent, record: FortuneRecord, service: FortuneService
+    ) -> bytes | None:
+        """Render fortune to image, fallback to None when unavailable."""
+        cached = await service.get_cached_image(record.user_id, record.date_str)
+        if cached:
+            return cached
+
+        bg_bytes, img_url = await self._get_fortune_background_image()
+        if not bg_bytes:
+            return None
+
+        html_renderer = self._get_html_renderer()
+        if html_renderer is None:
+            return None
+
+        image_base64 = base64.b64encode(bg_bytes).decode("ascii")
+        html = self._render_fortune_html(record, image_base64)
+        try:
+            render_output = await html_renderer(
+                tmpl=html,
+                data={},
+                return_url=False,
+                options={"full_page": True, "type": "png", "scale": "device"},
+            )
+            image_bytes = await self._read_render_output(render_output)
+            if image_bytes:
+                await service.update_image_cache(record, image_bytes, img_url)
+            return image_bytes
+        except Exception as exc:
+            logger.warning("[fortune] failed to render fortune image: %s", exc)
+            return None
+
+    async def _get_fortune_background_image(self) -> tuple[bytes | None, str | None]:
+        config = get_config()
+        if not config:
+            return None, None
+        try:
+            init_provider_from_config(config)
+            provider = get_provider()
+
+            tags = [t.strip() for t in config.fortune.tags.split(",") if t.strip()]
+            mode = config.fortune.content_mode.value
+            if mode == "r18":
+                is_r18 = True
+            elif mode == "mix":
+                is_r18 = random.random() > 0.5
+            else:
+                is_r18 = False
+
+            request = SetuRequest.from_user_input(
+                count=1,
+                tags=tags,
+                r18=is_r18,
+                exclude_ai=config.exclude_ai,
+            )
+            payload = await provider.fetch_and_download(request)
+            if payload.is_empty:
+                return None, None
+
+            if payload.raw_bytes:
+                return payload.raw_bytes[0], payload.urls[0] if payload.urls else None
+            if payload.items and isinstance(payload.items[0], bytes):
+                return payload.items[0], payload.urls[0] if payload.urls else None
+            if payload.file_paths:
+                return payload.file_paths[0].read_bytes(), (
+                    payload.urls[0] if payload.urls else None
+                )
+            return None, None
+        except Exception as exc:
+            logger.warning("[fortune] failed to fetch background image: %s", exc)
+            return None, None
+
+    @staticmethod
+    def _render_fortune_html(record: FortuneRecord, image_base64: str) -> str:
+        stars = "★" * record.star_count + "☆" * (record.max_stars - record.star_count)
+        return f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><style>
+body{{margin:0;padding:0;background:#f4f6fb;font-family:'PingFang SC','Noto Sans CJK SC',sans-serif;}}
+.card{{width:900px;margin:0 auto;background:#fff;border-radius:24px;overflow:hidden;box-shadow:0 20px 40px rgba(0,0,0,.12);}}
+.cover{{width:100%;display:block;}}
+.body{{padding:36px 40px;}}
+.title{{font-size:52px;color:#333;font-weight:700;margin-bottom:16px;}}
+.stars{{font-size:42px;color:#f0b429;margin-bottom:20px;}}
+.desc{{font-size:34px;line-height:1.7;color:#444;}}
+.date{{font-size:24px;color:#8a8f98;margin-bottom:10px;}}
+</style></head>
+<body><div class="card">
+<img class="cover" src="data:image/jpeg;base64,{image_base64}" />
+<div class="body">
+<div class="date">{record.date_str}</div>
+<div class="title">{record.title}</div>
+<div class="stars">{stars}</div>
+<div class="desc">{record.description}</div>
+</div></div></body></html>"""
+
+    @staticmethod
+    def _get_html_renderer():
+        context = get_plugin_context()
+        if context is None:
+            return None
+        return getattr(context, "html_render", None)
+
+    @staticmethod
+    async def _read_render_output(output: Any) -> bytes | None:
+        if output is None:
+            return None
+        if isinstance(output, bytes):
+            return output
+        if isinstance(output, str):
+            path = Path(output)
+            if path.exists():
+                return path.read_bytes()
+        return None
 
     def _message(self, key: str, **kwargs: Any) -> str:
         config = get_config()
