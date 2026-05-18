@@ -39,6 +39,7 @@ from .src.shared.send_cache import clear_send_cache, init_send_cache
 
 # Regex patterns for command triggers
 SETU_REGEX_PATTERN = r"^/?(来\s*(.*?)(份|个|张|点))(.*?)(?:福利|色|瑟|涩|塞)?图$"
+FORTUNE_REGEX_PATTERN = r"^(?!/)(今日运势|jrys)$"
 
 # Module-level handler singletons
 _setu_handler: SetuCommandHandler | None = None
@@ -281,6 +282,17 @@ class SetuPlugin(Star):
         self, event: AstrMessageEvent
     ) -> AsyncGenerator[Any, None]:
         """今日运势 / jrys"""
+        if _fortune_handler is None:
+            yield event.plain_result("插件未初始化")
+            return
+        async for result in _fortune_handler.fortune_command(event):
+            yield result
+
+    @filter.regex(FORTUNE_REGEX_PATTERN)
+    async def fortune_regex_command(
+        self, event: AstrMessageEvent
+    ) -> AsyncGenerator[Any, None]:
+        """纯文本今日运势/jrys入口（不带命令前缀）。"""
         if _fortune_handler is None:
             yield event.plain_result("插件未初始化")
             return
