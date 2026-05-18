@@ -113,7 +113,9 @@ class FortuneCommandHandler:
                 self._message("fortune_refresh_group_done", count=refreshed_count)
             )
         except Exception as e:
-            yield event.plain_result(self._message("fortune_refresh_group_failed", error=e))
+            yield event.plain_result(
+                self._message("fortune_refresh_group_failed", error=e)
+            )
 
     async def refresh_all_fortune_command(
         self, event: AstrMessageEvent
@@ -137,7 +139,9 @@ class FortuneCommandHandler:
                 self._message("fortune_refresh_all_done", count=refreshed_count)
             )
         except Exception as e:
-            yield event.plain_result(self._message("fortune_refresh_all_failed", error=e))
+            yield event.plain_result(
+                self._message("fortune_refresh_all_failed", error=e)
+            )
 
     async def enable_fortune_group_command(
         self, event: AstrMessageEvent, args: str = ""
@@ -191,7 +195,9 @@ class FortuneCommandHandler:
 
         repo = get_access_control_repo()
         await repo.add_fortune_blocked_user(str(target_id))
-        yield event.plain_result(self._message("fortune_block_user_done", user_id=target_id))
+        yield event.plain_result(
+            self._message("fortune_block_user_done", user_id=target_id)
+        )
 
     async def unblock_fortune_user_command(
         self, event: AstrMessageEvent, args: str = ""
@@ -229,7 +235,9 @@ class FortuneCommandHandler:
 
         repo = get_access_control_repo()
         await repo.add_fortune_whitelist_user(str(target_id))
-        yield event.plain_result(self._message("fortune_trust_user_done", user_id=target_id))
+        yield event.plain_result(
+            self._message("fortune_trust_user_done", user_id=target_id)
+        )
 
     async def untrust_fortune_user_command(
         self, event: AstrMessageEvent, args: str = ""
