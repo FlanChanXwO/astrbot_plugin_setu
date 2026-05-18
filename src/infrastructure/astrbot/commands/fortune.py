@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
 import base64
 import random
-from pathlib import Path
+from collections.abc import AsyncGenerator
 from typing import Any
 
 import astrbot.api.message_components as Comp
 from astrbot.api.event import AstrMessageEvent
 from astrbot.core.provider.register import llm_tools
-from astrbot.core import html_renderer
 
 from ....domain.access_control import AccessPolicy
 from ....domain.fortune import (
@@ -25,6 +23,7 @@ from ... import get_access_control_repo, get_provider
 from ...permission_service import PermissionService
 from ...persistence import get_fortune_repo
 from ...providers import init_provider_from_config
+from ..fortune_renderer import FortuneRenderer
 from ..config import get_config
 
 logger = get_logger()
@@ -41,7 +40,7 @@ class FortuneCommandHandler:
     """
 
     def __init__(self) -> None:
-        pass
+        self._renderer = FortuneRenderer()
 
     # ==================== Command Handlers ====================
 
@@ -414,15 +413,20 @@ class FortuneCommandHandler:
             return None
 
         image_base64 = base64.b64encode(bg_bytes).decode("ascii")
-        html = self._render_fortune_html(record, image_base64)
+        fortune_dict = {
+            "username": record.username,
+            "date_str": record.date_str,
+            "title": record.title,
+            "star_count": record.star_count,
+            "max_stars": record.max_stars,
+            "description": record.description,
+            "extra_message": record.extra_message,
+            "theme_color": record.theme_color,
+        }
         try:
-            render_output = await html_renderer.render_custom_template(
-                tmpl_str=html,
-                tmpl_data={},
-                return_url=False,
-                options={"full_page": True, "type": "png", "scale": "device"},
+            image_bytes = await self._renderer.render_to_image(
+                fortune_dict, image_base64=image_base64
             )
-            image_bytes = await self._read_render_output(render_output)
             if image_bytes:
                 await service.update_image_cache(record, image_bytes, img_url)
             return image_bytes
@@ -469,41 +473,6 @@ class FortuneCommandHandler:
         except Exception as exc:
             logger.warning("[fortune] failed to fetch background image: %s", exc)
             return None, None
-
-    @staticmethod
-    def _render_fortune_html(record: FortuneRecord, image_base64: str) -> str:
-        stars = "★" * record.star_count + "☆" * (record.max_stars - record.star_count)
-        return f"""<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><style>
-body{{margin:0;padding:0;background:#f4f6fb;font-family:'PingFang SC','Noto Sans CJK SC',sans-serif;}}
-.card{{width:900px;margin:0 auto;background:#fff;border-radius:24px;overflow:hidden;box-shadow:0 20px 40px rgba(0,0,0,.12);}}
-.cover{{width:100%;display:block;}}
-.body{{padding:36px 40px;}}
-.title{{font-size:52px;color:#333;font-weight:700;margin-bottom:16px;}}
-.stars{{font-size:42px;color:#f0b429;margin-bottom:20px;}}
-.desc{{font-size:34px;line-height:1.7;color:#444;}}
-.date{{font-size:24px;color:#8a8f98;margin-bottom:10px;}}
-</style></head>
-<body><div class="card">
-<img class="cover" src="data:image/jpeg;base64,{image_base64}" />
-<div class="body">
-<div class="date">{record.date_str}</div>
-<div class="title">{record.title}</div>
-<div class="stars">{stars}</div>
-<div class="desc">{record.description}</div>
-</div></div></body></html>"""
-
-    @staticmethod
-    async def _read_render_output(output: Any) -> bytes | None:
-        if output is None:
-            return None
-        if isinstance(output, bytes):
-            return output
-        if isinstance(output, str):
-            path = Path(output)
-            if path.exists():
-                return path.read_bytes()
-        return None
 
     def _message(self, key: str, **kwargs: Any) -> str:
         config = get_config()
