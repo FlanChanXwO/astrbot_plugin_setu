@@ -365,11 +365,21 @@ class FortuneCommandHandler:
 
         cached_count = 0
         for record in records:
-            if await service.get_cached_image(record.user_id, record.date_str):
-                continue
-            image_bytes = await self._render_fortune_image(record, service)
-            if image_bytes:
-                cached_count += 1
+            try:
+                cached_path = await repo.get_cached_image_path(
+                    record.user_id, record.date_str
+                )
+                if cached_path:
+                    continue
+                image_bytes = await self._render_fortune_image(record, service)
+                if image_bytes:
+                    cached_count += 1
+            except Exception as exc:
+                logger.warning(
+                    "[fortune] Failed to pregenerate cache for %s: %s",
+                    record.user_id,
+                    exc,
+                )
         return cached_count
 
     # ==================== Helper Methods ====================

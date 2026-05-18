@@ -25,6 +25,7 @@ class MemoryFortuneRepo:
         self.active_requests = active_requests
         self.records: dict[tuple[str, str], FortuneRecord] = {}
         self.cached_images: dict[tuple[str, str], bytes] = {}
+        self.cached_paths: dict[tuple[str, str], Path] = {}
 
     async def get_today_fortune(
         self, request: FortuneGenerationRequest
@@ -62,8 +63,10 @@ class MemoryFortuneRepo:
             for request in self.active_requests
         ]
 
-    async def get_cached_image_path(self, user_id: str, date_str: str) -> Path | None:
-        return None
+    async def get_cached_image_path(
+        self, user_id: str, date_str: str
+    ) -> Path | None:
+        return self.cached_paths.get((user_id, date_str))
 
     async def save_cached_image(
         self, user_id: str, date_str: str, image_data: bytes, img_url: str | None
@@ -124,6 +127,86 @@ async def test_pregenerate_active_fortune_images_writes_rendered_cache(
     assert record.group_id == "group-1"
     assert record.image_cached is True
     assert record.img_url == "https://example.com/bg.jpg"
+
+
+@pytest.mark.asyncio
+async def test_pregenerate_active_fortune_images_skips_existing_cache(
+    monkeypatch,
+) -> None:
+    today = date.today().isoformat()
+    repo = MemoryFortuneRepo(
+        [
+            FortuneGenerationRequest(
+                user_id="user-1",
+                username="测试用户",
+                date_str="2026-05-17",
+                group_id="group-1",
+            )
+        ]
+    )
+    repo.cached_paths[("user-1", today)] = Path(f"/tmp/user-1_{today}.jpg")
+    handler = FortuneCommandHandler()
+    render_call_count = 0
+
+    async def fake_render_to_image(*args, **kwargs) -> bytes:
+        nonlocal render_call_count
+        render_call_count += 1
+        return b"rendered-card"
+
+    monkeypatch.setattr(
+        fortune_cmd,
+        "get_config",
+        lambda: SimpleNamespace(
+            fortune=SimpleNamespace(enabled=True, auto_refresh=True)
+        ),
+    )
+    monkeypatch.setattr(fortune_cmd, "get_fortune_repo", lambda: repo)
+    monkeypatch.setattr(handler._renderer, "render_to_image", fake_render_to_image)
+
+    cached_count = await handler.pregenerate_active_fortune_images()
+
+    assert cached_count == 0
+    assert render_call_count == 0
+    assert repo.cached_images == {}
+
+
+@pytest.mark.asyncio
+async def test_pregenerate_active_fortune_images_continues_after_record_error(
+    monkeypatch,
+) -> None:
+    today = date.today().isoformat()
+    repo = MemoryFortuneRepo(
+        [
+            FortuneGenerationRequest("bad-user", "坏数据", "2026-05-17"),
+            FortuneGenerationRequest("good-user", "测试用户", "2026-05-17"),
+        ]
+    )
+    handler = FortuneCommandHandler()
+
+    async def fake_background_image() -> tuple[bytes, str]:
+        return b"background", "https://example.com/bg.jpg"
+
+    async def fake_render_to_image(fortune, *args, **kwargs) -> bytes:
+        if fortune["username"] == "坏数据":
+            raise RuntimeError("boom")
+        return b"rendered-card"
+
+    monkeypatch.setattr(
+        fortune_cmd,
+        "get_config",
+        lambda: SimpleNamespace(
+            fortune=SimpleNamespace(enabled=True, auto_refresh=True)
+        ),
+    )
+    monkeypatch.setattr(fortune_cmd, "get_fortune_repo", lambda: repo)
+    monkeypatch.setattr(handler, "_get_fortune_background_image", fake_background_image)
+    monkeypatch.setattr(handler._renderer, "render_to_image", fake_render_to_image)
+
+    cached_count = await handler.pregenerate_active_fortune_images()
+
+    assert cached_count == 1
+    assert ("bad-user", today) not in repo.cached_images
+    assert repo.cached_images[("good-user", today)] == b"rendered-card"
 
 
 @pytest.mark.asyncio
