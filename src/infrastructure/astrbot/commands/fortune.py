@@ -11,6 +11,7 @@ from typing import Any
 import astrbot.api.message_components as Comp
 from astrbot.api.event import AstrMessageEvent
 from astrbot.core.provider.register import llm_tools
+from astrbot.core import html_renderer
 
 from ....domain.access_control import AccessPolicy
 from ....domain.fortune import (
@@ -24,7 +25,7 @@ from ... import get_access_control_repo, get_provider
 from ...permission_service import PermissionService
 from ...persistence import get_fortune_repo
 from ...providers import init_provider_from_config
-from ..config import get_config, get_plugin_context
+from ..config import get_config
 
 logger = get_logger()
 
@@ -412,16 +413,12 @@ class FortuneCommandHandler:
         if not bg_bytes:
             return None
 
-        html_renderer = self._get_html_renderer()
-        if html_renderer is None:
-            return None
-
         image_base64 = base64.b64encode(bg_bytes).decode("ascii")
         html = self._render_fortune_html(record, image_base64)
         try:
-            render_output = await html_renderer(
-                tmpl=html,
-                data={},
+            render_output = await html_renderer.render_custom_template(
+                tmpl_str=html,
+                tmpl_data={},
                 return_url=False,
                 options={"full_page": True, "type": "png", "scale": "device"},
             )
@@ -495,13 +492,6 @@ body{{margin:0;padding:0;background:#f4f6fb;font-family:'PingFang SC','Noto Sans
 <div class="stars">{stars}</div>
 <div class="desc">{record.description}</div>
 </div></div></body></html>"""
-
-    @staticmethod
-    def _get_html_renderer():
-        context = get_plugin_context()
-        if context is None:
-            return None
-        return getattr(context, "html_render", None)
 
     @staticmethod
     async def _read_render_output(output: Any) -> bytes | None:
