@@ -148,20 +148,39 @@ class FortuneService:
         Returns:
             Number of fortunes pregenerated
         """
+        records = await self.pregenerate_active_user_records(
+            days=days, include_existing=False
+        )
+        return len(records)
+
+    async def pregenerate_active_user_records(
+        self, days: int = 3, *, include_existing: bool = False
+    ) -> list[FortuneRecord]:
+        """Ensure today's fortune records exist for recently active users.
+
+        Args:
+            days: Number of days to look back for activity
+            include_existing: Include existing records in the returned list
+
+        Returns:
+            Records that were created, plus existing records when requested
+        """
         today_str = date.today().isoformat()
-        active_users = await self._repo.get_active_users(days)
+        active_requests = await self._repo.get_active_fortune_requests(
+            days, date_str=today_str
+        )
 
-        pregenerated = 0
-        for user_id in active_users:
-            # Check if already has fortune today
-            request = FortuneGenerationRequest(user_id, "指挥官", today_str)
+        records: list[FortuneRecord] = []
+        for request in active_requests:
             existing = await self._repo.get_today_fortune(request)
-            if not existing:
-                # Generate new fortune
-                await self.get_or_create_fortune(request)
-                pregenerated += 1
+            if existing:
+                if include_existing:
+                    records.append(existing)
+                continue
 
-        return pregenerated
+            records.append(await self.get_or_create_fortune(request))
+
+        return records
 
     async def update_image_cache(
         self, record: FortuneRecord, image_data: bytes, img_url: str | None

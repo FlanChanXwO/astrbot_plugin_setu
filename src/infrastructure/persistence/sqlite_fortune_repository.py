@@ -45,6 +45,7 @@ class SQLiteFortuneRepo(FortuneRepository):
                     """
                     CREATE TABLE IF NOT EXISTS fortune_data (
                         user_id   TEXT NOT NULL,
+                        username  TEXT,
                         date_str  TEXT NOT NULL,
                         title     TEXT NOT NULL,
                         stars     INTEGER NOT NULL,
@@ -72,6 +73,10 @@ class SQLiteFortuneRepo(FortuneRepository):
             await db.execute("ALTER TABLE fortune_data ADD COLUMN img_url TEXT")
             await db.commit()
 
+        if "username" not in column_names:
+            await db.execute("ALTER TABLE fortune_data ADD COLUMN username TEXT")
+            await db.commit()
+
         if "last_view_date" not in column_names:
             await db.execute("ALTER TABLE fortune_data ADD COLUMN last_view_date TEXT")
             await db.commit()
@@ -88,9 +93,10 @@ class SQLiteFortuneRepo(FortuneRepository):
         self, row: tuple, user_id: str, username: str, date_str: str
     ) -> FortuneRecord:
         """Convert a database row to FortuneRecord."""
+        stored_username = row[9] if len(row) > 9 else None
         return FortuneRecord(
             user_id=user_id,
-            username=username,
+            username=username or stored_username or user_id,
             date_str=date_str,
             title=row[0],
             star_count=row[1],
@@ -112,7 +118,7 @@ class SQLiteFortuneRepo(FortuneRepository):
         async with self._db_lock:
             async with aiosqlite.connect(str(self._db_path)) as db:
                 cursor = await db.execute(
-                    "SELECT title, stars, desc_text, extra, theme, image_cached, img_url, last_view_date, group_id "
+                    "SELECT title, stars, desc_text, extra, theme, image_cached, img_url, last_view_date, group_id, username "
                     "FROM fortune_data WHERE user_id = ? AND date_str = ?",
                     (request.user_id, request.date_str),
                 )
@@ -132,10 +138,11 @@ class SQLiteFortuneRepo(FortuneRepository):
                 async with aiosqlite.connect(str(self._db_path)) as db:
                     await db.execute(
                         "INSERT OR REPLACE INTO fortune_data "
-                        "(user_id, date_str, title, stars, desc_text, extra, theme, image_cached, img_url, last_view_date, group_id) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        "(user_id, username, date_str, title, stars, desc_text, extra, theme, image_cached, img_url, last_view_date, group_id) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         (
                             record.user_id,
+                            record.username,
                             record.date_str,
                             record.title,
                             record.star_count,
@@ -221,11 +228,53 @@ class SQLiteFortuneRepo(FortuneRepository):
         async with self._db_lock:
             async with aiosqlite.connect(str(self._db_path)) as db:
                 cursor = await db.execute(
-                    "SELECT DISTINCT user_id FROM fortune_data WHERE last_view_date >= ?",
+                    "SELECT DISTINCT user_id FROM fortune_data WHERE COALESCE(last_view_date, date_str) >= ?",
                     (cutoff,),
                 )
                 rows = await cursor.fetchall()
         return [row[0] for row in rows]
+
+    async def get_active_fortune_requests(
+        self, days: int = 3, date_str: str | None = None
+    ) -> list[FortuneGenerationRequest]:
+        """Get latest generation request data for recently active users."""
+        import aiosqlite
+
+        target_date = date_str or datetime.date.today().isoformat()
+        cutoff = (datetime.date.today() - datetime.timedelta(days=days)).isoformat()
+        async with self._db_lock:
+            async with aiosqlite.connect(str(self._db_path)) as db:
+                cursor = await db.execute(
+                    """
+                    SELECT user_id,
+                           COALESCE(NULLIF(username, ''), user_id) AS username,
+                           group_id
+                    FROM fortune_data
+                    WHERE COALESCE(last_view_date, date_str) >= ?
+                    ORDER BY user_id,
+                             COALESCE(last_view_date, date_str) DESC,
+                             date_str DESC,
+                             rowid DESC
+                    """,
+                    (cutoff,),
+                )
+                rows = await cursor.fetchall()
+
+        requests: list[FortuneGenerationRequest] = []
+        seen: set[str] = set()
+        for user_id, username, group_id in rows:
+            if user_id in seen:
+                continue
+            seen.add(user_id)
+            requests.append(
+                FortuneGenerationRequest(
+                    user_id=str(user_id),
+                    username=str(username or user_id),
+                    date_str=target_date,
+                    group_id=str(group_id) if group_id else None,
+                )
+            )
+        return requests
 
     async def get_cached_image_path(self, user_id: str, date_str: str) -> Any | None:
         """Get cached image path for fortune."""
