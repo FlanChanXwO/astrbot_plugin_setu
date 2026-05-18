@@ -16,15 +16,15 @@ from ....domain.fortune import (
     FortuneGenerationRequest,
     FortuneRecord,
 )
-from ....domain.setu import SetuRequest
 from ....domain.fortune.service import FortuneService
+from ....domain.setu import SetuRequest
 from ....shared import get_logger
 from ... import get_access_control_repo, get_provider
 from ...permission_service import PermissionService
 from ...persistence import get_fortune_repo
 from ...providers import init_provider_from_config
-from ..fortune_renderer import FortuneRenderer
 from ..config import get_config
+from ..fortune_renderer import FortuneRenderer
 
 logger = get_logger()
 
@@ -64,7 +64,7 @@ class FortuneCommandHandler:
             repo = get_fortune_repo()
             service = FortuneService(repository=repo)
             result = await service.get_or_create_fortune(request)
-            fortune_image = await self._render_fortune_image(event, result, service)
+            fortune_image = await self._render_fortune_image(result, service)
             if fortune_image:
                 yield event.chain_result([Comp.Image.fromBytes(fortune_image)])
             else:
@@ -351,6 +351,37 @@ class FortuneCommandHandler:
         except Exception as e:
             return self._message("fortune_refresh_all_failed", error=e)
 
+    async def pregenerate_active_fortune_images(self, days: int = 3) -> int:
+        """Pregenerate and cache rendered fortune cards for active users."""
+        config = get_config()
+        if not config or not config.fortune.enabled or not config.fortune.auto_refresh:
+            return 0
+
+        repo = get_fortune_repo()
+        service = FortuneService(repository=repo)
+        records = await service.pregenerate_active_user_records(
+            days=days, include_existing=True
+        )
+
+        cached_count = 0
+        for record in records:
+            try:
+                cached_path = await repo.get_cached_image_path(
+                    record.user_id, record.date_str
+                )
+                if cached_path:
+                    continue
+                image_bytes = await self._render_fortune_image(record, service)
+                if image_bytes:
+                    cached_count += 1
+            except Exception as exc:
+                logger.warning(
+                    "[fortune] Failed to pregenerate cache for %s: %s",
+                    record.user_id,
+                    exc,
+                )
+        return cached_count
+
     # ==================== Helper Methods ====================
 
     async def _check_access(self, event: AstrMessageEvent, config) -> tuple[bool, str]:
@@ -401,7 +432,7 @@ class FortuneCommandHandler:
         )
 
     async def _render_fortune_image(
-        self, event: AstrMessageEvent, record: FortuneRecord, service: FortuneService
+        self, record: FortuneRecord, service: FortuneService
     ) -> bytes | None:
         """Render fortune to image, fallback to None when unavailable."""
         cached = await service.get_cached_image(record.user_id, record.date_str)

@@ -44,6 +44,13 @@ class FortuneRepository(ABC):
         ...
 
     @abstractmethod
+    async def get_active_fortune_requests(
+        self, days: int = 3, date_str: str | None = None
+    ) -> list[FortuneGenerationRequest]:
+        """Get generation requests for users active within N days."""
+        ...
+
+    @abstractmethod
     async def get_cached_image_path(self, user_id: str, date_str: str) -> Any | None:
         """Get cached image path."""
         ...

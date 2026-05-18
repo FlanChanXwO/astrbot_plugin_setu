@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.0.2] - 2026-05-18
+
+### Fixed
+- **恢复运势自动预缓存**：启用 `auto_refresh` 时，近期使用过 `jrys` 的用户会在跨日后预生成并缓存运势卡片图片
+- **修复测试目录污染**：测试初始化阶段固定 `ASTRBOT_ROOT`，避免 AstrBot 核心运行时数据写入插件目录下的 `data/`
+
+### Changed
+- **清理无效工作流路径**：移除 `.github/workflow/` 下的旧工作流文件，保留 GitHub Actions 标准目录 `.github/workflows/`
+
 ## [2.0.1] - 2026-05-18
 
 ### Added

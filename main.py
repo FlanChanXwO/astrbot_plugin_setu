@@ -6,8 +6,11 @@ registration discovers them. Business logic is delegated to handler helpers.
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
+import asyncio
+import datetime
 import re
+from collections.abc import AsyncGenerator
+from contextlib import suppress
 from typing import Any
 
 from astrbot.api import logger
@@ -126,6 +129,21 @@ def _is_fortune_command_invocation(event: AstrMessageEvent) -> bool:
     return _get_invoked_command(event) in {"今日运势", "jrys"}
 
 
+def _fortune_auto_refresh_enabled(config: Any) -> bool:
+    fortune = getattr(config, "fortune", None)
+    return (
+        getattr(fortune, "enabled", False) is True
+        and getattr(fortune, "auto_refresh", False) is True
+    )
+
+
+def _seconds_until_next_midnight() -> float:
+    now = datetime.datetime.now()
+    tomorrow = now.date() + datetime.timedelta(days=1)
+    next_midnight = datetime.datetime.combine(tomorrow, datetime.time.min)
+    return max(1.0, (next_midnight - now).total_seconds())
+
+
 def _resolve_fortune_refresh_target(event: AstrMessageEvent, args: str) -> str:
     command = _get_invoked_command(event)
     if command in FORTUNE_REFRESH_COMMANDS:
@@ -177,6 +195,7 @@ class SetuPlugin(Star):
         super().__init__(context, config)
         self.context = context
         self._plugin_config = config
+        self._fortune_pregenerate_task: asyncio.Task[None] | None = None
         register_session_config_web_apis(self.context)
 
     async def initialize(self) -> None:
@@ -203,6 +222,10 @@ class SetuPlugin(Star):
         _setu_handler = SetuCommandHandler()
         _fortune_handler = FortuneCommandHandler()
         _session_config_handler = SessionConfigCommandHandler()
+        if _fortune_auto_refresh_enabled(cfg):
+            self._fortune_pregenerate_task = asyncio.create_task(
+                self._fortune_pregenerate_loop(), name="setu_fortune_pregenerate"
+            )
 
         try:
             register_setu_llm_tools()
@@ -223,6 +246,12 @@ class SetuPlugin(Star):
             clear_session_config_repo,
         )
 
+        if self._fortune_pregenerate_task is not None:
+            self._fortune_pregenerate_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._fortune_pregenerate_task
+            self._fortune_pregenerate_task = None
+
         try:
             unregister_setu_llm_tools()
             unregister_fortune_llm_tools()
@@ -241,6 +270,29 @@ class SetuPlugin(Star):
         _session_config_handler = None
 
         logger.info("SetuPlugin terminated")
+
+    async def _fortune_pregenerate_loop(self) -> None:
+        """Cache fortune card images for recently active users after day rollover."""
+        while True:
+            await asyncio.sleep(_seconds_until_next_midnight())
+            await self._pregenerate_active_fortune_images()
+
+    async def _pregenerate_active_fortune_images(self) -> None:
+        if _fortune_handler is None:
+            return
+        try:
+            cached_count = await _fortune_handler.pregenerate_active_fortune_images()
+            if cached_count:
+                logger.info(
+                    "[fortune] Pregenerated %d rendered fortune card caches",
+                    cached_count,
+                )
+            else:
+                logger.debug("[fortune] No fortune card caches pregenerated")
+        except Exception as exc:
+            logger.warning(
+                "[fortune] Failed to pregenerate fortune card caches: %s", exc
+            )
 
     def _runtime_plugin_config(self) -> dict[str, Any]:
         """Return the plugin-scoped config dict passed in by AstrBot."""
