@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 
-from astrbot.api.event import AstrMessageEvent
-from astrbot.core import AstrBotConfig
+for parent in Path(__file__).resolve().parents:
+    if (parent / "astrbot" / "core" / "__init__.py").exists():
+        os.environ.setdefault("ASTRBOT_ROOT", str(parent))
+        break
+
+from astrbot.api.event import AstrMessageEvent  # noqa: E402
+from astrbot.core import AstrBotConfig  # noqa: E402
 
 
 @pytest.fixture
