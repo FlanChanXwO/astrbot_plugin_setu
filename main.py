@@ -115,6 +115,17 @@ def _get_invoked_command(event: AstrMessageEvent) -> str:
     return text.split(maxsplit=1)[0] if text else ""
 
 
+def _is_fortune_command_invocation(event: AstrMessageEvent) -> bool:
+    """Return True when the message is already handled by fortune command routing."""
+    raw_message = getattr(event, "message_str", None)
+    if isinstance(raw_message, str) and raw_message.strip().startswith("/"):
+        command = _get_invoked_command(event)
+        return command in {"今日运势", "jrys"}
+
+    # Non-command text should be handled by regex entry.
+    return False
+
+
 def _resolve_fortune_refresh_target(event: AstrMessageEvent, args: str) -> str:
     command = _get_invoked_command(event)
     if command in FORTUNE_REFRESH_COMMANDS:
@@ -293,6 +304,8 @@ class SetuPlugin(Star):
         self, event: AstrMessageEvent
     ) -> AsyncGenerator[Any, None]:
         """纯文本今日运势/jrys入口（不带命令前缀）。"""
+        if _is_fortune_command_invocation(event):
+            return
         if _fortune_handler is None:
             yield event.plain_result("插件未初始化")
             return

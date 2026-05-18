@@ -4,6 +4,7 @@ import re
 
 from astrbot_plugin_setu.main import (
     FORTUNE_REGEX_PATTERN,
+    _is_fortune_command_invocation,
     _resolve_fortune_refresh_target,
     _resolve_fortune_toggle_action,
     _resolve_fortune_user_action,
@@ -44,3 +45,12 @@ def test_fortune_regex_pattern_matches_plain_jrys() -> None:
     assert re.match(FORTUNE_REGEX_PATTERN, "jrys")
     assert re.match(FORTUNE_REGEX_PATTERN, "今日运势")
     assert not re.match(FORTUNE_REGEX_PATTERN, "/jrys")
+
+
+def test_fortune_regex_dedup_skips_command_invocation(mock_event) -> None:
+    mock_event.message_str = "/jrys"
+    assert _is_fortune_command_invocation(mock_event) is True
+    mock_event.message_str = "/今日运势"
+    assert _is_fortune_command_invocation(mock_event) is True
+    mock_event.message_str = "jrys"
+    assert _is_fortune_command_invocation(mock_event) is False
