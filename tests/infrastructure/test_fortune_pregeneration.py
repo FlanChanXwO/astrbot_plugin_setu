@@ -63,9 +63,7 @@ class MemoryFortuneRepo:
             for request in self.active_requests
         ]
 
-    async def get_cached_image_path(
-        self, user_id: str, date_str: str
-    ) -> Path | None:
+    async def get_cached_image_path(self, user_id: str, date_str: str) -> Path | None:
         return self.cached_paths.get((user_id, date_str))
 
     async def save_cached_image(
