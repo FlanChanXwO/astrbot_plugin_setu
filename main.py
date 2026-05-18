@@ -290,7 +290,9 @@ class SetuPlugin(Star):
             else:
                 logger.debug("[fortune] No fortune card caches pregenerated")
         except Exception as exc:
-            logger.warning("[fortune] Failed to pregenerate fortune card caches: %s", exc)
+            logger.warning(
+                "[fortune] Failed to pregenerate fortune card caches: %s", exc
+            )
 
     def _runtime_plugin_config(self) -> dict[str, Any]:
         """Return the plugin-scoped config dict passed in by AstrBot."""
