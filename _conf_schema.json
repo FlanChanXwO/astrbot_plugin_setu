@@ -503,7 +503,6 @@
             "fortune_unblock_user_done": {"description": "运势黑名单移除成功提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "hint": "{user_id} 占位符可用。", "default": "用户 {user_id} 已从运势黑名单移除"}}},
             "fortune_trust_user_done": {"description": "运势白名单添加成功提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "hint": "{user_id} 占位符可用。", "default": "用户 {user_id} 已添加到运势白名单"}}},
             "fortune_untrust_user_done": {"description": "运势白名单移除成功提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "hint": "{user_id} 占位符可用。", "default": "用户 {user_id} 已从运势白名单移除"}}}
-            }
         }
     },
     "safety": {
