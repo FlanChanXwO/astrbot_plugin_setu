@@ -367,28 +367,13 @@ class SetuCommandHandler:
         return -1
 
     def _message(self, key: str, **kwargs: Any) -> str:
-        """Resolve configured message and fall back to defaults."""
+        """Resolve configured message text."""
         config = get_config()
         if config and hasattr(config, "resolve_message"):
             text = config.resolve_message(key, **kwargs)
-            if text:
+            if text is not None:
                 return text
-
-        defaults = {
-            "rate_limited": "你有一个请求正在处理中，请稍后再试~",
-            "config_not_loaded": "配置未加载",
-            "invalid_count": "数量解析失败，图片数量必须在{min_count}-{max_count}之间",
-            "max_count_exceeded": "一次最多只能获取{max_count}张哦~",
-            "count_out_of_range": "图片数量必须在{min_count}-{max_count}之间哦~",
-            "fetch_timeout": "获取图片超时，网络可能不稳定，请稍后再试。",
-            "fetch_failed": "获取图片失败，请稍后再试",
-            "no_result": "未找到{tags_info}符合要求的图片~",
-            "fetching": "正在获取图片，请稍候...",
-        }
-        msg = defaults.get(key, "")
-        for k, v in kwargs.items():
-            msg = msg.replace(f"{{{k}}}", str(v))
-        return msg
+        return ""
 
 
 # ==================== LLM Tools Registration ====================

@@ -489,7 +489,6 @@
                     "text": {"type": "string", "description": "提示文本", "default": "R18 Docx 封装失败，请稍后再试或联系管理员。"}
                 }
             },
-            "fortune_config_not_loaded": {"description": "运势配置未加载提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "default": "配置未加载"}}},
             "fortune_group_only": {"description": "运势群聊限制提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "default": "此命令仅支持群聊"}}},
             "fortune_missing_user_id": {"description": "运势用户ID缺失提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "default": "请指定用户ID"}}},
             "fortune_get_failed": {"description": "运势获取失败提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "hint": "{error} 占位符可用。", "default": "获取运势失败: {error}"}}},

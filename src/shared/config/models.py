@@ -271,9 +271,6 @@ class MessagesConfig(BaseModel):
             text="R18 Docx 封装失败，请稍后再试或联系管理员。"
         )
     )
-    fortune_config_not_loaded: MessageTextConfig = Field(
-        default_factory=lambda: MessageTextConfig(text="配置未加载")
-    )
     fortune_group_only: MessageTextConfig = Field(
         default_factory=lambda: MessageTextConfig(text="此命令仅支持群聊")
     )
@@ -697,6 +694,8 @@ class SetuPluginConfig(BaseModel):
         result = str(text)
         for k, v in kwargs.items():
             result = result.replace(f"{{{k}}}", str(v))
+        if not result:
+            return None
         return result
 
     @property

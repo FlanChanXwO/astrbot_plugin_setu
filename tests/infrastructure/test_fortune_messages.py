@@ -44,4 +44,4 @@ def test_fortune_message_disabled_returns_fallback(
     )
 
     handler = FortuneCommandHandler()
-    assert handler._message("fortune_group_only") == "此命令仅支持群聊"
+    assert handler._message("fortune_group_only") == ""
