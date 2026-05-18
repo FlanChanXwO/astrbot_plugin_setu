@@ -48,9 +48,16 @@ def test_fortune_regex_pattern_matches_plain_jrys() -> None:
 
 
 def test_fortune_regex_dedup_skips_command_invocation(mock_event) -> None:
+    mock_event.is_at_or_wake_command = True
     mock_event.message_str = "/jrys"
     assert _is_fortune_command_invocation(mock_event) is True
     mock_event.message_str = "/今日运势"
     assert _is_fortune_command_invocation(mock_event) is True
+    mock_event.message_str = "!jrys"
+    assert _is_fortune_command_invocation(mock_event) is True
+    mock_event.message_str = "。今日运势"
+    assert _is_fortune_command_invocation(mock_event) is True
+
+    mock_event.is_at_or_wake_command = False
     mock_event.message_str = "jrys"
     assert _is_fortune_command_invocation(mock_event) is False

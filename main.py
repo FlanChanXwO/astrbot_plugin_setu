@@ -7,6 +7,7 @@ registration discovers them. Business logic is delegated to handler helpers.
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+import re
 from typing import Any
 
 from astrbot.api import logger
@@ -104,26 +105,25 @@ FORTUNE_USER_ARG_ALIASES = {
     "untrust": "untrust",
 }
 
+_LEADING_COMMAND_PREFIX_PATTERN = re.compile(r"^[^\w\u4e00-\u9fff]+")
+
 
 def _get_invoked_command(event: AstrMessageEvent) -> str:
     raw_message = getattr(event, "message_str", None)
     if not raw_message and hasattr(event, "get_message_str"):
         raw_message = event.get_message_str()
     text = str(raw_message or "").strip()
-    if text.startswith("/"):
-        text = text[1:].strip()
-    return text.split(maxsplit=1)[0] if text else ""
+    if not text:
+        return ""
+    first_token = text.split(maxsplit=1)[0]
+    return _LEADING_COMMAND_PREFIX_PATTERN.sub("", first_token).strip()
 
 
 def _is_fortune_command_invocation(event: AstrMessageEvent) -> bool:
     """Return True when the message is already handled by fortune command routing."""
-    raw_message = getattr(event, "message_str", None)
-    if isinstance(raw_message, str) and raw_message.strip().startswith("/"):
-        command = _get_invoked_command(event)
-        return command in {"今日运势", "jrys"}
-
-    # Non-command text should be handled by regex entry.
-    return False
+    if not getattr(event, "is_at_or_wake_command", False):
+        return False
+    return _get_invoked_command(event) in {"今日运势", "jrys"}
 
 
 def _resolve_fortune_refresh_target(event: AstrMessageEvent, args: str) -> str:
