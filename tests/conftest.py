@@ -153,7 +153,6 @@ def sample_config_dict() -> dict[str, Any]:
         "delivery": {
             "send_mode": "auto",
             "r18_docx_mode": True,
-            "auto_handle_send_failure": True,
             "auto_revoke_r18": False,
             "auto_revoke_delay": 30,
             "napcat_stream_mode": "fallback",

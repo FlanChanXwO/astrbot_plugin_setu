@@ -22,6 +22,27 @@
     return result || {};
   }
 
+  function bridgeReady() {
+    if (!bridge || typeof bridge.ready !== 'function') {
+      return Promise.reject(new Error('AstrBot Plugin Pages bridge 未注入'));
+    }
+    return bridge.ready();
+  }
+
+  function apiGet(path) {
+    return bridgeReady().then(function () {
+      if (typeof bridge.apiGet !== 'function') throw new Error('Plugin Pages bridge 不支持 apiGet');
+      return bridge.apiGet(path);
+    });
+  }
+
+  function apiPost(path, payload) {
+    return bridgeReady().then(function () {
+      if (typeof bridge.apiPost !== 'function') throw new Error('Plugin Pages bridge 不支持 apiPost');
+      return bridge.apiPost(path, payload);
+    });
+  }
+
   function createStore(initial) {
     return new Proxy(initial, {
       set: function (target, key, val) {
@@ -120,9 +141,7 @@
       var s = this.store;
       s.loading = true;
       self.renderAll();
-      bridge.ready().then(function () {
-        return bridge.apiGet('session-config');
-      }).then(apiResult).then(function (result) {
+      apiGet('session-config').then(apiResult).then(function (result) {
         s.keys = result.keys || [];
         s.sessions = result.sessions || [];
         s.globalValues = result.global || {};
@@ -186,7 +205,7 @@
       }
       s.loading = true;
       self.renderAll();
-      bridge.apiPost('session-config/upsert', s.form).then(apiResult).then(function (result) {
+      apiPost('session-config/upsert', s.form).then(apiResult).then(function (result) {
         self.selectSession(result.data || s.form);
         return self.reload();
       }).then(function () {
@@ -205,7 +224,7 @@
       if (!s.form.session_id) return;
       s.loading = true;
       self.renderAll();
-      bridge.apiPost('session-config/clear', s.form).then(apiResult).then(function (result) {
+      apiPost('session-config/clear', s.form).then(apiResult).then(function (result) {
         self.selectSession(result.data || s.form);
         return self.reload();
       }).then(function () {
@@ -224,7 +243,7 @@
       if (!s.form.session_id) return;
       s.loading = true;
       self.renderAll();
-      bridge.apiPost('session-config/delete', { session_id: s.form.session_id }).then(apiResult).then(function () {
+      apiPost('session-config/delete', { session_id: s.form.session_id }).then(apiResult).then(function () {
         s.form = self.emptyForm();
         return self.reload();
       }).then(function () {
@@ -282,7 +301,7 @@
         if (a === 'sc-reload') { btn.disabled = !!s.loading; return; }
         if (a === 'sc-delete') { btn.disabled = !hasSession || !!s.loading; return; }
         if (a === 'sc-save') { btn.disabled = !!s.loading; return; }
-        if (a === 'sc-clear') { btn.disabled = !hasSession; return; }
+        if (a === 'sc-clear') { btn.disabled = !hasSession || !!s.loading; return; }
       });
     },
 
@@ -439,9 +458,7 @@
       var s = this.store;
       s.loading = true;
       self.renderButtons();
-      bridge.ready().then(function () {
-        return bridge.apiGet('access-control');
-      }).then(apiResult).then(function (result) {
+      apiGet('access-control').then(apiResult).then(function (result) {
         s.modes = Object.assign({}, s.modes, result.modes || {});
         s.entries = result.entries || [];
         self.renderAll();
@@ -458,7 +475,7 @@
       var s = this.store;
       s.loading = true;
       self.renderButtons();
-      bridge.apiPost('access-control/modes', { modes: s.modes }).then(apiResult).then(function (result) {
+      apiPost('access-control/modes', { modes: s.modes }).then(apiResult).then(function (result) {
         s.modes = Object.assign({}, s.modes, result.modes || {});
         self.renderModes();
         globalStore.showToast('模式已保存');
@@ -480,7 +497,7 @@
       }
       s.loading = true;
       self.renderButtons();
-      bridge.apiPost('access-control/entries/upsert', payload).then(apiResult).then(function () {
+      apiPost('access-control/entries/upsert', payload).then(apiResult).then(function () {
         s.form = self.emptyForm();
         self.renderForm();
         return self.reload();
@@ -506,7 +523,7 @@
       if (!id) return;
       s.loading = true;
       self.renderButtons();
-      bridge.apiPost('access-control/entries/delete', { id: id }).then(apiResult).then(function () {
+      apiPost('access-control/entries/delete', { id: id }).then(apiResult).then(function () {
         if (s.form.id === id) s.form = self.emptyForm();
         return self.reload();
       }).then(function () {

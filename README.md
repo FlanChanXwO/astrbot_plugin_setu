@@ -10,7 +10,7 @@
 
 **一个支持多平台、可自定义、带防审核机制的随机色图插件，支持多 API、会话级配置、LLM 工具调用。**
 
-[![License: APGL](https://img.shields.io/badge/License-APGL-blue.svg)](https://opensource.org/licenses/agpl-3.0)
+[![License: AGPL](https://img.shields.io/badge/License-AGPL-blue.svg)](https://opensource.org/licenses/agpl-3.0)
 ![Python Version](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![AstrBot](https://img.shields.io/badge/AstrBot-%E2%89%A54.24.0-green)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey)
@@ -61,7 +61,7 @@
 - 🏷️ **标签搜索** - 支持多标签、中文标签、模糊匹配
 - 🔄 **多种发送模式** - 直接发送、合并转发、文件封装
 - 🛡️ **防审核机制** - HTML 卡片 fallback、NapCat 流式上传、延迟撤回、Docx 封装
-- ⚡ **性能优化** - 并发下载、磁盘缓存、自动补图、httpx、分段下载
+- ⚡ **性能优化** - 磁盘缓存、自动补图、httpx、可观测下载重试
 - 🌐 **多平台适配** - 兼容 AstrBot 支持的所有平台
 
 ---
@@ -89,7 +89,7 @@
 
 发送以下任一指令即可获取色图：
 
-```
+```text
 来一份色图
 来三份白丝瑟图
 来9份白丝 萝莉色图
@@ -106,7 +106,7 @@
 
 ### 会话配置命令（管理员设置）
 
-```
+```bash
 /session_config get
 /session_config get setu.content_mode
 /session_config set setu.content_mode r18
@@ -116,9 +116,9 @@
 
 ### 黑白名单管理命令（管理员）
 
-通过插件 WebUI 的 `accessControl` 页面可集中管理黑白名单，也可使用命令动态管理：
+通过插件 WebUI 的 Dashboard 访问控制标签页可集中管理黑白名单，也可使用命令动态管理：
 
-```
+```bash
 /拉黑色图用户 @用户
 /信任色图用户 @用户
 /开启色图
@@ -149,9 +149,9 @@
 | 配置项 | 说明 | 默认值 |
 |--------|------|--------|
 | `api_type` | API 类型（lolicon / atri / sexnyan / custom / all） | `lolicon` |
-| `send_mode` | 发送模式（auto / image / forward） | `auto` |
+| `send_mode` | 发送模式（auto / image / forward） | `image` |
 | `content_mode` | 内容模式（sfw / r18 / mix） | `sfw` |
-| `max_count` | 单次最大图片数（1-20） | `10` |
+| `max_count` | 单次最大图片数（1-10） | `10` |
 | `max_replenish_rounds` | 下载暂时失败时的同 URL 确认尝试次数/补图轮次 | `3` |
 | `cache_enabled` | 是否复用本地发送缓存 | `true` |
 | `exclude_ai` | 是否排除 AI 生成图片 | `false` |
@@ -178,7 +178,7 @@
 
 ### 访问控制
 
-访问控制通过插件 WebUI 的 `accessControl` 页面管理，支持：
+访问控制通过插件 WebUI 的 Dashboard 访问控制标签页管理，支持：
 
 - Setu / 运势独立的用户和群组访问模式
 - 黑白名单表格管理

@@ -152,7 +152,6 @@ class DeliveryConfig(BaseModel):
 
     send_mode: SendModeStr = SendModeStr.IMAGE
     r18_docx_mode: bool = True
-    auto_handle_send_failure: bool = True
     auto_revoke_r18: bool = False
     auto_revoke_delay: int = Field(default=30, ge=5, le=300)
     napcat_stream_mode: NapcatStreamModeStr = NapcatStreamModeStr.FALLBACK

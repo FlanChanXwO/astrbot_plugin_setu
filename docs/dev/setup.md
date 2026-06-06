@@ -52,12 +52,12 @@ python /path/to/AstrBot/main.py
 
 ### Plugin Pages
 
-前端位于 `pages/sessionConfig/` 和 `pages/accessControl/`，主要由：
+前端统一位于 `pages/dashboard/`，主要由：
 
 - `index.html`
-- `app.js`（sessionConfig）
+- `app.js`
 
-构成。前端行为依赖 AstrBot Plugin Pages bridge，不是独立 SPA。
+构成。Dashboard 内通过标签页提供会话配置和访问控制，前端行为依赖 AstrBot Plugin Pages bridge，不是独立 SPA。
 
 ## 测试与检查命令
 

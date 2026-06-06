@@ -4,7 +4,7 @@
 
 发送以下任一指令即可获取色图：
 
-```
+```text
 来一份色图
 来三份白丝瑟图
 来9份白丝 萝莉色图
@@ -21,9 +21,9 @@
 ## 会话配置命令（管理员设置）
 
 会话覆盖配置会写入插件数据目录下的 `session_overrides.json`，不会修改全局 WebUI 配置。
-也可以在插件 WebUI 的 `sessionConfig` 页面集中管理所有群聊/私聊会话覆盖。
+也可以在插件 WebUI 的 Dashboard 会话配置标签页集中管理所有群聊/私聊会话覆盖。
 
-```
+```bash
 /session_config get
 /session_config get setu.content_mode
 /session_config get json
@@ -40,7 +40,7 @@
 
 ## 黑白名单管理命令（管理员）
 
-通过插件 WebUI 的 `accessControl` 页面可集中管理黑白名单。以下命令也可动态管理黑白名单（配置会自动持久化到同一份访问控制数据）。
+通过插件 WebUI 的 Dashboard 访问控制标签页可集中管理黑白名单。以下命令也可动态管理黑白名单（配置会自动持久化到同一份访问控制数据）。
 
 ### 色图用户黑白名单
 

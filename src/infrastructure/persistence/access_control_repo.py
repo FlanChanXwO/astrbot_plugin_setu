@@ -20,6 +20,10 @@ if TYPE_CHECKING:
     from astrbot.core import AstrBotConfig
 
 
+class AccessControlPersistenceError(RuntimeError):
+    """Raised when access-control changes cannot be persisted."""
+
+
 class FileBackedAccessControlRepo(AccessControlRepository):
     """File-backed repository for access control lists.
 
@@ -163,7 +167,7 @@ class FileBackedAccessControlRepo(AccessControlRepository):
             if key in modes:
                 current[key] = _normalize_mode(modes.get(key))
         self._cache["modes"] = current
-        await self._save_config()
+        await self._ensure_saved()
         return self.get_modes()
 
     def list_entries(self) -> list[dict[str, str]]:
@@ -186,7 +190,7 @@ class FileBackedAccessControlRepo(AccessControlRepository):
             entries.append(entry)
         self._dedupe_entry_conflicts(entry)
         self._sync_legacy_lists_from_entries()
-        await self._save_config()
+        await self._ensure_saved()
         return entry
 
     async def delete_entry(self, entry_id: str) -> bool:
@@ -198,8 +202,13 @@ class FileBackedAccessControlRepo(AccessControlRepository):
         if deleted:
             self._cache["entries"] = next_entries
             self._sync_legacy_lists_from_entries()
-            await self._save_config()
+            await self._ensure_saved()
         return deleted
+
+    async def _ensure_saved(self) -> None:
+        """Persist current cache or surface the failure to callers."""
+        if not await self._save_config():
+            raise AccessControlPersistenceError("访问控制配置保存失败")
 
     # Setu user access control
     async def add_setu_blocked_user(self, user_id: str) -> bool:

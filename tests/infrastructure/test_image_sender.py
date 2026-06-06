@@ -243,6 +243,47 @@ async def test_send_images_materializes_local_files_before_direct_send(
 
 
 @pytest.mark.asyncio
+async def test_html_card_only_preserves_pending_send_status(
+    tmp_path: Path, mock_event, sample_config_dict
+) -> None:
+    image_path = tmp_path / "image.jpg"
+    image_path.write_bytes(b"image-data")
+
+    context = MagicMock()
+    context.send_message = AsyncMock(side_effect=TimeoutError("html ack timeout"))
+    set_plugin_context(context)
+
+    class FakeHtmlRenderer:
+        async def render_single_image(self, **kwargs) -> bytes:
+            return b"html-card"
+
+    config_dict = sample_config_dict.copy()
+    config_dict["html_card"] = {
+        **sample_config_dict["html_card"],
+        "strategy": "always",
+    }
+    config_dict["messages"] = {
+        **sample_config_dict["messages"],
+        "found": {"enabled": False, "text": "找到 {count} 张符合要求的图片~"},
+    }
+    config = SetuPluginConfig(**config_dict)
+    sender = ImageSender(config)
+    sender.set_html_renderer(FakeHtmlRenderer())
+    payload = ImagePayload(
+        urls=("https://example.com/image.jpg",),
+        raw_bytes=(),
+        file_paths=(image_path,),
+        items=(image_path,),
+        r18=False,
+        tags=(),
+    )
+
+    results = [item async for item in sender.send_images(payload, mock_event)]
+
+    assert results == [{"send_success": True, "image_count": 1, "send_pending": True}]
+
+
+@pytest.mark.asyncio
 async def test_direct_send_strategy_passthroughs_onebot_stream_refs(mock_event) -> None:
     context = MagicMock()
     strategy = DirectSendStrategy(context)

@@ -155,13 +155,19 @@ class ImageSender:
             )
             if found_message:
                 await self._send_plain_text(event, found_message)
-            success = await self._try_html_card_fallback(
+            html_result = await self._try_html_card_fallback(
                 event, chain, options, payload.r18
             )
-            if not success:
+            if not html_result.accepted:
                 fail_message = self._send_failed_message()
                 if fail_message:
                     yield event.plain_result(fail_message)
+            elif html_result.pending:
+                yield {
+                    "send_success": True,
+                    "image_count": payload.count,
+                    "send_pending": True,
+                }
             else:
                 yield {"send_success": True, "image_count": payload.count}
             schedule_send_cache_cleanup()
@@ -220,13 +226,8 @@ class ImageSender:
                 self._session_label(event),
                 effective_mode,
             )
-            html_success = await self._try_html_card_fallback(
+            send_result = await self._try_html_card_fallback(
                 event, chain, options, payload.r18
-            )
-            send_result = (
-                SendAttemptResult.success()
-                if html_success
-                else SendAttemptResult.failed("html card fallback failed")
             )
 
         if not send_result.accepted:
@@ -375,10 +376,10 @@ class ImageSender:
         chain: list[Comp.Image],
         options: SendOptions,
         is_r18: bool,
-    ) -> bool:
+    ) -> SendAttemptResult:
         """Try HTML card fallback."""
         if not self._html_renderer:
-            return False
+            return SendAttemptResult.failed("html renderer unavailable")
 
         strategy = HtmlCardFallbackStrategy(
             self._context,
@@ -388,7 +389,9 @@ class ImageSender:
                 "card_gap": options.html_gap,
             },
         )
-        return await strategy.send(event, chain, is_r18 and options.auto_revoke)
+        return await strategy.send_with_status(
+            event, chain, is_r18 and options.auto_revoke
+        )
 
     def _payload_items(self, payload: ImagePayload) -> tuple[ImageItem, ...]:
         if payload.items:

@@ -6,6 +6,7 @@ Extracts business logic from FortuneCore into a pure domain service.
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
 from datetime import date
 
 from ...application.ports import FortuneRepository
@@ -59,7 +60,8 @@ class FortuneService:
         # Try to get existing fortune
         existing = await self._repo.get_today_fortune(request)
         if existing and not force_refresh:
-            updated = existing.with_last_view_date(request.date_str)
+            updated = await self._prepare_existing_record(existing, request)
+            updated = updated.with_last_view_date(request.date_str)
             await self._repo.save_fortune(updated)
             return updated
 
@@ -154,7 +156,12 @@ class FortuneService:
         return len(records)
 
     async def pregenerate_active_user_records(
-        self, days: int = 3, *, include_existing: bool = False
+        self,
+        days: int = 3,
+        *,
+        include_existing: bool = False,
+        access_filter: Callable[[FortuneGenerationRequest], Awaitable[bool]]
+        | None = None,
     ) -> list[FortuneRecord]:
         """Ensure today's fortune records exist for recently active users.
 
@@ -172,8 +179,11 @@ class FortuneService:
 
         records: list[FortuneRecord] = []
         for request in active_requests:
+            if access_filter is not None and not await access_filter(request):
+                continue
             existing = await self._repo.get_today_fortune(request)
             if existing:
+                existing = await self._prepare_existing_record(existing, request)
                 if include_existing:
                     records.append(existing)
                 continue
@@ -181,6 +191,26 @@ class FortuneService:
             records.append(await self.get_or_create_fortune(request))
 
         return records
+
+    async def _prepare_existing_record(
+        self, existing: FortuneRecord, request: FortuneGenerationRequest
+    ) -> FortuneRecord:
+        """Refresh mutable display fields while preserving fortune result."""
+        changed = (
+            existing.username != request.username
+            or existing.group_id != request.group_id
+        )
+        if not changed:
+            return existing
+
+        updated = existing.with_presentation(
+            username=request.username,
+            group_id=request.group_id,
+            invalidate_image_cache=True,
+        )
+        await self._repo.delete_cached_image(existing.user_id, existing.date_str)
+        await self._repo.save_fortune(updated)
+        return updated
 
     async def update_image_cache(
         self, record: FortuneRecord, image_data: bytes, img_url: str | None

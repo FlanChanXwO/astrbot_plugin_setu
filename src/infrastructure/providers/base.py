@@ -244,7 +244,7 @@ class DownloadingSetuImageProvider(SetuImageProvider):
                     )
                     return cached
 
-            if cache is not None:
+            if cache_enabled and cache is not None:
                 write = None
                 try:
                     async with client.stream("GET", url) as response:
@@ -268,6 +268,22 @@ class DownloadingSetuImageProvider(SetuImageProvider):
                     if write is not None:
                         await cache.discard(write)
                     raise
+
+            if cache is not None:
+                chunks: list[bytes] = []
+                async with client.stream("GET", url) as response:
+                    response.raise_for_status()
+                    async for chunk in response.aiter_bytes():
+                        if chunk:
+                            chunks.append(chunk)
+                content = b"".join(chunks)
+                logger.debug(
+                    "[provider] download bytes: provider=%s, url=%s, bytes=%d",
+                    provider_name,
+                    url,
+                    len(content),
+                )
+                return content
 
             response = await client.get(url)
             response.raise_for_status()

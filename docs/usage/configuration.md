@@ -7,9 +7,9 @@
 | 配置项 | 类型 | 说明 | 可选值 | 默认值 |
 |--------|------|------|--------|--------|
 | `api_type` | 字符串 | API 类型 | `lolicon` / `atri` / `sexnyan` / `custom` / `all` | `lolicon` |
-| `send_mode` | 字符串 | 发送模式 | `auto` / `image` / `forward` | `auto` |
+| `send_mode` | 字符串 | 发送模式 | `auto` / `image` / `forward` | `image` |
 | `content_mode` | 字符串 | 内容模式 | `sfw` / `r18` / `mix` | `sfw` |
-| `max_count` | 整数 | 单次最大图片数 | 1-20 | `10` |
+| `max_count` | 整数 | 单次最大图片数 | 1-10 | `10` |
 | `max_replenish_rounds` | 整数 | 下载暂时失败时的同 URL 确认尝试次数，也是短缺时的补图轮次 | 1-3 | `3` |
 | `cache_enabled` | 布尔值 | 是否复用本地发送缓存 | `true` / `false` | `true` |
 | `exclude_ai` | 布尔值 | 是否排除 AI 生成图片 | `true` / `false` | `false` |
@@ -46,7 +46,7 @@
 
 ## 访问控制配置
 
-安全配置已从 `_conf_schema.json` 移到插件 WebUI 的 `accessControl` 页面。页面支持：
+安全配置已从 `_conf_schema.json` 移到插件 WebUI 的 Dashboard 访问控制标签页。页面支持：
 
 - 设置 Setu/运势的用户、群组访问模式：`none` / `blacklist` / `whitelist`
 - 用表格新增、编辑、删除用户/群组黑白名单
@@ -75,11 +75,7 @@
 |------|------|--------|
 | `napcat_stream_mode` | NapCat/OneBot 图片传输策略 | `fallback` |
 | `cache_enabled` | 是否复用发送缓存 | `true` |
-| `enable_range_download` | 启用分段下载，适合高带宽服务器 | `false`（一般）/ `true`（高带宽） |
-| `range_segments` | 分段数 | 2-4 |
-| `range_download_threshold` | 分段下载阈值（KB） | 512 |
-| `download_concurrent_limit` | 并发下载限制 | 10 |
-| `download_timeout_seconds` | 下载超时时间（秒） | 30 |
+| `max_replenish_rounds` | 图片 URL 短暂下载失败时的确认重试和补图轮次 | `3` |
 
 ## 配置示例
 

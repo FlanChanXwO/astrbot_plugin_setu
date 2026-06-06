@@ -9,6 +9,9 @@ import pytest
 from astrbot_plugin_setu.src.infrastructure.persistence import (
     FileBackedAccessControlRepo,
 )
+from astrbot_plugin_setu.src.infrastructure.persistence.access_control_repo import (
+    AccessControlPersistenceError,
+)
 
 
 class TestFileBackedAccessControlRepo:
@@ -157,10 +160,28 @@ class TestFileBackedAccessControlRepo:
         )
 
         assert await repo.is_setu_user_blocked("user-table") is True
-        assert repo.list_entries()[0]["note"] == "manual"
+        entries = repo.list_entries()
+        stored_entry = next(item for item in entries if item["id"] == entry["id"])
+        assert stored_entry["note"] == "manual"
 
         assert await repo.delete_entry(entry["id"]) is True
         assert await repo.is_setu_user_blocked("user-table") is False
+
+    @pytest.mark.asyncio
+    async def test_set_modes_surfaces_persistence_failure(
+        self, temp_data_dir, mock_astrbot_config, monkeypatch
+    ) -> None:
+        """WebUI writes should not report success when the JSON save fails."""
+        repo = FileBackedAccessControlRepo(temp_data_dir, mock_astrbot_config)
+        await repo.initialize()
+
+        async def fail_save() -> bool:
+            return False
+
+        monkeypatch.setattr(repo, "_save_config", fail_save)
+
+        with pytest.raises(AccessControlPersistenceError):
+            await repo.set_modes({"setu_user_access_control_mode": "blacklist"})
 
     @pytest.mark.asyncio
     async def test_modes_are_persisted(

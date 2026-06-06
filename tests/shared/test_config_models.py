@@ -93,3 +93,15 @@ def test_tag_alias_templates_override_text_default(sample_config_dict) -> None:
     config = SetuPluginConfig(**config_dict)
 
     assert config.tag_alias == "少女=girl,girls"
+
+
+def test_legacy_auto_handle_send_failure_is_ignored(sample_config_dict) -> None:
+    config_dict = sample_config_dict.copy()
+    config_dict["delivery"] = {
+        **sample_config_dict["delivery"],
+        "auto_handle_send_failure": False,
+    }
+
+    config = SetuPluginConfig(**config_dict)
+
+    assert not hasattr(config.delivery, "auto_handle_send_failure")

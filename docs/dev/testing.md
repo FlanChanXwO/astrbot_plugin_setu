@@ -8,7 +8,7 @@
 | Python lint | AstrBot 根目录 | `uv run ruff check data/plugins/astrbot_plugin_setu` |
 | 全量 pytest | 插件目录 | `PYTHONPATH=/path/to/data/plugins python -m pytest tests/ -v` |
 | 单文件测试 | 插件目录 | `PYTHONPATH=/path/to/data/plugins python -m pytest tests/infrastructure/test_fortune_pregeneration.py -q` |
-| 编译检查 | 插件目录 | `python -m py_compile main.py src/**/*.py tests/**/*.py` |
+| 编译检查 | 插件目录 | `python -m compileall main.py src tests` |
 
 > [!TIP]
 > 如果上级缓存目录不可写，设置 `RUFF_CACHE_DIR=.ruff_cache` 后再运行 ruff。
@@ -18,7 +18,7 @@
 | 改动类型 | 最小检查 | 建议额外回归 | 关注点 |
 | --- | --- | --- | --- |
 | Python 业务逻辑 | 相关单元测试、`ruff check` | provider、sender、config model、message config | 不要只跑被改函数附近的测试。 |
-| Plugin Pages | `node --check pages/*/app.js` | 手工验证 sessionConfig 页面加载、读写、重置 | 前端改动不要只看代码。 |
+| Plugin Pages | `node --check pages/dashboard/app.js` | 手工验证 Dashboard 标签页加载、读写、重置 | 前端改动不要只看代码。 |
 | 配置或迁移 | 相关配置测试 | `_conf_schema.json` 同步、`models.py` 同步、旧配置兼容 | 脏配置要能被容忍。 |
 | sender / 媒体 | sender 单测、发送策略测试 | HTML 卡片降级、NapCat 流式、文件封装 | 不同平台行为差异要覆盖。 |
 | 运势 / Fortune | fortune 相关单测 | 渲染、缓存、预生成、刷新命令 | 卡片渲染失败要能降级到文本。 |

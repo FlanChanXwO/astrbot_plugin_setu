@@ -396,7 +396,11 @@ class SetuCommandHandler:
         """Apply tag alias mapping for list inputs."""
         if not tags:
             return []
-        return self._resolve_tags(" ".join(tags), config)
+        alias_map = TagResolverService.parse_alias_map_from_string(
+            getattr(config, "tag_alias", ""), split_spaces=False
+        )
+        resolver = TagResolverService(alias_map or TagResolverService.DEFAULT_TAG_ALIAS)
+        return [resolver.resolve_tag(str(tag)) for tag in tags if str(tag).strip()]
 
 
 # ==================== LLM Tools Registration ====================

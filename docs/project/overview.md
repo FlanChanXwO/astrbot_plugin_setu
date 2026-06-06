@@ -54,7 +54,7 @@ v2.0 的目标是把容易回归的部分保护起来：
 ### 插件不再负责
 
 - 旧版 `aiohttp` 依赖（已迁移到 `httpx`）
-- 旧版 `safety.*` 配置直接管理（已迁移到 `accessControl` 页面）
+- 旧版 `safety.*` 配置直接管理（已迁移到 Dashboard 访问控制标签页）
 - 旧版硬编码提示文案（已迁移到 `MessagesConfig`）
 
 ## 当前用户入口
@@ -71,8 +71,8 @@ v2.0 的目标是把容易回归的部分保护起来：
    - `get_session_config` / `set_session_config` / `clear_session_config`
    - `get_today_fortune` / `refresh_my_fortune` / `refresh_group_fortune` / `refresh_all_fortune`
 3. Plugin Pages
-   - `sessionConfig` 会话覆盖配置页
-   - `accessControl` 访问控制管理页
+   - `dashboard` 统一管理页
+   - Dashboard 内含会话配置和访问控制两个标签页
 
 ## 当前实现取向
 

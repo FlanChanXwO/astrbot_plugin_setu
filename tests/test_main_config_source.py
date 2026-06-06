@@ -9,7 +9,7 @@ from astrbot_plugin_setu.main import SetuPlugin
 
 @pytest.mark.asyncio
 async def test_initialize_uses_plugin_config_not_context_config(
-    monkeypatch, sample_config_dict
+    monkeypatch, tmp_path, sample_config_dict
 ) -> None:
     context = MagicMock()
     context.get_config.return_value = {
@@ -58,7 +58,7 @@ async def test_initialize_uses_plugin_config_not_context_config(
         "astrbot_plugin_setu.main.set_plugin_context", lambda _ctx: None
     )
     monkeypatch.setattr(
-        "astrbot_plugin_setu.main.StarTools.get_data_dir", lambda _name: "/tmp"
+        "astrbot_plugin_setu.main.StarTools.get_data_dir", lambda _name: str(tmp_path)
     )
     monkeypatch.setattr(
         "astrbot_plugin_setu.main.init_provider_from_config", lambda _cfg: None

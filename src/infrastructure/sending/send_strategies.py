@@ -8,6 +8,7 @@ Defines the strategy interface and implementations for different send modes:
 
 from __future__ import annotations
 
+import asyncio
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
@@ -342,9 +343,19 @@ class HtmlCardFallbackStrategy(SendStrategy):
         Returns:
             True if send succeeded
         """
+        result = await self.send_with_status(event, chain, auto_revoke)
+        return result.accepted
+
+    async def send_with_status(
+        self,
+        event: AstrMessageEvent,
+        chain: list[Any],
+        auto_revoke: bool = False,
+    ) -> SendAttemptResult:
+        """Send HTML fallback and preserve pending delivery status."""
         if not self._renderer:
             logger.warning("[html_fallback] renderer unavailable")
-            return False
+            return SendAttemptResult.failed("html renderer unavailable")
 
         images: list[bytes] = []
         for comp in chain:
@@ -363,8 +374,6 @@ class HtmlCardFallbackStrategy(SendStrategy):
                 )
                 if candidate.exists():
                     try:
-                        import asyncio
-
                         data = await asyncio.to_thread(candidate.read_bytes)
                         images.append(data)
                     except OSError:
@@ -375,7 +384,7 @@ class HtmlCardFallbackStrategy(SendStrategy):
 
         if not images:
             logger.warning("[html_fallback] no images available after materialization")
-            return False
+            return SendAttemptResult.failed("no images available")
 
         rendered_images = []
         for i, img_data in enumerate(images):
@@ -392,12 +401,14 @@ class HtmlCardFallbackStrategy(SendStrategy):
 
         if not rendered_images:
             logger.warning("[html_fallback] renderer produced no images")
-            return False
+            return SendAttemptResult.failed("renderer produced no images")
 
         # Send rendered images
         chain = [Comp.Image.fromBytes(img) for img in rendered_images]
         logger.info("[html_fallback] rendered images: count=%d", len(rendered_images))
-        return await DirectSendStrategy(self._context).send(event, chain, False)
+        return await DirectSendStrategy(self._context).send_with_status(
+            event, chain, auto_revoke
+        )
 
 
 def resolve_send_mode(

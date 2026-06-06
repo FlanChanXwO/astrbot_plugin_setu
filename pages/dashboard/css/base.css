@@ -21,8 +21,8 @@
   --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08);
   --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.08);
   --radius: 8px;
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
-  --font-mono: "SF Mono", Monaco, "Cascadia Code", "Liberation Mono", monospace;
+  --font-sans: -apple-system, "BlinkMacSystemFont", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: "SF Mono", "Monaco", "Cascadia Code", "Liberation Mono", monospace;
 }
 
 @media (prefers-color-scheme: dark) {

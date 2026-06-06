@@ -6,7 +6,6 @@ from __future__ import annotations
 ONEBOT_LIKE_PLATFORM_MARKERS: tuple[str, ...] = (
     "aiocqhttp",
     "onebot11",
-    "onebot",
     "go-cqhttp",
     "napcat",
     "llonebot",

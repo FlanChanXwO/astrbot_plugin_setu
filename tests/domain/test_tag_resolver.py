@@ -97,7 +97,7 @@ test2=
 
     def test_parse_alias_map_with_cn_separators_and_spaces(self) -> None:
         """Test parsing alias string with Chinese separators and spaces."""
-        alias_str = "少女=girl，girls cute\tkawaii、pretty"
+        alias_str = "少女=girl\uff0cgirls cute\tkawaii\u3001pretty"
         result = TagResolverService.parse_alias_map_from_string(alias_str)
         assert result == {"少女": ["girl", "girls", "cute", "kawaii", "pretty"]}
 

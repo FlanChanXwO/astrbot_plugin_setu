@@ -27,3 +27,13 @@ class TestSetuTagAliasIntegration:
         resolved = handler._resolve_tags_from_list(["girl", "kawaii"], config)
 
         assert resolved == ["少女", "kawaii"]
+
+    def test_resolve_tags_from_list_keeps_multi_word_tags(self) -> None:
+        handler = SetuCommandHandler()
+        config = SimpleNamespace(tag_alias="碧蓝档案=blue archive")
+
+        resolved = handler._resolve_tags_from_list(
+            ["blue archive", "white hair"], config
+        )
+
+        assert resolved == ["碧蓝档案", "white hair"]
