@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from astrbot_plugin_setu.src.infrastructure.persistence import (
@@ -135,3 +137,74 @@ class TestFileBackedAccessControlRepo:
         await repo.add_setu_blocked_user("user666")
         assert await repo.is_setu_user_blocked("user666") is True
         assert await repo.is_setu_user_whitelisted("user666") is False
+
+    @pytest.mark.asyncio
+    async def test_table_entries_drive_legacy_checks(
+        self, temp_data_dir, mock_astrbot_config
+    ) -> None:
+        """Table-style entries should back old checker methods."""
+        repo = FileBackedAccessControlRepo(temp_data_dir, mock_astrbot_config)
+        await repo.initialize()
+
+        entry = await repo.upsert_entry(
+            {
+                "feature": "setu",
+                "subject_type": "user",
+                "list_type": "blacklist",
+                "target_id": "user-table",
+                "note": "manual",
+            }
+        )
+
+        assert await repo.is_setu_user_blocked("user-table") is True
+        assert repo.list_entries()[0]["note"] == "manual"
+
+        assert await repo.delete_entry(entry["id"]) is True
+        assert await repo.is_setu_user_blocked("user-table") is False
+
+    @pytest.mark.asyncio
+    async def test_modes_are_persisted(
+        self, temp_data_dir, mock_astrbot_config
+    ) -> None:
+        """Access modes should be managed by the new safety page store."""
+        repo = FileBackedAccessControlRepo(temp_data_dir, mock_astrbot_config)
+        await repo.initialize()
+
+        modes = await repo.set_modes(
+            {
+                "setu_user_access_control_mode": "blacklist",
+                "fortune_group_access_control_mode": "whitelist",
+            }
+        )
+
+        assert modes["setu_user_access_control_mode"] == "blacklist"
+        assert modes["fortune_group_access_control_mode"] == "whitelist"
+
+        repo2 = FileBackedAccessControlRepo(temp_data_dir, mock_astrbot_config)
+        await repo2.initialize()
+        assert repo2.get_modes()["setu_user_access_control_mode"] == "blacklist"
+
+    @pytest.mark.asyncio
+    async def test_imports_legacy_config_file_lists(
+        self, temp_data_dir, mock_astrbot_config
+    ) -> None:
+        """Old config.json list keys should migrate into table entries."""
+        (temp_data_dir / "config.json").write_text(
+            json.dumps(
+                {
+                    "setu_blocked_users": ["legacy-user"],
+                    "fortune_whitelist_groups": ["legacy-group"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        repo = FileBackedAccessControlRepo(temp_data_dir, mock_astrbot_config)
+        await repo.initialize()
+
+        entries = repo.list_entries()
+        assert await repo.is_setu_user_blocked("legacy-user") is True
+        assert await repo.is_fortune_group_whitelisted("legacy-group") is True
+        assert {entry["target_id"] for entry in entries} == {
+            "legacy-user",
+            "legacy-group",
+        }

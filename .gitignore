@@ -191,6 +191,12 @@ cython_debug/
 # Ruff stuff:
 .ruff_cache/
 
+# Plugin-local runtime artifacts
+/data/
+
+# Local agent/tool settings
+/.claude/
+
 # PyPI configuration file
 .pypirc
 

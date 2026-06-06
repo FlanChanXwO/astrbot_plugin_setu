@@ -127,7 +127,11 @@ class TagResolverService:
             if not key or not value:
                 continue
 
-            aliases = [a.strip() for a in value.split(",") if a.strip()]
+            normalized_value = (
+                value.replace("，", ",").replace("、", ",").replace("\t", " ")
+            )
+            normalized_value = ",".join(normalized_value.split())
+            aliases = [a.strip() for a in normalized_value.split(",") if a.strip()]
             if aliases:
                 result[key] = aliases
 

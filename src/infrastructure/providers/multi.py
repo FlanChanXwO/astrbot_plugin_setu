@@ -6,11 +6,12 @@ import random
 
 from ...application.ports import SetuImageProvider
 from ...shared import get_logger
+from .base import DownloadingSetuImageProvider
 
 logger = get_logger()
 
 
-class MultiApiProvider(SetuImageProvider):
+class MultiApiProvider(DownloadingSetuImageProvider):
     """多 API 提供商，支持轮询、随机和故障转移策略。"""
 
     def __init__(

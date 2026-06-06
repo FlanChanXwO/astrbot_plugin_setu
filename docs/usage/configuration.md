@@ -10,8 +10,11 @@
 | `send_mode` | 字符串 | 发送模式 | `auto` / `image` / `forward` | `auto` |
 | `content_mode` | 字符串 | 内容模式 | `sfw` / `r18` / `mix` | `sfw` |
 | `max_count` | 整数 | 单次最大图片数 | 1-20 | `10` |
+| `max_replenish_rounds` | 整数 | 下载暂时失败时的同 URL 确认尝试次数，也是短缺时的补图轮次 | 1-3 | `3` |
 | `cache_enabled` | 布尔值 | 是否复用本地发送缓存 | `true` / `false` | `true` |
 | `exclude_ai` | 布尔值 | 是否排除 AI 生成图片 | `true` / `false` | `false` |
+
+图片 URL 已返回但下载出现连接错误、HTTP 错误或超时时，插件会先按 `max_replenish_rounds` 对同一 URL 做可观测的确认重试。仍失败时才进入后续补图轮次或返回无结果，避免 CDN/反代短暂抖动被直接当成最终失败。
 
 ## HTML 卡片与防审核配置
 
@@ -27,8 +30,10 @@
 | 策略 | 说明 |
 |------|------|
 | `never` | 从不使用 HTML 卡片，直接发送原图 |
-| `fallback`（默认） | 发送失败时自动降级为 HTML 卡片 |
+| `fallback`（默认） | 确认发送失败时自动降级为 HTML 卡片 |
 | `always` | 总是使用 HTML 卡片包装发送 |
+
+发送接口超时或 OneBot/NapCat 类适配器未返回 message id 时，插件会把结果标记为“可能仍在送达”，不会立刻触发 NapCat 流式或 HTML 卡片 fallback，避免原图稍后送达时又重复发送降级图片。明确抛出的发送异常仍会进入原有 fallback 链路。
 
 ## 模板覆盖配置
 

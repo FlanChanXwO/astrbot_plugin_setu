@@ -13,7 +13,11 @@ async def test_initialize_uses_plugin_config_not_context_config(
 ) -> None:
     context = MagicMock()
     context.get_config.return_value = {
-        "api": {"lolicon": {"proxy": "wrong.example.com"}}
+        "api": {
+            "provider_overrides": [
+                {"__template_key": "lolicon", "proxy": "wrong.example.com"}
+            ]
+        }
     }
     config = MagicMock()
     config.items.return_value = sample_config_dict.items()
@@ -25,16 +29,20 @@ async def test_initialize_uses_plugin_config_not_context_config(
 
     def fake_init_config(raw_config):
         captured["raw_config"] = raw_config
+        overrides = {
+            item["__template_key"]: item
+            for item in raw_config["api"]["provider_overrides"]
+        }
         return MagicMock(
             api_type="lolicon",
             custom_api_configs=[],
             multi_api_strategy="round_robin",
-            proxy=raw_config["api"]["lolicon"]["proxy"],
+            proxy=overrides["lolicon"]["proxy"],
             image_size="original",
             aspect_ratio="",
             uid=[],
             keyword="",
-            atri_proxy=raw_config["api"]["atri"]["proxy"],
+            atri_proxy=overrides["atri"]["proxy"],
             atri_image_size="original",
             atri_aspect_ratio="",
             atri_uid=[],
@@ -75,7 +83,15 @@ async def test_initialize_uses_plugin_config_not_context_config(
 
     await plugin.initialize()
 
+    raw_config = captured["raw_config"]
+    assert isinstance(raw_config, dict)
+    captured_overrides = {
+        item["__template_key"]: item for item in raw_config["api"]["provider_overrides"]
+    }
+    expected_overrides = {
+        item["__template_key"]: item
+        for item in sample_config_dict["api"]["provider_overrides"]
+    }
     assert (
-        captured["raw_config"]["api"]["lolicon"]["proxy"]
-        == sample_config_dict["api"]["lolicon"]["proxy"]
+        captured_overrides["lolicon"]["proxy"] == expected_overrides["lolicon"]["proxy"]
     )

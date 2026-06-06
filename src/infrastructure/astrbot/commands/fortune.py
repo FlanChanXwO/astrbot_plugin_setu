@@ -391,14 +391,20 @@ class FortuneCommandHandler:
         user_id = event.get_sender_id()
         group_id = event.get_group_id()
 
+        repo = get_access_control_repo()
+        modes = repo.get_modes()
         policy = AccessPolicy.for_session(
             user_id=user_id,
             group_id=group_id,
-            user_mode=config.fortune_user_access_control_mode if config else "none",
-            group_mode=config.fortune_group_access_control_mode if config else "none",
+            user_mode=modes.get(
+                "fortune_user_access_control_mode",
+                config.fortune_user_access_control_mode if config else "none",
+            ),
+            group_mode=modes.get(
+                "fortune_group_access_control_mode",
+                config.fortune_group_access_control_mode if config else "none",
+            ),
         )
-
-        repo = get_access_control_repo()
         service = AccessControlService(repo)
         return await service.check_fortune_access(policy)
 
@@ -487,6 +493,7 @@ class FortuneCommandHandler:
                 tags=tags,
                 r18=is_r18,
                 exclude_ai=config.exclude_ai,
+                max_replenish_rounds=config.max_replenish_rounds,
             )
             payload = await provider.fetch_and_download(request)
             if payload.is_empty:

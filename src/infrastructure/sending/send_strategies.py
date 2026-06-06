@@ -16,6 +16,8 @@ import astrbot.api.message_components as Comp
 from astrbot.api.event import AstrMessageEvent
 
 from ...shared import get_logger
+from .dto import SendAttemptResult
+from .platform_capabilities import is_onebot_like_platform
 
 logger = get_logger()
 
@@ -41,6 +43,16 @@ class SendStrategy(ABC):
             True if send succeeded, False otherwise
         """
         ...
+
+    async def send_with_status(
+        self,
+        event: AstrMessageEvent,
+        chain: list[Any],
+        auto_revoke: bool = False,
+    ) -> SendAttemptResult:
+        """Send message chain and expose whether fallback is safe."""
+        success = await self.send(event, chain, auto_revoke)
+        return SendAttemptResult.success() if success else SendAttemptResult.failed()
 
 
 class DirectSendStrategy(SendStrategy):
@@ -70,33 +82,48 @@ class DirectSendStrategy(SendStrategy):
         Returns:
             True if send succeeded
         """
+        result = await self.send_with_status(event, chain, auto_revoke)
+        return result.accepted
+
+    async def send_with_status(
+        self,
+        event: AstrMessageEvent,
+        chain: list[Any],
+        auto_revoke: bool = False,
+    ) -> SendAttemptResult:
+        """Send images directly and keep timeout separate from confirmed failure."""
         try:
             send_result = await self._send_message(event, chain)
 
             platform_name = getattr(event.platform, "name", "unknown")
 
-            # Only strict-check return value for OneBot platforms
-            if send_result is None and platform_name == "aiocqhttp":
-                logger.warning(
-                    "[send] direct send returned None: platform=%s, chain=%d",
+            # AstrBot/OneBot 适配器偶尔会在平台侧已接收消息时返回 None。
+            # 这里不把不确定返回当作失败，避免图片仍在延迟送达时误触发回退策略。
+            if send_result is None and is_onebot_like_platform(platform_name):
+                logger.info(
+                    "[send] direct send returned None but treated as pending success: platform=%s, chain=%d",
                     platform_name,
                     len(chain),
                 )
-                return False
+                return SendAttemptResult.pending_delivery(
+                    "adapter returned no message id"
+                )
 
             logger.info(
                 "[send] direct send completed: platform=%s, chain=%d",
                 platform_name,
                 len(chain),
             )
-            return True
-        except TimeoutError:
+            return SendAttemptResult.success()
+        except TimeoutError as exc:
+            # 发送接口超时后无法判断平台侧是否已经接收消息，重发 fallback 可能造成重复图片。
             logger.warning(
-                "[send] direct send timed out: platform=%s, chain=%d",
+                "[send] direct send confirmation timed out, treating as pending delivery: platform=%s, chain=%d, error=%s",
                 getattr(event.platform, "name", "unknown"),
                 len(chain),
+                exc,
             )
-            return False
+            return SendAttemptResult.pending_delivery("send confirmation timed out")
         except Exception as exc:
             logger.exception(
                 "[send] direct send failed: platform=%s, chain=%d, error=%s",
@@ -104,12 +131,12 @@ class DirectSendStrategy(SendStrategy):
                 len(chain),
                 exc,
             )
-            return False
+            return SendAttemptResult.failed(str(exc))
 
     async def _send_message(self, event: AstrMessageEvent, chain: list[Any]) -> Any:
         if self._requires_onebot_passthrough(event, chain):
-            send_result = await self._send_onebot_image_chain(event, chain)
-            if send_result is not None:
+            attempted, send_result = await self._send_onebot_image_chain(event, chain)
+            if attempted:
                 return send_result
         result = event.chain_result(chain)
         return await self._context.send_message(event.unified_msg_origin, result)
@@ -118,7 +145,7 @@ class DirectSendStrategy(SendStrategy):
         self, event: AstrMessageEvent, chain: list[Any]
     ) -> bool:
         platform_name = getattr(getattr(event, "platform", None), "name", "") or ""
-        return "aiocqhttp" in platform_name.lower() and any(
+        return is_onebot_like_platform(platform_name) and any(
             self._is_onebot_image_ref(comp)
             for comp in chain
             if isinstance(comp, Comp.Image)
@@ -139,10 +166,10 @@ class DirectSendStrategy(SendStrategy):
 
     async def _send_onebot_image_chain(
         self, event: AstrMessageEvent, chain: list[Any]
-    ) -> Any | None:
+    ) -> tuple[bool, Any]:
         bot = getattr(event, "bot", None)
         if bot is None:
-            return None
+            return False, None
 
         message: list[dict[str, Any]] = []
         for comp in chain:
@@ -163,11 +190,16 @@ class DirectSendStrategy(SendStrategy):
                 "[send] skip OneBot passthrough: invalid session_id=%s",
                 session_id,
             )
-            return None
+            return False, None
 
         if is_group:
-            return await bot.send_group_msg(group_id=int(session_id), message=message)
-        return await bot.send_private_msg(user_id=int(session_id), message=message)
+            return True, await bot.send_group_msg(
+                group_id=int(session_id),
+                message=message,
+            )
+        return True, await bot.send_private_msg(
+            user_id=int(session_id), message=message
+        )
 
 
 class ForwardSendStrategy(SendStrategy):
@@ -197,6 +229,16 @@ class ForwardSendStrategy(SendStrategy):
         Returns:
             True if send succeeded
         """
+        result = await self.send_with_status(event, chain, auto_revoke)
+        return result.accepted
+
+    async def send_with_status(
+        self,
+        event: AstrMessageEvent,
+        chain: list[Any],
+        auto_revoke: bool = False,
+    ) -> SendAttemptResult:
+        """Send forward nodes and keep adapter ack timeout from triggering fallback."""
         import time
 
         build_start = time.monotonic()
@@ -217,7 +259,7 @@ class ForwardSendStrategy(SendStrategy):
             build_end - build_start,
         )
 
-        return await self._send_nodes_direct(event, nodes)
+        return await self._send_nodes_direct_with_status(event, nodes)
 
     async def _send_nodes_direct(
         self, event: AstrMessageEvent, nodes: list[Comp.Node]
@@ -231,20 +273,37 @@ class ForwardSendStrategy(SendStrategy):
         Returns:
             True if send succeeded
         """
+        result = await self._send_nodes_direct_with_status(event, nodes)
+        return result.accepted
+
+    async def _send_nodes_direct_with_status(
+        self, event: AstrMessageEvent, nodes: list[Comp.Node]
+    ) -> SendAttemptResult:
+        """Send forward nodes and expose whether fallback is safe."""
         try:
-            forward_chain = [Comp.Forward(node) for node in nodes]
+            # AstrBot 当前版本用 Node/Nodes 作为待发送合并转发内容；
+            # Forward 只表示已收到的转发消息引用，不能包装 Node 发送。
+            forward_chain = [Comp.Nodes(nodes)]
             result = event.chain_result(forward_chain)
             await self._context.send_message(event.unified_msg_origin, result)
 
             logger.info("[forward] send completed: nodes=%d", len(nodes))
-            return True
+            return SendAttemptResult.success()
+        except TimeoutError as exc:
+            # 合并转发也可能在平台侧已接收后只丢失本地确认，立刻 fallback 会造成重复消息。
+            logger.warning(
+                "[forward] send confirmation timed out, treating as pending delivery: nodes=%d, error=%s",
+                len(nodes),
+                exc,
+            )
+            return SendAttemptResult.pending_delivery("forward confirmation timed out")
         except Exception as exc:
             logger.exception(
                 "[forward] send failed: nodes=%d, error=%s",
                 len(nodes),
                 exc,
             )
-            return False
+            return SendAttemptResult.failed(str(exc))
 
 
 class HtmlCardFallbackStrategy(SendStrategy):

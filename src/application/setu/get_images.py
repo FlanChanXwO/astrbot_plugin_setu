@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-
 from ...domain.setu import SetuRequest
 from ..ports import ImageProvider
 from ..settings import get_setu_settings
@@ -24,12 +22,10 @@ class GetSetuImagesUseCase:
             tags=tags,
             r18=r18,
             exclude_ai=settings.exclude_ai,
+            max_replenish_rounds=settings.max_replenish_rounds,
         )
 
-        payload = await asyncio.wait_for(
-            self._provider.fetch_and_download(request),
-            timeout=settings.fetch_timeout_seconds,
-        )
+        payload = await self._provider.fetch_and_download(request)
 
         if payload.is_empty:
             return SetuImagesResult(payload=None)

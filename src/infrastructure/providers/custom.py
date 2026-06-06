@@ -12,9 +12,9 @@ from urllib.parse import quote, urlparse
 
 import httpx
 
-from ...application.ports import SetuImageProvider
 from ...domain import HTTP_TIMEOUT_SECONDS
 from ...shared import get_logger
+from .base import DownloadingSetuImageProvider
 
 logger = get_logger()
 
@@ -121,7 +121,7 @@ async def _validate_url(url: str) -> tuple[str, str | None]:
     return url, None
 
 
-class CustomApiProvider(SetuImageProvider):
+class CustomApiProvider(DownloadingSetuImageProvider):
     """自定义 API 提供商。
 
     支持用户配置任意 API 地址，并提供灵活的响应解析方式。

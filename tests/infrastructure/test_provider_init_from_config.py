@@ -19,14 +19,10 @@ def test_init_provider_from_config_uses_current_proxy_values(
     }
     config_dict["api"] = {
         **sample_config_dict["api"],
-        "lolicon": {
-            **sample_config_dict["api"]["lolicon"],
-            "proxy": "proxy.example.com",
-        },
-        "atri": {
-            **sample_config_dict["api"]["atri"],
-            "proxy": "atri-proxy.example.com",
-        },
+        "provider_overrides": [
+            {"__template_key": "lolicon", "proxy": "proxy.example.com"},
+            {"__template_key": "atri", "proxy": "atri-proxy.example.com"},
+        ],
     }
     config = SetuPluginConfig(**config_dict)
 

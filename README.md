@@ -152,6 +152,7 @@
 | `send_mode` | 发送模式（auto / image / forward） | `auto` |
 | `content_mode` | 内容模式（sfw / r18 / mix） | `sfw` |
 | `max_count` | 单次最大图片数（1-20） | `10` |
+| `max_replenish_rounds` | 下载暂时失败时的同 URL 确认尝试次数/补图轮次 | `3` |
 | `cache_enabled` | 是否复用本地发送缓存 | `true` |
 | `exclude_ai` | 是否排除 AI 生成图片 | `false` |
 
@@ -163,6 +164,8 @@
 | `napcat_stream_mode` | NapCat 流式上传策略 | `fallback` |
 | `auto_revoke_r18` | R18 图片是否自动撤回 | `false` |
 | `r18_docx_mode` | R18 是否使用 Docx 封装 | `true` |
+
+图片下载遇到短暂网络错误时会先按 `max_replenish_rounds` 对同一 URL 做确认重试；发送接口超时或 OneBot/NapCat 类适配器未返回 message id 时会标记为可能仍在送达，不会立刻触发降级重复发图。
 
 ### 模板覆盖
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ImageSize(str, Enum):
@@ -92,7 +92,7 @@ class ProviderConfig(BaseModel):
     """Configuration for a single API provider (Lolicon or Atri)."""
 
     image_size: ImageSize = ImageSize.ORIGINAL
-    proxy: str = "i.pixiv.re"
+    proxy: str = ""
     aspect_ratio: AspectRatio | None = None
     uid: list[int] = Field(default_factory=list)
     keyword: str = ""
@@ -107,18 +107,6 @@ class ProviderConfig(BaseModel):
         return value
 
 
-class LoliconConfig(ProviderConfig):
-    """Lolicon API specific configuration."""
-
-    pass
-
-
-class AtriConfig(ProviderConfig):
-    """Atri API specific configuration."""
-
-    pass
-
-
 class CustomApiConfig(BaseModel):
     """Custom API configuration."""
 
@@ -130,6 +118,24 @@ class CustomApiConfig(BaseModel):
     json_path: str = ""
 
 
+class ProviderOverrideConfig(ProviderConfig):
+    """Provider config supplied via template_list (carries its template key)."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    template_key: str = Field("", alias="__template_key")
+
+
+class TagAliasTemplateConfig(BaseModel):
+    """Optional tag alias mapping from template_list."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    template_key: str = Field("", alias="__template_key")
+    canonical: str = ""
+    aliases: list[str] = Field(default_factory=list)
+
+
 class SetuGeneralConfig(BaseModel):
     """Setu general configuration."""
 
@@ -138,7 +144,7 @@ class SetuGeneralConfig(BaseModel):
     content_mode: ContentModeStr = ContentModeStr.SFW
     max_count: int = Field(default=10, ge=1, le=10)
     max_replenish_rounds: int = Field(default=3, ge=1, le=3)
-    tag_alias: str = ""
+    tag_alias_templates: list[TagAliasTemplateConfig] = Field(default_factory=list)
 
 
 class DeliveryConfig(BaseModel):
@@ -181,16 +187,6 @@ class CacheConfig(BaseModel):
     cleanup_on_start: bool = True
 
 
-class PerformanceConfig(BaseModel):
-    """Performance tuning configuration."""
-
-    enable_range_download: bool = False
-    range_segments: int = Field(default=3, ge=2, le=6)
-    range_download_threshold: int = Field(default=512, ge=256, le=2048)
-    download_concurrent_limit: int = Field(default=10, ge=1, le=50)
-    download_timeout_seconds: int = Field(default=30, ge=5, le=120)
-
-
 class MessagesFetchingConfig(BaseModel):
     """Fetching message configuration."""
 
@@ -219,9 +215,21 @@ class MessageTextConfig(BaseModel):
     text: str = ""
 
 
+class MessageOverrideConfig(BaseModel):
+    """Optional user-facing message override from template_list."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    template_key: str = Field("", alias="__template_key")
+    message_key: str = ""
+    enabled: bool = True
+    text: str = ""
+
+
 class MessagesConfig(BaseModel):
     """User-facing message configuration."""
 
+    message_overrides: list[MessageOverrideConfig] = Field(default_factory=list)
     fetching: MessagesFetchingConfig = Field(default_factory=MessagesFetchingConfig)
     found: MessagesFoundConfig = Field(default_factory=MessagesFoundConfig)
     send_failed: MessagesSendFailedConfig = Field(
@@ -367,8 +375,7 @@ class FortuneSessionTemplateItem(BaseModel):
 class ApiSectionConfig(BaseModel):
     """API section configuration."""
 
-    lolicon: LoliconConfig = Field(default_factory=LoliconConfig)
-    atri: AtriConfig = Field(default_factory=AtriConfig)
+    provider_overrides: list[ProviderOverrideConfig] = Field(default_factory=list)
     custom_api_configs: list[CustomApiConfig] = Field(default_factory=list)
 
 
@@ -390,7 +397,6 @@ class SetuPluginConfig(BaseModel):
     api: ApiSectionConfig = Field(default_factory=ApiSectionConfig)
     messages: MessagesConfig = Field(default_factory=MessagesConfig)
     safety: SafetyConfig = Field(default_factory=SafetyConfig)
-    performance: PerformanceConfig = Field(default_factory=PerformanceConfig)
     session_configs: list[SessionTemplateItem] = Field(default_factory=list)
     fortune_session_configs: list[FortuneSessionTemplateItem] = Field(
         default_factory=list
@@ -446,8 +452,16 @@ class SetuPluginConfig(BaseModel):
 
     @property
     def tag_alias(self) -> str:
-        """Get tag alias string."""
-        return self.setu_general.tag_alias
+        """Get tag alias string derived from tag_alias_templates."""
+        lines = []
+        for item in self.setu_general.tag_alias_templates:
+            canonical = item.canonical.strip()
+            aliases = [
+                str(alias).strip() for alias in item.aliases if str(alias).strip()
+            ]
+            if canonical and aliases:
+                lines.append(f"{canonical}={','.join(aliases)}")
+        return "\n".join(lines)
 
     @property
     def send_mode(self) -> str:
@@ -510,91 +524,66 @@ class SetuPluginConfig(BaseModel):
         return self.cache.cleanup_on_start
 
     @property
-    def download_concurrent_limit(self) -> int:
-        """Get download concurrent limit."""
-        return self.performance.download_concurrent_limit
-
-    @property
-    def download_timeout_seconds(self) -> int:
-        """Get download timeout seconds."""
-        return self.performance.download_timeout_seconds
-
-    @property
-    def enable_range_download(self) -> bool:
-        """Get enable range download."""
-        return self.performance.enable_range_download
-
-    @property
-    def range_segments(self) -> int:
-        """Get range segments."""
-        return self.performance.range_segments
-
-    @property
-    def range_threshold(self) -> int:
-        """Get range threshold."""
-        return self.performance.range_download_threshold
-
-    @property
     def exclude_ai(self) -> bool:
         """Get exclude AI."""
-        return self.api.lolicon.exclude_ai
+        return self._provider_config("lolicon").exclude_ai
 
     @property
     def image_size(self) -> str:
         """Get image size."""
-        return self.api.lolicon.image_size.value
+        return self._provider_config("lolicon").image_size.value
 
     @property
     def proxy(self) -> str:
         """Get proxy."""
-        return self.api.lolicon.proxy
+        return self._provider_config("lolicon").proxy
 
     @property
     def aspect_ratio(self) -> str:
         """Get aspect ratio."""
-        return (
-            self.api.lolicon.aspect_ratio.value if self.api.lolicon.aspect_ratio else ""
-        )
+        config = self._provider_config("lolicon")
+        return config.aspect_ratio.value if config.aspect_ratio else ""
 
     @property
     def uid(self) -> list[int]:
         """Get UID list."""
-        return self.api.lolicon.uid
+        return self._provider_config("lolicon").uid
 
     @property
     def keyword(self) -> str:
         """Get keyword."""
-        return self.api.lolicon.keyword
+        return self._provider_config("lolicon").keyword
 
     @property
     def atri_image_size(self) -> str:
         """Get Atri image size."""
-        return self.api.atri.image_size.value
+        return self._provider_config("atri").image_size.value
 
     @property
     def atri_proxy(self) -> str:
         """Get Atri proxy."""
-        return self.api.atri.proxy
+        return self._provider_config("atri").proxy
 
     @property
     def atri_aspect_ratio(self) -> str:
         """Get Atri aspect ratio."""
-        return self.api.atri.aspect_ratio.value if self.api.atri.aspect_ratio else ""
+        config = self._provider_config("atri")
+        return config.aspect_ratio.value if config.aspect_ratio else ""
 
     @property
     def atri_uid(self) -> list[int]:
         """Get Atri UID list."""
-        return self.api.atri.uid
+        return self._provider_config("atri").uid
 
     @property
     def atri_keyword(self) -> str:
         """Get Atri keyword."""
-        return self.api.atri.keyword
+        return self._provider_config("atri").keyword
 
     @property
     def atri_exclude_ai(self) -> bool:
         """Get Atri exclude AI."""
-        return self.api.atri.exclude_ai
+        return self._provider_config("atri").exclude_ai
 
     @property
     def fortune_api_type(self) -> str:
@@ -641,6 +630,13 @@ class SetuPluginConfig(BaseModel):
             return None
         return configs[0].model_dump()
 
+    def _provider_config(self, provider: str) -> ProviderConfig:
+        """Return provider config from matching template, else built-in defaults."""
+        for item in self.api.provider_overrides:
+            if item.template_key == provider:
+                return item
+        return ProviderConfig()
+
     @property
     def msg_fetching_enabled(self) -> bool:
         """Get fetching message enabled."""
@@ -673,7 +669,12 @@ class SetuPluginConfig(BaseModel):
 
     def resolve_message(self, key: str, **kwargs: Any) -> str | None:
         """Resolve configured message text by key with placeholder substitution."""
-        if key == "fetching":
+        override = self._message_override(key)
+        if override is not None:
+            if not override.enabled:
+                return None
+            text = override.text
+        elif key == "fetching":
             if not self.msg_fetching_enabled:
                 return None
             text = self.msg_fetching_text
@@ -698,6 +699,14 @@ class SetuPluginConfig(BaseModel):
             return None
         return result
 
+    def _message_override(self, key: str) -> MessageOverrideConfig | None:
+        """Return a matching message override, if configured."""
+        for item in self.messages.message_overrides:
+            override_key = item.message_key or item.template_key
+            if override_key == key:
+                return item
+        return None
+
     @property
     def setu_user_access_control_mode(self) -> str:
         """Get Setu user access control mode."""
@@ -720,10 +729,10 @@ class SetuPluginConfig(BaseModel):
 
     def format_found_message(self, count: int, revoke_delay: int | None = None) -> str:
         """Format found message with placeholders."""
-        result = self.msg_found_text.replace("{count}", str(count))
-        if revoke_delay is not None:
-            result = result.replace("{revoke_delay}", str(revoke_delay))
-        return result
+        return (
+            self.resolve_message("found", count=count, revoke_delay=revoke_delay or "")
+            or ""
+        )
 
     def get_effective_fortune_api_type(self) -> str:
         """Get effective fortune API type."""

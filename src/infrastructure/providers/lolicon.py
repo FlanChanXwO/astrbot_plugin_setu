@@ -10,14 +10,14 @@ from urllib.parse import quote
 
 import httpx
 
-from ...application.ports import SetuImageProvider
 from ...domain import HTTP_TIMEOUT_SECONDS
 from ...shared import get_logger
+from .base import DownloadingSetuImageProvider
 
 logger = get_logger()
 
 
-class LoliconProvider(SetuImageProvider):
+class LoliconProvider(DownloadingSetuImageProvider):
     """Lolicon API V2 提供商。
 
     文档: https://api.lolicon.app
@@ -28,7 +28,7 @@ class LoliconProvider(SetuImageProvider):
     def __init__(
         self,
         image_size: str = "original",
-        proxy: str = "i.pixiv.re",
+        proxy: str = "",
         aspect_ratio: str = "",
         uid: list[int] | None = None,
         keyword: str = "",

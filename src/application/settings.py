@@ -18,7 +18,7 @@ class SetuSettings:
     max_count: int
     content_mode: str
     exclude_ai: bool
-    fetch_timeout_seconds: float = 60.0
+    max_replenish_rounds: int
 
 
 @dataclass(frozen=True)
@@ -68,11 +68,13 @@ def get_setu_settings() -> SetuSettings:
             max_count=10,
             content_mode="sfw",
             exclude_ai=True,
+            max_replenish_rounds=3,
         )
     return SetuSettings(
         max_count=_config.max_count,
         content_mode=_config.content_mode,
         exclude_ai=_config.exclude_ai,
+        max_replenish_rounds=_config.max_replenish_rounds,
     )
 
 

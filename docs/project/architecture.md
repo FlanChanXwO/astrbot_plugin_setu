@@ -36,10 +36,11 @@ tests/             # 单元与集成测试
 ### 1. Setu 图片获取与发送
 
 1. 命令或 LLM tool 触发 → `GetSetuImagesUseCase`
-2. 用例通过 `ImageProviderPort` 获取图片 URL
-3. `ImageSender` 按策略发送：直接发送 → HTML 卡片 fallback → NapCat 流式 → Docx 封装
-4. 发送结果通过 `resolve_message()` 生成可配置提示
-5. 缓存命中时复用本地文件，降低内存压力
+2. 用例通过 `ImageProviderPort` 获取图片 URL，并在下载暂时失败时按 `max_replenish_rounds` 对同一 URL 做确认重试
+3. `ImageSender` 按策略发送：直接发送 / 合并转发 → 确认失败后 NapCat 流式或 HTML 卡片 fallback → Docx 封装
+4. 发送接口超时或 OneBot/NapCat 类适配器未返回 message id 时标记为可能仍在送达，不立即触发 fallback，避免延迟送达后重复发图
+5. 发送结果通过 `resolve_message()` 生成可配置提示
+6. 缓存命中时复用本地文件，降低内存压力
 
 ### 2. Fortune 运势生成
 

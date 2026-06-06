@@ -34,17 +34,35 @@
             },
             "max_replenish_rounds": {
                 "type": "int",
-                "description": "最大补充轮次",
-                "hint": "部分图片下载失败时的重试轮次。",
+                "description": "最大补图轮次",
+                "hint": "图片 URL 下载暂时失败时，同一 URL 会先按该轮次短暂重试；仍失败才继续补图或返回无结果。",
                 "default": 3,
                 "slider": {"min": 1, "max": 3, "step": 1}
             },
-            "tag_alias": {
-                "type": "text",
-                "description": "标签别名映射",
-                "hint": "格式：canonical=alias1,alias2",
-                "default": "",
-                "obvious_hint": true
+            "tag_alias_templates": {
+                "type": "template_list",
+                "description": "标签别名模板",
+                "hint": "可选覆盖项；添加后会优先使用这些模板化别名。",
+                "default": [],
+                "templates": {
+                    "alias": {
+                        "name": "标签别名",
+                        "hint": "把多个别名映射到一个标准标签。",
+                        "items": {
+                            "canonical": {
+                                "type": "string",
+                                "description": "标准标签",
+                                "default": "少女"
+                            },
+                            "aliases": {
+                                "type": "list",
+                                "description": "别名列表",
+                                "hint": "每行一个别名。",
+                                "default": ["girl", "girls"]
+                            }
+                        }
+                    }
+                }
             }
         }
     },
@@ -66,12 +84,6 @@
                 "hint": "将 R18 图片打包到 docx 文件中。",
                 "default": true
             },
-            "auto_handle_send_failure": {
-                "type": "bool",
-                "description": "自动处理消息发送失败",
-                "hint": "当图片发送失败（无法获取message_id）时，自动尝试 HTML 卡片渲染绕过审核。",
-                "default": true
-            },
             "auto_revoke_r18": {
                 "type": "bool",
                 "description": "自动撤回 R18 图片/文件",
@@ -87,7 +99,7 @@
             "napcat_stream_mode": {
                 "type": "string",
                 "description": "NapCat 流式上传",
-                "hint": "disabled=不用流式上传，fallback=普通发送失败后流式重试，always=发送前优先流式上传。",
+                "hint": "disabled=不用流式上传，fallback=确认普通发送失败后流式重试，always=发送前优先流式上传。",
                 "default": "fallback",
                 "options": ["disabled", "fallback", "always"]
             }
@@ -101,16 +113,9 @@
             "strategy": {
                 "type": "string",
                 "description": "HTML 卡片策略",
-                "hint": "never=从不使用，fallback=发送失败时降级使用，always=总是使用。",
+                "hint": "never=从不使用，fallback=确认发送失败时降级使用，always=总是使用。",
                 "default": "fallback",
                 "options": ["never", "fallback", "always"]
-            },
-            "mode": {
-                "type": "string",
-                "description": "卡片模式",
-                "hint": "single=所有图片放入一张卡片，multiple=每张图片一张卡片。",
-                "default": "single",
-                "options": ["single", "multiple"]
             },
             "card_padding": {
                 "type": "int",
@@ -209,89 +214,89 @@
         "type": "object",
         "hint": "提供者特定的设置。",
         "items": {
-            "lolicon": {
-                "description": "Lolicon 选项",
-                "type": "object",
-                "hint": "仅用于 lolicon 提供者。",
-                "items": {
-                    "image_size": {
-                        "type": "string",
-                        "description": "图片尺寸",
-                        "default": "original",
-                        "options": ["original", "regular", "small", "thumb", "mini"]
+            "provider_overrides": {
+                "type": "template_list",
+                "description": "Provider 配置",
+                "hint": "provider 专属配置；未添加对应模板时使用内置默认（original 尺寸、无代理）。",
+                "default": [],
+                "templates": {
+                    "lolicon": {
+                        "name": "Lolicon 配置",
+                        "hint": "Lolicon 提供者的专属配置。",
+                        "items": {
+                            "image_size": {
+                                "type": "string",
+                                "description": "图片尺寸",
+                                "default": "original",
+                                "options": ["original", "regular", "small", "thumb", "mini"]
+                            },
+                            "proxy": {
+                                "type": "string",
+                                "description": "图片代理主机",
+                                "default": ""
+                            },
+                            "aspect_ratio": {
+                                "type": "string",
+                                "description": "宽高比过滤",
+                                "default": "",
+                                "options": ["", "horizontal", "vertical", "square"]
+                            },
+                            "uid": {
+                                "type": "list",
+                                "description": "作者 UID 列表",
+                                "hint": "每行一个 UID。",
+                                "default": []
+                            },
+                            "keyword": {
+                                "type": "string",
+                                "description": "关键词过滤",
+                                "default": ""
+                            },
+                            "exclude_ai": {
+                                "type": "bool",
+                                "description": "排除 AI 生成作品",
+                                "default": true
+                            }
+                        }
                     },
-                    "proxy": {
-                        "type": "string",
-                        "description": "图片代理主机",
-                        "hint": "默认为 i.pixiv.re。",
-                        "default": "i.pixiv.re"
-                    },
-                    "aspect_ratio": {
-                        "type": "string",
-                        "description": "宽高比过滤",
-                        "default": "",
-                        "options": ["", "horizontal", "vertical", "square"]
-                    },
-                    "uid": {
-                        "type": "list",
-                        "description": "作者 UID 列表",
-                        "hint": "每行一个 UID。",
-                        "default": [],
-                        "obvious_hint": true
-                    },
-                    "keyword": {
-                        "type": "string",
-                        "description": "关键词过滤",
-                        "default": ""
-                    },
-                    "exclude_ai": {
-                        "type": "bool",
-                        "description": "排除 AI 生成作品",
-                        "hint": "排除 AI 生成的图片。",
-                        "default": true
-                    }
-                }
-            },
-            "atri": {
-                "description": "Atri 选项",
-                "type": "object",
-                "hint": "仅用于 atri 提供者。",
-                "items": {
-                    "image_size": {
-                        "type": "string",
-                        "description": "图片尺寸",
-                        "default": "original",
-                        "options": ["original", "regular", "small", "thumb", "mini"]
-                    },
-                    "proxy": {
-                        "type": "string",
-                        "description": "图片代理主机",
-                        "hint": "默认为 i.pixiv.re。",
-                        "default": "i.pixiv.re"
-                    },
-                    "aspect_ratio": {
-                        "type": "string",
-                        "description": "宽高比过滤",
-                        "default": "",
-                        "options": ["", "horizontal", "vertical", "square"]
-                    },
-                    "uid": {
-                        "type": "list",
-                        "description": "作者 UID 列表",
-                        "hint": "每行一个 UID。",
-                        "default": [],
-                        "obvious_hint": true
-                    },
-                    "keyword": {
-                        "type": "string",
-                        "description": "关键词过滤",
-                        "default": ""
-                    },
-                    "exclude_ai": {
-                        "type": "bool",
-                        "description": "排除 AI 生成作品",
-                        "hint": "排除 AI 生成的图片。",
-                        "default": true
+                    "atri": {
+                        "name": "Atri 配置",
+                        "hint": "Atri 提供者的专属配置。",
+                        "items": {
+                            "image_size": {
+                                "type": "string",
+                                "description": "图片尺寸",
+                                "default": "original",
+                                "options": ["original", "regular", "small", "thumb", "mini"]
+                            },
+                            "proxy": {
+                                "type": "string",
+                                "description": "图片代理主机",
+                                "default": ""
+                            },
+                            "aspect_ratio": {
+                                "type": "string",
+                                "description": "宽高比过滤",
+                                "default": "",
+                                "options": ["", "horizontal", "vertical", "square"]
+                            },
+                            "uid": {
+                                "type": "list",
+                                "description": "作者 UID 列表",
+                                "hint": "每行一个 UID。",
+                                "default": []
+                            },
+                            "keyword": {
+                                "type": "string",
+                                "description": "关键词过滤",
+                                "default": ""
+                            },
+                            "exclude_ai": {
+                                "type": "bool",
+                                "description": "排除 AI 生成作品",
+                                "default": true
+                            }
+                        }
                     }
                 }
             },
@@ -348,290 +353,68 @@
         }
     },
     "messages": {
-        "description": "提示消息",
+        "description": "提示消息覆盖",
         "type": "object",
-        "hint": "自定义插件发送的提示消息文本。",
+        "hint": "默认使用内置提示；只在需要自定义某条提示时添加覆盖模板。",
         "items": {
-            "fetching": {
-                "description": "获取图片提示",
-                "type": "object",
-                "hint": "开始获取图片时发送的提示消息。",
-                "items": {
-                    "enabled": {
-                        "type": "bool",
-                        "description": "启用该提示",
-                        "hint": "是否发送此提示消息。",
-                        "default": true
-                    },
-                    "text": {
-                        "type": "string",
-                        "description": "提示文本",
-                        "hint": "开始获取图片时显示的文本。",
-                        "default": "正在获取图片，请稍候..."
+            "message_overrides": {
+                "type": "template_list",
+                "description": "提示消息覆盖",
+                "hint": "添加后按 message_key 覆盖对应内置提示文本。",
+                "default": [],
+                "templates": {
+                    "message": {
+                        "name": "提示消息",
+                        "hint": "覆盖一条插件提示，可关闭或修改文本。",
+                        "items": {
+                            "message_key": {
+                                "type": "string",
+                                "description": "消息键",
+                                "default": "fetching",
+                                "options": [
+                                    "fetching",
+                                    "found",
+                                    "send_failed",
+                                    "rate_limited",
+                                    "config_not_loaded",
+                                    "invalid_count",
+                                    "max_count_exceeded",
+                                    "count_out_of_range",
+                                    "fetch_timeout",
+                                    "fetch_failed",
+                                    "no_result",
+                                    "empty_payload",
+                                    "r18_docx_failed",
+                                    "fortune_group_only",
+                                    "fortune_missing_user_id",
+                                    "fortune_get_failed",
+                                    "fortune_refresh_failed",
+                                    "fortune_refresh_group_failed",
+                                    "fortune_refresh_all_failed",
+                                    "fortune_refresh_group_done",
+                                    "fortune_refresh_all_done",
+                                    "fortune_enabled_group_done",
+                                    "fortune_disabled_group_done",
+                                    "fortune_block_user_done",
+                                    "fortune_unblock_user_done",
+                                    "fortune_trust_user_done",
+                                    "fortune_untrust_user_done"
+                                ]
+                            },
+                            "enabled": {
+                                "type": "bool",
+                                "description": "启用该提示",
+                                "default": true
+                            },
+                            "text": {
+                                "type": "string",
+                                "description": "提示文本",
+                                "hint": "可继续使用该消息原本支持的占位符。",
+                                "default": "正在获取图片，请稍候..."
+                            }
+                        }
                     }
                 }
-            },
-            "found": {
-                "description": "找到图片提示",
-                "type": "object",
-                "hint": "成功找到图片后发送的提示消息。",
-                "items": {
-                    "enabled": {
-                        "type": "bool",
-                        "description": "启用该提示",
-                        "hint": "是否发送此提示消息。",
-                        "default": true
-                    },
-                    "text": {
-                        "type": "string",
-                        "description": "提示文本",
-                        "hint": "成功找到图片时显示的文本，{count} 会被替换为实际数量，{revoke_delay} 会被替换为自动撤回延迟（仅在R18自动撤回时生效）。",
-                        "default": "找到 {count} 张符合要求的图片~"
-                    }
-                }
-            },
-            "send_failed": {
-                "description": "发送失败提示",
-                "type": "object",
-                "hint": "图片最终发送失败时的提示消息。",
-                "items": {
-                    "enabled": {
-                        "type": "bool",
-                        "description": "启用该提示",
-                        "hint": "是否发送此提示消息。",
-                        "default": true
-                    },
-                    "text": {
-                        "type": "string",
-                        "description": "提示文本",
-                        "hint": "自动降级也失败后发送的文本。",
-                        "default": "图片发送失败，请稍后再试。"
-                    }
-                }
-            },
-            "rate_limited": {
-                "description": "并发限流提示",
-                "type": "object",
-                "items": {
-                    "enabled": {"type": "bool", "description": "启用该提示", "default": true},
-                    "text": {"type": "string", "description": "提示文本", "default": "你有一个请求正在处理中，请稍后再试~"}
-                }
-            },
-            "config_not_loaded": {
-                "description": "配置未加载提示",
-                "type": "object",
-                "items": {
-                    "enabled": {"type": "bool", "description": "启用该提示", "default": true},
-                    "text": {"type": "string", "description": "提示文本", "default": "配置未加载"}
-                }
-            },
-            "invalid_count": {
-                "description": "数量解析失败提示",
-                "type": "object",
-                "items": {
-                    "enabled": {"type": "bool", "description": "启用该提示", "default": true},
-                    "text": {"type": "string", "description": "提示文本", "hint": "{min_count}/{max_count} 占位符可用。", "default": "数量解析失败，图片数量必须在{min_count}-{max_count}之间"}
-                }
-            },
-            "max_count_exceeded": {
-                "description": "超出上限提示",
-                "type": "object",
-                "items": {
-                    "enabled": {"type": "bool", "description": "启用该提示", "default": true},
-                    "text": {"type": "string", "description": "提示文本", "hint": "{max_count} 占位符可用。", "default": "一次最多只能获取{max_count}张哦~"}
-                }
-            },
-            "count_out_of_range": {
-                "description": "数量越界提示",
-                "type": "object",
-                "items": {
-                    "enabled": {"type": "bool", "description": "启用该提示", "default": true},
-                    "text": {"type": "string", "description": "提示文本", "hint": "{min_count}/{max_count} 占位符可用。", "default": "图片数量必须在{min_count}-{max_count}之间哦~"}
-                }
-            },
-            "fetch_timeout": {
-                "description": "获取超时提示",
-                "type": "object",
-                "items": {
-                    "enabled": {"type": "bool", "description": "启用该提示", "default": true},
-                    "text": {"type": "string", "description": "提示文本", "default": "获取图片超时，网络可能不稳定，请稍后再试。"}
-                }
-            },
-            "fetch_failed": {
-                "description": "获取失败提示",
-                "type": "object",
-                "items": {
-                    "enabled": {"type": "bool", "description": "启用该提示", "default": true},
-                    "text": {"type": "string", "description": "提示文本", "default": "获取图片失败，请稍后再试"}
-                }
-            },
-            "no_result": {
-                "description": "无结果提示",
-                "type": "object",
-                "items": {
-                    "enabled": {"type": "bool", "description": "启用该提示", "default": true},
-                    "text": {"type": "string", "description": "提示文本", "hint": "{tags_info} 占位符可用。", "default": "未找到{tags_info}符合要求的图片~"}
-                }
-            },
-            "empty_payload": {
-                "description": "空负载提示",
-                "type": "object",
-                "items": {
-                    "enabled": {"type": "bool", "description": "启用该提示", "default": true},
-                    "text": {"type": "string", "description": "提示文本", "default": "运气不好，一张图都没拿到..."}
-                }
-            },
-            "r18_docx_failed": {
-                "description": "R18 Docx 封装失败提示",
-                "type": "object",
-                "items": {
-                    "enabled": {"type": "bool", "description": "启用该提示", "default": true},
-                    "text": {"type": "string", "description": "提示文本", "default": "R18 Docx 封装失败，请稍后再试或联系管理员。"}
-                }
-            },
-            "fortune_group_only": {"description": "运势群聊限制提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "default": "此命令仅支持群聊"}}},
-            "fortune_missing_user_id": {"description": "运势用户ID缺失提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "default": "请指定用户ID"}}},
-            "fortune_get_failed": {"description": "运势获取失败提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "hint": "{error} 占位符可用。", "default": "获取运势失败: {error}"}}},
-            "fortune_refresh_failed": {"description": "运势刷新失败提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "hint": "{error} 占位符可用。", "default": "刷新运势失败: {error}"}}},
-            "fortune_refresh_group_failed": {"description": "群运势刷新失败提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "hint": "{error} 占位符可用。", "default": "刷新群运势失败: {error}"}}},
-            "fortune_refresh_all_failed": {"description": "全局运势刷新失败提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "hint": "{error} 占位符可用。", "default": "刷新全局运势失败: {error}"}}},
-            "fortune_refresh_group_done": {"description": "群运势刷新成功提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "hint": "{count} 占位符可用。", "default": "已刷新本群 {count} 位用户的今日运势"}}},
-            "fortune_refresh_all_done": {"description": "全局运势刷新成功提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "hint": "{count} 占位符可用。", "default": "已刷新全局 {count} 位用户的今日运势"}}},
-            "fortune_enabled_group_done": {"description": "开启运势成功提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "default": "运势功能已开启"}}},
-            "fortune_disabled_group_done": {"description": "关闭运势成功提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "default": "运势功能已关闭"}}},
-            "fortune_block_user_done": {"description": "运势黑名单添加成功提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "hint": "{user_id} 占位符可用。", "default": "用户 {user_id} 已添加到运势黑名单"}}},
-            "fortune_unblock_user_done": {"description": "运势黑名单移除成功提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "hint": "{user_id} 占位符可用。", "default": "用户 {user_id} 已从运势黑名单移除"}}},
-            "fortune_trust_user_done": {"description": "运势白名单添加成功提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "hint": "{user_id} 占位符可用。", "default": "用户 {user_id} 已添加到运势白名单"}}},
-            "fortune_untrust_user_done": {"description": "运势白名单移除成功提示", "type": "object", "items": {"enabled": {"type": "bool", "description": "启用该提示", "default": true}, "text": {"type": "string", "description": "提示文本", "hint": "{user_id} 占位符可用。", "default": "用户 {user_id} 已从运势白名单移除"}}}
-        }
-    },
-    "safety": {
-        "description": "安全和过滤",
-        "type": "object",
-        "hint": "用户和群组级别的功能访问控制。",
-        "items": {
-            "setu_user_access_control_mode": {
-                "type": "string",
-                "description": "色图用户访问控制模式",
-                "hint": "none=不启用黑白名单，blacklist=仅黑名单模式，whitelist=仅白名单模式",
-                "default": "none",
-                "options": ["none", "blacklist", "whitelist"]
-            },
-            "setu_group_access_control_mode": {
-                "type": "string",
-                "description": "色图群组访问控制模式",
-                "hint": "none=不启用黑白名单，blacklist=仅黑名单模式，whitelist=仅白名单模式",
-                "default": "none",
-                "options": ["none", "blacklist", "whitelist"]
-            },
-            "setu_blocked_users": {
-                "type": "list",
-                "description": "色图黑名单用户列表",
-                "hint": "在黑名单中的用户将无法使用色图功能。每行一个用户 ID。",
-                "default": [],
-                "obvious_hint": true
-            },
-            "setu_whitelist_users": {
-                "type": "list",
-                "description": "色图白名单用户列表",
-                "hint": "仅在白名单中的用户可使用色图功能。每行一个用户 ID。仅在色图用户访问控制模式为 whitelist 时生效。",
-                "default": [],
-                "obvious_hint": true
-            },
-            "setu_blocked_groups": {
-                "type": "list",
-                "description": "色图黑名单群组列表",
-                "hint": "在这些群组中禁用色图功能，但运势功能仍可用。每行一个群组 ID。",
-                "default": [],
-                "obvious_hint": true
-            },
-            "setu_whitelist_groups": {
-                "type": "list",
-                "description": "色图白名单群组列表",
-                "hint": "仅在这些群组中允许使用色图功能（当启用色图群组白名单模式时）。每行一个群组 ID。",
-                "default": [],
-                "obvious_hint": true
-            },
-            "fortune_user_access_control_mode": {
-                "type": "string",
-                "description": "运势用户访问控制模式",
-                "hint": "none=不启用黑白名单，blacklist=仅黑名单模式，whitelist=仅白名单模式",
-                "default": "none",
-                "options": ["none", "blacklist", "whitelist"]
-            },
-            "fortune_group_access_control_mode": {
-                "type": "string",
-                "description": "运势群组访问控制模式",
-                "hint": "none=不启用黑白名单，blacklist=仅黑名单模式，whitelist=仅白名单模式",
-                "default": "none",
-                "options": ["none", "blacklist", "whitelist"]
-            },
-            "fortune_blocked_users": {
-                "type": "list",
-                "description": "运势黑名单用户列表",
-                "hint": "在黑名单中的用户将无法使用运势功能。每行一个用户 ID。",
-                "default": [],
-                "obvious_hint": true
-            },
-            "fortune_whitelist_users": {
-                "type": "list",
-                "description": "运势白名单用户列表",
-                "hint": "仅在白名单中的用户可使用运势功能。每行一个用户 ID。仅在运势用户访问控制模式为 whitelist 时生效。",
-                "default": [],
-                "obvious_hint": true
-            },
-            "fortune_blocked_groups": {
-                "type": "list",
-                "description": "运势黑名单群组列表",
-                "hint": "在这些群组中禁用运势功能，但色图功能仍可用。每行一个群组 ID。",
-                "default": [],
-                "obvious_hint": true
-            },
-            "fortune_whitelist_groups": {
-                "type": "list",
-                "description": "运势白名单群组列表",
-                "hint": "仅在这些群组中允许使用运势功能（当启用运势群组白名单模式时）。每行一个群组 ID。",
-                "default": [],
-                "obvious_hint": true
-            }
-        }
-    },
-    "performance": {
-        "description": "性能配置",
-        "type": "object",
-        "hint": "下载速度和并发设置",
-        "items": {
-            "enable_range_download": {
-                "type": "bool",
-                "description": "启用分段下载",
-                "hint": "将单张大图分成多段并行下载，可显著提升大图片下载速度。推荐在高带宽环境启用。",
-                "default": false
-            },
-            "range_segments": {
-                "type": "int",
-                "description": "分段数",
-                "hint": "单张图片的分段下载数。2-4 段通常效果最佳，太多反而可能降低速度。",
-                "default": 3,
-                "slider": {"min": 2, "max": 6, "step": 1}
-            },
-            "range_download_threshold": {
-                "type": "int",
-                "description": "分段下载阈值(KB)",
-                "hint": "图片大于此值才启用分段下载。太小的图片分段反而慢。",
-                "default": 512,
-                "slider": {"min": 256, "max": 2048, "step": 128}
-            },
-            "download_concurrent_limit": {
-                "type": "int",
-                "description": "并发下载限制",
-                "hint": "同时下载图片的最大并发数。普通服务器建议 10，高带宽服务器可设置 20-30。",
-                "default": 10
-            },
-            "download_timeout_seconds": {
-                "type": "int",
-                "description": "下载超时时间(秒)",
-                "hint": "单个图片下载的最大超时时间。默认 30 秒，网络慢可适当增加。",
-                "default": 30
             }
         }
     }
