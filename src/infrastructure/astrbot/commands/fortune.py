@@ -431,7 +431,8 @@ class FortuneCommandHandler:
             ),
         )
         service = AccessControlService(repo)
-        return await service.check_fortune_access(policy)
+        allowed, reason = await service.check_fortune_access(policy)
+        return allowed, reason or ""
 
     def _build_fortune_request(
         self, event: AstrMessageEvent
