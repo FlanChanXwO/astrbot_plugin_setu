@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.0.3] - 2026-06-07
+
+### Added
+- **统一 Dashboard 管理入口**：Plugin Pages 合并为 `pages/dashboard/`，在同一页面管理会话配置与访问控制
+- **访问控制 Web API**：新增访问控制页面 API，支持黑白名单表格、Setu/运势独立模式与旧 `safety.*` 配置一次性导入
+
+### Changed
+- **发送失败判定更谨慎**：发送接口超时或适配器暂未返回 message id 时标记为待确认，不再立刻触发 HTML 卡片或 NapCat 流式降级，降低网络延迟导致重复发图的概率
+- **Provider 下载缓存语义修正**：关闭发送缓存时不再走 `reserve/commit` 落盘分支，改为直接返回 streaming bytes
+- **运势预生成更贴近运行态访问控制**：预生成会跳过被访问控制拒绝的用户/群组，只在实际缓存可读时跳过渲染，并同步旧记录的展示字段
+- **标签别名解析保持多词标签**：列表输入中的 `blue archive` 等多词标签不再被 join/split 拆开
+- **配置与文档收敛**：更新 Dashboard、配置项、测试命令与 `exclude_ai` 默认值说明，移除旧性能配置残留描述
+
+### Fixed
+- **访问控制持久化失败不再伪成功**：保存失败会抛出明确错误，Web API 对参数错误和内部错误使用不同状态码与安全提示
+- **访问控制初始化减少无效写盘**：已有配置未变化时不再每次启动重写 `config.json`
+- **Dashboard bridge 兜底**：Plugin Page bridge 未注入时页面不再因直接调用 `ready/apiGet/apiPost` 崩溃
+- **平台能力误判修复**：移除泛化 `onebot` marker，避免 OneBot v12 被误判为支持 OneBot v11 合并转发能力
+- **Atri provider 配置生效**：`api_type=atri` 时 `exclude_ai` 读取 Atri provider override，不再固定沿用 Lolicon 配置
+
 ## [2.0.2] - 2026-05-18
 
 ### Fixed
