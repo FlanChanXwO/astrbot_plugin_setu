@@ -1,213 +1,76 @@
-# AGENTS.md - astrbot_plugin_setu
+# AGENTS.md — astrbot_plugin_setu
 
-AstrBot plugin for Setu image delivery, session overrides, access control, and
-fortune cards backed by image providers.
+本文件只保留协作 agent 的入口规则。业务细节按需阅读 `docs/project/`，开发维护规则优先阅读 `docs/dev/maintenance.md`。
 
-## Communication Language
+## 沟通语言
 
-Must communicate with the user in Chinese (中文). Keep engineering updates concise
-and grounded in local code.
+- 与用户沟通必须使用中文。
 
-## Project Overview
+## 项目形态
 
-- **Language**: Python 3.10+ compatible code style with `from __future__ import annotations`
-- **Framework**: AstrBot v4.24.x plugin system
-- **Architecture**: DDD-style layered `src/` package
-- **Runtime features**: random image fetching, provider proxy rewrite, send-mode fallback,
-  Setu/Fortune access control, per-session config overrides, Fortune card rendering
-- **Current release focus**: v2.0.2 restores Fortune daily pre-rendered image cache and
-  prevents AstrBot core test runtime data from being written under the plugin directory
+- 这是一个 AstrBot 随机图片插件，采用 DDD 分层。
+- 管理功能属于 Plugin Pages（统一 dashboard 页面，含会话配置和访问控制标签页）。
 
-## Required Skills
+主要目录：
 
-Use `$skill-astrbot-dev` for AstrBot plugin structure, decorators/hooks, lifecycle,
-config schema, message flow, platform adapters, HTML rendering, and LLM tools. If
-docs and source disagree, trust source.
+- `src/domain/`: 领域实体、值对象、标签解析、访问控制。
+- `src/application/`: 用例、DTO、端口接口、会话配置服务。
+- `src/infrastructure/`: 配置、持久化、provider、sender、AstrBot 适配。
+- `src/shared/`: 配置模型、日志、发送缓存。
+- `pages/`: Plugin Pages 前端（统一 dashboard）。
+- `templates/`: 运势卡片 HTML 模板与字体。
+- `tests/`: 单元测试、集成测试与测试夹具。
 
-Use `$github` for issues, PRs, CI runs, and advanced repository queries through
-`gh`.
+## 阅读入口
 
-## Directory Structure
+- 任何改动前先看：`docs/dev/maintenance.md`
+- 需要业务背景时看：`docs/project/overview.md`
+- 修改模块关系和启动分工时看：`docs/project/architecture.md`
+- 修改消息配置、提示文案或占位符时看：`src/shared/config/models.py`
+- 修改 provider 适配或 sender 策略时看：`src/infrastructure/providers/` 和 `src/infrastructure/sending/`
 
-```text
-main.py                         # AstrBot Star entrypoint and command registration
-metadata.yaml                   # Plugin metadata and release version
-_conf_schema.json               # AstrBot config UI schema
-CHANGELOG.md                    # Release changelog
-README.md                       # User-facing usage docs
-AGENTS.md                       # Agent-facing repository guide
-src/
-  application/
-    ports/                      # Repository/provider interfaces
-    session_config/             # Session override DTOs, keys, service
-    setu/                       # Setu use cases and DTOs
-    settings.py                 # Config snapshot access for application layer
-  domain/
-    access_control/             # Access policy and decision service
-    fortune/                    # Fortune entities, generation service, value objects
-    setu/                       # Setu request/tag domain objects
-  infrastructure/
-    astrbot/                    # AstrBot adapters, command handlers, renderer, Web API
-    persistence/                # JSON/SQLite repositories
-    providers/                  # Lolicon, Atri, custom, multi-provider adapters
-    sending/                    # Image sender, strategies, NapCat stream upload
-  shared/
-    config/                     # Pydantic config models and message defaults
-    logging.py                  # Plugin logger wrapper
-    send_cache.py               # Stable send cache before adapter delivery
-pages/
-  sessionConfig/                # WebUI page for session overrides
-templates/
-  fortune.html                  # Legacy-compatible Fortune card template
-  res/fonts/                    # Embedded Fortune card fonts
-tests/                          # pytest + pytest-asyncio tests
-skills/                         # Plugin-specific Codex/AstrBot skills
-```
+## 硬约束
 
-## Key Conventions
+- 不要把业务逻辑编排塞进 `main.py`；保持注册和路由专注。
+- 插件运行数据必须通过 `StarTools.get_data_dir(self.name)` 获取，不要硬编码路径。
+- 从插件目录本地调试时，不要创建或使用 `<plugin>/data` 作为运行态目录。
+- 所有用户可见提示必须走 `MessagesConfig` / `resolve_message()`，不要在 handler 内硬编码提示文案。
+- 其他领域值、平台行为和配置边界不要写进本文件，放到 `docs/project/` 或 `docs/dev/`。
 
-### Main Entry
+## 文档纪律
 
-`main.py` should stay focused on AstrBot registration, singleton initialization,
-and forwarding into infrastructure command handlers. Keep reusable orchestration in
-`application/` or `infrastructure/` modules.
+- 文档不是可选收尾。行为、边界、入口、配置、流程或维护约定变化时，必须同步更新对应 `docs/`。
+- 下列变化默认必须同步文档：
+  - 命令行为或参数变化
+  - Plugin Pages 交互变化
+  - 配置项、默认值或兼容规则变化
+  - provider、sender、消息配置算法变化
+  - 访问控制判定逻辑变化
+- 如果修改 repo-wide 维护规则或 agent 入口约定，同步更新 `AGENTS.md` 和 `CLAUDE.md`。
 
-Command handlers must be `async def` and yield AstrBot results. Prefer
-`event.plain_result(...)` and `event.chain_result(...)`; do not assume every event
-has `event.result(...)`.
+## 测试与检查命令
 
-### Setu Flow
-
-Setu fetching is routed through `GetSetuImagesUseCase`, provider ports, and
-`ImageSender`. Empty payloads should not carry hardcoded use-case notices; command
-handlers resolve configurable messages instead.
-
-Provider behavior belongs in `src/infrastructure/providers/`. Pixiv proxy rewrite
-and provider diagnostics should stay observable through structured logs.
-
-### Fortune Flow
-
-`FortuneCommandHandler` owns AstrBot-specific Fortune behavior. `FortuneService`
-owns domain generation and repository-backed record lifecycle only.
-
-Fortune card rendering is image-first:
-
-- `fortune_command` gets or creates today's `FortuneRecord`
-- `_render_fortune_image()` reuses cached card bytes when present
-- otherwise it fetches a background image, renders `templates/fortune.html`, and
-  saves the rendered card through `FortuneService.update_image_cache()`
-- fallback to plain text is allowed only when background fetching or rendering fails
-
-`fortune.auto_refresh` means recently active users should be handled after day
-rollover. v2.0.2 behavior is to pre-generate records and cache rendered card images,
-not just write database rows.
-
-### Message Configuration
-
-All user-facing prompts should go through `MessagesConfig` / `MessageTextConfig`
-and `resolve_message()`. Avoid handler-local hardcoded fallback dictionaries; use a
-minimal generic fallback only when config is unavailable.
-
-When adding a message key, keep these files in sync:
-
-- `_conf_schema.json`
-- `src/shared/config/models.py`
-- focused tests under `tests/infrastructure/` or `tests/shared/`
-
-### Runtime Data
-
-Do not write runtime files into the plugin source directory. Use
-`StarTools.get_data_dir(self.name)` in plugin runtime and temp pytest directories in
-tests.
-
-`tests/conftest.py` pins `ASTRBOT_ROOT` before importing `astrbot.core`, because
-AstrBot defaults its root to `os.getcwd()` and otherwise creates
-`data/cmd_config.json` and `data/t2i_templates/` under the plugin checkout.
-
-Never commit local runtime artifacts such as:
-
-- `data/`
-- `assets/*.png` generated during manual checks
-- downloaded image caches
-- local AstrBot runtime config
-
-### WebUI
-
-WebUI pages live under `pages/<page_name>/index.html`. The current session config
-page uses plain JS and AstrBot's injected bridge. APIs are registered through
-`context.register_web_api(...)` from `src/infrastructure/astrbot/session_config_api.py`.
-
-### GitHub Actions
-
-Workflow files must live under `.github/workflows/`. Do not add workflow files under
-`.github/workflow/`; GitHub Actions will not load that path.
-
-## Build, Test, and Development Commands
+从插件目录运行：
 
 ```bash
-python -m pip install -e ".[dev]"
-python -m pip install -U astrbot
-PYTHONPATH=/path/to/data/plugins python -m pytest
+PYTHONPATH=/path/to/data/plugins python -m pytest tests/ -v
 PYTHONPATH=/path/to/data/plugins python -m pytest tests/infrastructure/test_fortune_pregeneration.py -q
 RUFF_CACHE_DIR=.ruff_cache python -m ruff check .
 python -m ruff format .
 python -m py_compile main.py src/**/*.py tests/**/*.py
 ```
 
-If parent cache directories are not writable, set `RUFF_CACHE_DIR=.ruff_cache`.
+从 AstrBot 项目根目录运行：
 
-## Testing Guidelines
+```bash
+uv run ruff format data/plugins/astrbot_plugin_setu
+uv run ruff check data/plugins/astrbot_plugin_setu
+```
 
-Use pytest and pytest-asyncio. Name files `test_*.py`, classes `TestFeatureName`,
-and methods `test_behavior`.
+## 更新策略
 
-Reuse fixtures from `tests/conftest.py` for AstrBot config, events, providers, and
-temporary data directories. Add focused tests when touching:
+当架构、命令面、发送策略、配置路径或测试 / lint 流程变化时，同步更新 `CLAUDE.md` 和 `AGENTS.md`。
 
-- provider behavior and URL rewriting
-- sender fallback logic
-- message config keys and placeholder rendering
-- Fortune record/cache lifecycle
-- SQLite migrations or repository queries
-- `main.py` command routing and trigger de-duplication
+## 篇幅约束
 
-## Code Rules
-
-- Use 4-space indentation and type hints.
-- Use `snake_case` for functions/modules, `PascalCase` for classes, and
-  `UPPER_SNAKE_CASE` for constants.
-- New Python modules should start with a module docstring when useful, then
-  `from __future__ import annotations`.
-- Logger formatting should use `%s` placeholders, not `{}` interpolation.
-- Keep comments rare and useful; explain non-obvious behavior, not line-by-line actions.
-- Do not add external dependencies without updating `requirements.txt` and documenting why.
-
-## Release Rules
-
-Use semantic versioning and keep release files synchronized:
-
-- Patch bump: fixes, compatibility adjustments, tests/tooling corrections
-- Minor bump: new user-facing features, new config fields, new APIs or WebUI features
-- Major bump: breaking config/data/API changes or migrations requiring manual action
-
-For every release bump:
-
-- update `metadata.yaml` `version:`
-- add a new top `CHANGELOG.md` section
-- keep `_conf_schema.json`, `src/shared/config/models.py`, README examples, and tests
-  synchronized when config changes
-
-## Commit and PR Guidelines
-
-Recent history follows Conventional Commits, for example `fix(fortune): ...`,
-`feat(safety): ...`, `refactor: ...`, `docs: ...`, and `chore: ...`.
-
-Keep PRs focused. Include:
-
-- motivation and user-visible behavior
-- core files changed
-- tests or checks run
-- migration notes if config, database, or runtime data behavior changes
-
-Do not include unrelated working-tree changes, generated caches, local AstrBot data,
-or downloaded images in commits.
+`AGENTS.md` 和 `CLAUDE.md` 均不得超过 100 行；内容过长时拆入 `docs/dev/` 或 `docs/project/`。

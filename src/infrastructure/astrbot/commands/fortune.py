@@ -12,6 +12,7 @@ from astrbot.api.event import AstrMessageEvent
 from astrbot.core.provider.register import llm_tools
 
 from ....domain.access_control import AccessPolicy
+from ....domain.access_control.service import AccessControlService
 from ....domain.fortune import (
     FortuneGenerationRequest,
     FortuneRecord,
@@ -359,17 +360,43 @@ class FortuneCommandHandler:
 
         repo = get_fortune_repo()
         service = FortuneService(repository=repo)
+        access_repo = get_access_control_repo()
+        access_service = AccessControlService(access_repo)
+        modes = access_repo.get_modes()
+
+        async def can_pregenerate(request: FortuneGenerationRequest) -> bool:
+            policy = AccessPolicy.for_session(
+                user_id=request.user_id,
+                group_id=request.group_id,
+                user_mode=modes.get(
+                    "fortune_user_access_control_mode",
+                    config.fortune_user_access_control_mode if config else "none",
+                ),
+                group_mode=modes.get(
+                    "fortune_group_access_control_mode",
+                    config.fortune_group_access_control_mode if config else "none",
+                ),
+            )
+            allowed, reason = await access_service.check_fortune_access(policy)
+            if not allowed:
+                logger.debug(
+                    "[fortune] skip pregeneration by access-control: user=%s, group=%s, reason=%s",
+                    request.user_id,
+                    request.group_id or "-",
+                    reason or "-",
+                )
+            return allowed
+
         records = await service.pregenerate_active_user_records(
-            days=days, include_existing=True
+            days=days,
+            include_existing=True,
+            access_filter=can_pregenerate,
         )
 
         cached_count = 0
         for record in records:
             try:
-                cached_path = await repo.get_cached_image_path(
-                    record.user_id, record.date_str
-                )
-                if cached_path:
+                if await service.get_cached_image(record.user_id, record.date_str):
                     continue
                 image_bytes = await self._render_fortune_image(record, service)
                 if image_bytes:
@@ -386,21 +413,26 @@ class FortuneCommandHandler:
 
     async def _check_access(self, event: AstrMessageEvent, config) -> tuple[bool, str]:
         """Check if user/group has access to Fortune feature."""
-        from ....domain.access_control.service import AccessControlService
-
         user_id = event.get_sender_id()
         group_id = event.get_group_id()
 
+        repo = get_access_control_repo()
+        modes = repo.get_modes()
         policy = AccessPolicy.for_session(
             user_id=user_id,
             group_id=group_id,
-            user_mode=config.fortune_user_access_control_mode if config else "none",
-            group_mode=config.fortune_group_access_control_mode if config else "none",
+            user_mode=modes.get(
+                "fortune_user_access_control_mode",
+                config.fortune_user_access_control_mode if config else "none",
+            ),
+            group_mode=modes.get(
+                "fortune_group_access_control_mode",
+                config.fortune_group_access_control_mode if config else "none",
+            ),
         )
-
-        repo = get_access_control_repo()
         service = AccessControlService(repo)
-        return await service.check_fortune_access(policy)
+        allowed, reason = await service.check_fortune_access(policy)
+        return allowed, reason or ""
 
     def _build_fortune_request(
         self, event: AstrMessageEvent
@@ -487,6 +519,7 @@ class FortuneCommandHandler:
                 tags=tags,
                 r18=is_r18,
                 exclude_ai=config.exclude_ai,
+                max_replenish_rounds=config.max_replenish_rounds,
             )
             payload = await provider.fetch_and_download(request)
             if payload.is_empty:

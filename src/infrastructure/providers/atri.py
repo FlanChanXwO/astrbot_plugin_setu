@@ -9,14 +9,14 @@ import asyncio
 
 import httpx
 
-from ...application.ports import SetuImageProvider
 from ...domain import HTTP_TIMEOUT_SECONDS
 from ...shared import get_logger
+from .base import DownloadingSetuImageProvider
 
 logger = get_logger()
 
 
-class AtriProvider(SetuImageProvider):
+class AtriProvider(DownloadingSetuImageProvider):
     """Atri API 提供商。
 
     文档: https://api.atri.rodeo
@@ -27,7 +27,7 @@ class AtriProvider(SetuImageProvider):
     def __init__(
         self,
         image_size: str = "original",
-        proxy: str = "i.pixiv.re",
+        proxy: str = "",
         aspect_ratio: str = "",
         uid: list[int] | None = None,
         keyword: str = "",

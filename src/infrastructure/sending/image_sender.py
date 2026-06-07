@@ -17,8 +17,9 @@ from ...shared.send_cache import schedule_send_cache_cleanup
 from ..astrbot.config import get_config, get_plugin_context
 from ..astrbot.session_identity import get_event_session_identity
 from ..persistence import get_session_config_repo
-from .dto import SendOptions
+from .dto import SendAttemptResult, SendOptions
 from .napcat_stream import upload_file_stream
+from .platform_capabilities import supports_forward_messages
 from .send_strategies import (
     DirectSendStrategy,
     ForwardSendStrategy,
@@ -67,9 +68,11 @@ class ImageSender:
         send_mode = config.send_mode
         auto_revoke = config.auto_revoke_r18 if is_r18 else False
         r18_docx_mode = config.r18_docx_mode if is_r18 else False
+        session_label = "unknown"
 
         try:
             identity = get_event_session_identity(event)
+            session_label = identity.session_id
             service = SessionConfigService(get_session_config_repo())
             snapshot = await service.get_snapshot(
                 identity.session_id,
@@ -83,7 +86,7 @@ class ImageSender:
         except Exception as exc:
             self._log.debug(
                 "[send] failed to apply session overrides: session=%s, error=%s",
-                getattr(identity, "session_id", "unknown"),
+                session_label,
                 exc,
             )
 
@@ -152,13 +155,19 @@ class ImageSender:
             )
             if found_message:
                 await self._send_plain_text(event, found_message)
-            success = await self._try_html_card_fallback(
+            html_result = await self._try_html_card_fallback(
                 event, chain, options, payload.r18
             )
-            if not success:
+            if not html_result.accepted:
                 fail_message = self._send_failed_message()
                 if fail_message:
                     yield event.plain_result(fail_message)
+            elif html_result.pending:
+                yield {
+                    "send_success": True,
+                    "image_count": payload.count,
+                    "send_pending": True,
+                }
             else:
                 yield {"send_success": True, "image_count": payload.count}
             schedule_send_cache_cleanup()
@@ -180,10 +189,10 @@ class ImageSender:
             options.napcat_stream_mode,
             options.use_html_card,
         )
-        send_success = await self._send_chain(event, chain, effective_mode, options)
+        send_result = await self._send_chain(event, chain, effective_mode, options)
 
         if (
-            not send_success
+            not send_result.accepted
             and options.napcat_stream_mode == "fallback"
             and self._has_local_image_paths(chain)
         ):
@@ -199,7 +208,7 @@ class ImageSender:
                     self._session_label(event),
                     len(stream_chain),
                 )
-                send_success = await self._send_chain(
+                send_result = await self._send_chain(
                     event,
                     stream_chain,
                     effective_mode,
@@ -211,17 +220,17 @@ class ImageSender:
                     self._session_label(event),
                 )
 
-        if not send_success and options.use_html_card:
+        if not send_result.accepted and options.use_html_card:
             self._log.warning(
                 "[send] image send failed, attempting HTML card fallback: session=%s, mode=%s",
                 self._session_label(event),
                 effective_mode,
             )
-            send_success = await self._try_html_card_fallback(
+            send_result = await self._try_html_card_fallback(
                 event, chain, options, payload.r18
             )
 
-        if not send_success:
+        if not send_result.accepted:
             self._log.error(
                 "[send] all send strategies failed: session=%s, count=%d, mode=%s, html_strategy=%s, napcat_stream=%s",
                 self._session_label(event),
@@ -233,6 +242,19 @@ class ImageSender:
             fail_message = self._send_failed_message()
             if fail_message:
                 yield event.plain_result(fail_message)
+        elif send_result.pending:
+            self._log.warning(
+                "[send] pending delivery: session=%s, count=%d, mode=%s, reason=%s",
+                self._session_label(event),
+                payload.count,
+                effective_mode,
+                send_result.reason or "-",
+            )
+            yield {
+                "send_success": True,
+                "image_count": payload.count,
+                "send_pending": True,
+            }
         else:
             self._log.info(
                 "[send] completed: session=%s, count=%d, mode=%s",
@@ -250,7 +272,7 @@ class ImageSender:
         chain: list[Comp.Image],
         effective_mode: str,
         options: SendOptions,
-    ) -> bool:
+    ) -> SendAttemptResult:
         """Send an already-built image chain."""
         if options.napcat_stream_mode == "always":
             self._log.info(
@@ -263,11 +285,11 @@ class ImageSender:
                 chain = streamed_chain
 
         if effective_mode == "forward":
-            return await ForwardSendStrategy(self._context).send(
+            return await ForwardSendStrategy(self._context).send_with_status(
                 event, chain, options.auto_revoke
             )
         chain = await self._materialize_local_chain(chain)
-        return await DirectSendStrategy(self._context).send(
+        return await DirectSendStrategy(self._context).send_with_status(
             event, chain, options.auto_revoke
         )
 
@@ -354,10 +376,10 @@ class ImageSender:
         chain: list[Comp.Image],
         options: SendOptions,
         is_r18: bool,
-    ) -> bool:
+    ) -> SendAttemptResult:
         """Try HTML card fallback."""
         if not self._html_renderer:
-            return False
+            return SendAttemptResult.failed("html renderer unavailable")
 
         strategy = HtmlCardFallbackStrategy(
             self._context,
@@ -367,7 +389,9 @@ class ImageSender:
                 "card_gap": options.html_gap,
             },
         )
-        return await strategy.send(event, chain, is_r18 and options.auto_revoke)
+        return await strategy.send_with_status(
+            event, chain, is_r18 and options.auto_revoke
+        )
 
     def _payload_items(self, payload: ImagePayload) -> tuple[ImageItem, ...]:
         if payload.items:
@@ -513,22 +537,16 @@ class ImageSender:
         self, platform_name: str | None, event: AstrMessageEvent
     ) -> bool:
         """Check forward support from platform info."""
-        if not platform_name and hasattr(event, "bot") and event.bot:
-            if hasattr(event.bot, "call_action"):
-                return True
-
-        if platform_name:
-            supported = (
-                "aiocqhttp",
-                "onebot11",
-                "onebot",
-                "go-cqhttp",
-                "napcat",
-                "llonebot",
-            )
-            return any(p in platform_name.lower() for p in supported)
-
-        return False
+        has_call_action = bool(
+            not platform_name
+            and hasattr(event, "bot")
+            and event.bot
+            and hasattr(event.bot, "call_action")
+        )
+        return supports_forward_messages(
+            platform_name,
+            has_call_action=has_call_action,
+        )
 
     async def _send_with_revoke_support(
         self,

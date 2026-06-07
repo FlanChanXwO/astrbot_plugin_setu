@@ -20,14 +20,18 @@ class TestSetuRequest:
         assert request.tags == ("girl", "cute")
         assert request.r18 is False
         assert request.exclude_ai is True
+        assert request.max_replenish_rounds == 3
 
     def test_with_tags(self) -> None:
         """Test creating new request with different tags."""
-        request = SetuRequest.from_user_input(1, ["girl"], False)
+        request = SetuRequest.from_user_input(
+            1, ["girl"], False, max_replenish_rounds=2
+        )
         new_request = request.with_tags(["cat", "cute"])
         assert new_request.count == 1
         assert new_request.tags == ("cat", "cute")
         assert new_request.r18 is False
+        assert new_request.max_replenish_rounds == 2
 
 
 class TestImagePayload:

@@ -25,6 +25,9 @@ from .src.infrastructure import (
     init_session_config_repo,
 )
 from .src.infrastructure.astrbot import init_config, set_plugin_context
+from .src.infrastructure.astrbot.access_control_api import (
+    register_access_control_web_apis,
+)
 from .src.infrastructure.astrbot.commands import (
     FortuneCommandHandler,
     SessionConfigCommandHandler,
@@ -196,6 +199,7 @@ class SetuPlugin(Star):
         self.context = context
         self._plugin_config = config
         self._fortune_pregenerate_task: asyncio.Task[None] | None = None
+        register_access_control_web_apis(self.context)
         register_session_config_web_apis(self.context)
 
     async def initialize(self) -> None:

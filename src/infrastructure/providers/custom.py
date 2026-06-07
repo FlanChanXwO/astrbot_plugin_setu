@@ -12,9 +12,9 @@ from urllib.parse import quote, urlparse
 
 import httpx
 
-from ...application.ports import SetuImageProvider
 from ...domain import HTTP_TIMEOUT_SECONDS
 from ...shared import get_logger
+from .base import DownloadingSetuImageProvider
 
 logger = get_logger()
 
@@ -121,7 +121,7 @@ async def _validate_url(url: str) -> tuple[str, str | None]:
     return url, None
 
 
-class CustomApiProvider(SetuImageProvider):
+class CustomApiProvider(DownloadingSetuImageProvider):
     """自定义 API 提供商。
 
     支持用户配置任意 API 地址，并提供灵活的响应解析方式。
@@ -329,18 +329,18 @@ class CustomApiProvider(SetuImageProvider):
         exclude_ai: bool = True,
     ) -> list[str]:
         """从自定义 API 获取图片 URL 列表。"""
-        url, body, original_host = await self._build_url(num, tags, r18, exclude_ai)
-
-        if not url:
-            logger.error("自定义 API URL 未配置")
-            return []
-
-        timeout = self.api_config.get("timeout", HTTP_TIMEOUT_SECONDS)
-        headers = _sanitize_headers(self.api_config.get("headers", {}))
-        if original_host:
-            headers["Host"] = original_host
-
         try:
+            url, body, original_host = await self._build_url(num, tags, r18, exclude_ai)
+
+            if not url:
+                logger.error("自定义 API URL 未配置")
+                return []
+
+            timeout = self.api_config.get("timeout", HTTP_TIMEOUT_SECONDS)
+            headers = _sanitize_headers(self.api_config.get("headers", {}))
+            if original_host:
+                headers["Host"] = original_host
+
             async with httpx.AsyncClient(timeout=timeout) as client:
                 if body:
                     resp = await client.post(url, json=body, headers=headers)
@@ -352,6 +352,9 @@ class CustomApiProvider(SetuImageProvider):
                 urls = self._parse_response(data)
                 return urls[:num]  # 限制数量
 
+        except ValueError as e:
+            logger.error("自定义 API URL 校验失败: %s", e)
+            return []
         except Exception as e:
             logger.error("自定义 API 请求失败: %s", e)
             return []

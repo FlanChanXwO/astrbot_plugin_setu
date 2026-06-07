@@ -16,13 +16,13 @@ from ....application.session_config import SessionConfigService
 from ....application.setu.get_images import GetSetuImagesUseCase
 from ....domain.access_control import AccessPolicy
 from ....domain.access_control.service import AccessControlService
-from ....domain.setu import SetuRequest
+from ....domain.setu import SetuRequest, TagResolverService
 from ....shared import get_logger
 from ... import get_access_control_repo, get_provider
 from ...persistence import get_session_config_repo
+from ...providers import init_provider_from_config
 from ..config import get_config
 from ..session_identity import get_event_session_identity
-from ...providers import init_provider_from_config
 
 logger = get_logger()
 
@@ -140,7 +140,7 @@ class SetuCommandHandler:
             return
 
         tag_str = match.group(4).strip()
-        tags = tag_str.replace(",", " ").split() if tag_str else []
+        tags = self._resolve_tags(tag_str, config)
 
         effective_mode = await self._get_effective_content_mode(event)
         is_r18 = self._mode_requires_r18(effective_mode)
@@ -207,7 +207,7 @@ class SetuCommandHandler:
             )
             return
 
-        parsed_tags = [t.strip() for t in all_tags.split() if t.strip()]
+        parsed_tags = self._resolve_tags(all_tags, config)
 
         effective_mode = await self._get_effective_content_mode(event)
         is_r18 = self._mode_requires_r18(effective_mode)
@@ -244,9 +244,10 @@ class SetuCommandHandler:
             effective_mode = await self._get_effective_content_mode(event)
             request = SetuRequest.from_user_input(
                 count=count,
-                tags=tags or [],
+                tags=self._resolve_tags_from_list(tags or [], config),
                 r18=self._mode_requires_r18(effective_mode),
                 exclude_ai=config.exclude_ai,
+                max_replenish_rounds=config.max_replenish_rounds,
             )
             payload = await provider.fetch_and_download(request)
             from ...sending import ImageSender
@@ -265,11 +266,16 @@ class SetuCommandHandler:
         repo = get_access_control_repo()
         user_id = event.get_sender_id()
         group_id = event.get_group_id()
+        modes = repo.get_modes()
         policy = AccessPolicy.for_session(
             user_id=user_id,
             group_id=group_id,
-            user_mode=config.setu_user_access_control_mode,
-            group_mode=config.setu_group_access_control_mode,
+            user_mode=modes.get(
+                "setu_user_access_control_mode", config.setu_user_access_control_mode
+            ),
+            group_mode=modes.get(
+                "setu_group_access_control_mode", config.setu_group_access_control_mode
+            ),
         )
         return await AccessControlService(repo).check_setu_access(policy)
 
@@ -374,6 +380,27 @@ class SetuCommandHandler:
             if text is not None:
                 return text
         return ""
+
+    def _resolve_tags(self, raw_tags: str, config: Any) -> list[str]:
+        """Normalize raw tags and apply configured alias mapping."""
+        if not raw_tags:
+            return []
+
+        alias_map = TagResolverService.parse_alias_map_from_string(
+            getattr(config, "tag_alias", "")
+        )
+        resolver = TagResolverService(alias_map or TagResolverService.DEFAULT_TAG_ALIAS)
+        return resolver.resolve_tags(raw_tags)
+
+    def _resolve_tags_from_list(self, tags: list[str], config: Any) -> list[str]:
+        """Apply tag alias mapping for list inputs."""
+        if not tags:
+            return []
+        alias_map = TagResolverService.parse_alias_map_from_string(
+            getattr(config, "tag_alias", ""), split_spaces=False
+        )
+        resolver = TagResolverService(alias_map or TagResolverService.DEFAULT_TAG_ALIAS)
+        return [resolver.resolve_tag(str(tag)) for tag in tags if str(tag).strip()]
 
 
 # ==================== LLM Tools Registration ====================

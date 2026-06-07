@@ -202,6 +202,29 @@ class FortuneRecord:
             group_id=self.group_id,
         )
 
+    def with_presentation(
+        self,
+        *,
+        username: str,
+        group_id: str | None,
+        invalidate_image_cache: bool = False,
+    ) -> FortuneRecord:
+        """Return new record with current display fields."""
+        return FortuneRecord(
+            user_id=self.user_id,
+            username=username,
+            date_str=self.date_str,
+            title=self.title,
+            star_count=self.star_count,
+            description=self.description,
+            extra_message=self.extra_message,
+            theme_color=self.theme_color,
+            image_cached=False if invalidate_image_cache else self.image_cached,
+            img_url=None if invalidate_image_cache else self.img_url,
+            last_view_date=self.last_view_date,
+            group_id=group_id,
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class FortuneWeights:

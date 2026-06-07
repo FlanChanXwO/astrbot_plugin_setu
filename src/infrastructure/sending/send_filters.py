@@ -80,7 +80,8 @@ async def forward_send_filter(
             )
             nodes.append(node)
 
-        forward_chain = [Comp.Forward(node) for node in nodes]
+        # 当前 AstrBot 发送合并转发时直接使用 Nodes；Forward 表示已收到的转发消息引用。
+        forward_chain = [Comp.Nodes(nodes)]
         result = event.chain_result(forward_chain)
         await event.ctx.send_message(event.unified_msg_origin, result)
 

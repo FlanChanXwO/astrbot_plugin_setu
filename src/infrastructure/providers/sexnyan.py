@@ -10,14 +10,14 @@ from urllib.parse import quote
 
 import httpx
 
-from ...application.ports import SetuImageProvider
 from ...domain import HTTP_TIMEOUT_SECONDS
 from ...shared import get_logger
+from .base import DownloadingSetuImageProvider
 
 logger = get_logger()
 
 
-class SexNyanRunProvider(SetuImageProvider):
+class SexNyanRunProvider(DownloadingSetuImageProvider):
     """SexNyanRun API 提供商。
 
     文档: https://sex.nyan.run

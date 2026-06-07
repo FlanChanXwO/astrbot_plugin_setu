@@ -44,7 +44,7 @@ async def test_send_images_streams_on_fallback(
         if len(sent_results) == 1:
             return {"message_id": "found"}
         if len(sent_results) == 2:
-            return None
+            raise RuntimeError("direct image send failed")
         return {"message_id": "streamed"}
 
     context.send_message.side_effect = send_message
@@ -85,6 +85,118 @@ async def test_send_images_streams_on_fallback(
     retried_chain = sent_results[-1].result_chain
     assert retried_chain[0].file == "stream://image"
     assert mock_event.bot.call_action.called
+
+
+@pytest.mark.asyncio
+async def test_send_images_does_not_fallback_when_send_ack_times_out(
+    tmp_path: Path, mock_event, sample_config_dict
+) -> None:
+    """平台确认超时时不立刻降级，避免原图稍后送达时重复发送 fallback。"""
+    image_path = tmp_path / "image.jpg"
+    image_path.write_bytes(b"image-data")
+
+    context = MagicMock()
+    context.send_message = AsyncMock(side_effect=TimeoutError("adapter ack timeout"))
+    set_plugin_context(context)
+
+    mock_event.platform.name = "aiocqhttp"
+    mock_event.bot = MagicMock()
+    mock_event.bot.call_action = AsyncMock()
+
+    config = SetuPluginConfig(**sample_config_dict)
+    payload = ImagePayload(
+        urls=("https://example.com/image.jpg",),
+        raw_bytes=(),
+        file_paths=(image_path,),
+        items=(image_path,),
+        r18=False,
+        tags=(),
+    )
+
+    results = [
+        item async for item in ImageSender(config).send_images(payload, mock_event)
+    ]
+
+    assert results == [{"send_success": True, "image_count": 1, "send_pending": True}]
+    assert context.send_message.await_count == 2
+    mock_event.bot.call_action.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_send_images_treats_napcat_none_ack_as_pending(
+    tmp_path: Path, mock_event, sample_config_dict
+) -> None:
+    """NapCat 未返回 message id 时不立刻降级，避免延迟送达后重复发图。"""
+    image_path = tmp_path / "image.jpg"
+    image_path.write_bytes(b"image-data")
+
+    context = MagicMock()
+    context.send_message = AsyncMock(return_value=None)
+    set_plugin_context(context)
+
+    mock_event.platform.name = "napcat"
+    mock_event.bot = MagicMock()
+    mock_event.bot.call_action = AsyncMock()
+
+    config = SetuPluginConfig(**sample_config_dict)
+    payload = ImagePayload(
+        urls=("https://example.com/image.jpg",),
+        raw_bytes=(),
+        file_paths=(image_path,),
+        items=(image_path,),
+        r18=False,
+        tags=(),
+    )
+
+    results = [
+        item async for item in ImageSender(config).send_images(payload, mock_event)
+    ]
+
+    assert results == [{"send_success": True, "image_count": 1, "send_pending": True}]
+    assert context.send_message.await_count == 2
+    mock_event.bot.call_action.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_send_images_does_not_fallback_when_forward_ack_times_out(
+    tmp_path: Path, mock_event, sample_config_dict
+) -> None:
+    """合并转发确认超时时同样不触发流式或 HTML 降级。"""
+    image_a = tmp_path / "a.jpg"
+    image_b = tmp_path / "b.jpg"
+    image_a.write_bytes(b"image-a")
+    image_b.write_bytes(b"image-b")
+
+    context = MagicMock()
+    context.send_message = AsyncMock(side_effect=TimeoutError("forward ack timeout"))
+    set_plugin_context(context)
+
+    mock_event.platform.name = "aiocqhttp"
+    mock_event.bot = MagicMock()
+    mock_event.bot.call_action = AsyncMock()
+
+    config_dict = sample_config_dict.copy()
+    config_dict["messages"] = {
+        **sample_config_dict["messages"],
+        "found": {"enabled": False, "text": "找到 {count} 张符合要求的图片~"},
+    }
+    config = SetuPluginConfig(**config_dict)
+    payload = ImagePayload(
+        urls=("https://example.com/a.jpg", "https://example.com/b.jpg"),
+        raw_bytes=(),
+        file_paths=(image_a, image_b),
+        items=(image_a, image_b),
+        r18=False,
+        tags=(),
+    )
+
+    results = [
+        item async for item in ImageSender(config).send_images(payload, mock_event)
+    ]
+
+    assert results == [{"send_success": True, "image_count": 2, "send_pending": True}]
+    assert context.send_message.await_count == 1
+    mock_event.bot.call_action.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -131,6 +243,47 @@ async def test_send_images_materializes_local_files_before_direct_send(
 
 
 @pytest.mark.asyncio
+async def test_html_card_only_preserves_pending_send_status(
+    tmp_path: Path, mock_event, sample_config_dict
+) -> None:
+    image_path = tmp_path / "image.jpg"
+    image_path.write_bytes(b"image-data")
+
+    context = MagicMock()
+    context.send_message = AsyncMock(side_effect=TimeoutError("html ack timeout"))
+    set_plugin_context(context)
+
+    class FakeHtmlRenderer:
+        async def render_single_image(self, **kwargs) -> bytes:
+            return b"html-card"
+
+    config_dict = sample_config_dict.copy()
+    config_dict["html_card"] = {
+        **sample_config_dict["html_card"],
+        "strategy": "always",
+    }
+    config_dict["messages"] = {
+        **sample_config_dict["messages"],
+        "found": {"enabled": False, "text": "找到 {count} 张符合要求的图片~"},
+    }
+    config = SetuPluginConfig(**config_dict)
+    sender = ImageSender(config)
+    sender.set_html_renderer(FakeHtmlRenderer())
+    payload = ImagePayload(
+        urls=("https://example.com/image.jpg",),
+        raw_bytes=(),
+        file_paths=(image_path,),
+        items=(image_path,),
+        r18=False,
+        tags=(),
+    )
+
+    results = [item async for item in sender.send_images(payload, mock_event)]
+
+    assert results == [{"send_success": True, "image_count": 1, "send_pending": True}]
+
+
+@pytest.mark.asyncio
 async def test_direct_send_strategy_passthroughs_onebot_stream_refs(mock_event) -> None:
     context = MagicMock()
     strategy = DirectSendStrategy(context)
@@ -148,6 +301,56 @@ async def test_direct_send_strategy_passthroughs_onebot_stream_refs(mock_event) 
         group_id=123456,
         message=[{"type": "image", "data": {"file": "stream://image"}}],
     )
+
+
+@pytest.mark.asyncio
+async def test_direct_send_strategy_passthroughs_napcat_stream_refs(mock_event) -> None:
+    """NapCat 也走 OneBot 图片引用直通，避免 stream:// 被普通链路改写。"""
+    context = MagicMock()
+    strategy = DirectSendStrategy(context)
+
+    mock_event.platform.name = "napcat"
+    mock_event.get_group_id.return_value = "123456"
+    mock_event.get_sender_id.return_value = "654321"
+    mock_event.bot = MagicMock()
+    mock_event.bot.send_group_msg = AsyncMock(return_value={"message_id": "ok"})
+
+    success = await strategy.send(mock_event, [Comp.Image(file="stream://image")])
+
+    assert success is True
+    mock_event.bot.send_group_msg.assert_awaited_once_with(
+        group_id=123456,
+        message=[{"type": "image", "data": {"file": "stream://image"}}],
+    )
+
+
+@pytest.mark.asyncio
+async def test_direct_send_strategy_keeps_none_passthrough_ack_pending(
+    mock_event,
+) -> None:
+    """OneBot 直通已尝试但无确认时，不再落回普通发送链路。"""
+    context = MagicMock()
+    context.send_message = AsyncMock()
+    strategy = DirectSendStrategy(context)
+
+    mock_event.platform.name = "napcat"
+    mock_event.get_group_id.return_value = "123456"
+    mock_event.get_sender_id.return_value = "654321"
+    mock_event.bot = MagicMock()
+    mock_event.bot.send_group_msg = AsyncMock(return_value=None)
+
+    result = await strategy.send_with_status(
+        mock_event,
+        [Comp.Image(file="stream://image")],
+    )
+
+    assert result.accepted is True
+    assert result.pending is True
+    mock_event.bot.send_group_msg.assert_awaited_once_with(
+        group_id=123456,
+        message=[{"type": "image", "data": {"file": "stream://image"}}],
+    )
+    context.send_message.assert_not_called()
 
 
 @pytest.mark.asyncio

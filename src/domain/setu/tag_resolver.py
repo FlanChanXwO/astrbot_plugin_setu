@@ -53,7 +53,11 @@ class TagResolverService:
         normalized = raw_tags.replace("，", ",").replace(" ", ",")
         raw_list = [t.strip() for t in normalized.split(",") if t.strip()]
 
-        return [self._resolve_single_tag(tag) for tag in raw_list]
+        return [self.resolve_tag(tag) for tag in raw_list]
+
+    def resolve_tag(self, tag: str) -> str:
+        """Resolve one already-tokenized tag without splitting spaces."""
+        return self._resolve_single_tag(tag.strip())
 
     def _resolve_single_tag(self, tag: str) -> str:
         """Resolve a single tag to its canonical name.
@@ -93,7 +97,9 @@ class TagResolverService:
         return None
 
     @classmethod
-    def parse_alias_map_from_string(cls, alias_str: str) -> dict[str, list[str]]:
+    def parse_alias_map_from_string(
+        cls, alias_str: str, *, split_spaces: bool = True
+    ) -> dict[str, list[str]]:
         """Parse alias map from config string format.
 
         Format: "canonical=alias1,alias2" (one per line, # or ; for comments)
@@ -127,7 +133,10 @@ class TagResolverService:
             if not key or not value:
                 continue
 
-            aliases = [a.strip() for a in value.split(",") if a.strip()]
+            normalized_value = value.replace("，", ",").replace("、", ",")
+            if split_spaces:
+                normalized_value = ",".join(normalized_value.replace("\t", " ").split())
+            aliases = [a.strip() for a in normalized_value.split(",") if a.strip()]
             if aliases:
                 result[key] = aliases
 
