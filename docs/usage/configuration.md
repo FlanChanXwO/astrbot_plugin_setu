@@ -44,6 +44,8 @@
 | `tag_alias_templates` | template_list | 标签别名映射；添加后优先于旧文本格式 `tag_alias` |
 | `message_overrides` | template_list | 只在需要自定义某条提示时添加，未添加时使用内置默认提示 |
 
+访问控制 Web API 错误提示也可通过 `message_overrides` 覆盖，内置键为 `error.invalid_request` 和 `error.internal_server`。
+
 ## 访问控制配置
 
 安全配置已从 `_conf_schema.json` 移到插件 WebUI 的 Dashboard 访问控制标签页。页面支持：

@@ -242,6 +242,12 @@ class MessagesConfig(BaseModel):
     config_not_loaded: MessageTextConfig = Field(
         default_factory=lambda: MessageTextConfig(text="配置未加载")
     )
+    error_invalid_request: MessageTextConfig = Field(
+        default_factory=lambda: MessageTextConfig(text="请求参数无效")
+    )
+    error_internal_server: MessageTextConfig = Field(
+        default_factory=lambda: MessageTextConfig(text="服务器内部错误")
+    )
     invalid_count: MessageTextConfig = Field(
         default_factory=lambda: MessageTextConfig(
             text="数量解析失败，图片数量必须在{min_count}-{max_count}之间"
@@ -686,7 +692,11 @@ class SetuPluginConfig(BaseModel):
                 return None
             text = self.msg_send_failed_text
         else:
-            item = getattr(self.messages, key, None)
+            # Web API error keys are exposed as dotted names while Pydantic
+            # fields keep Python identifiers.
+            item = getattr(self.messages, key, None) or getattr(
+                self.messages, key.replace(".", "_"), None
+            )
             if not item or not getattr(item, "enabled", True):
                 return None
             text = str(getattr(item, "text", "") or "")

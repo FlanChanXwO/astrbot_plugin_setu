@@ -34,6 +34,15 @@ def test_resolve_message_respects_enabled_toggle(sample_config_dict) -> None:
     assert config.resolve_message("fetch_failed") is None
 
 
+def test_resolve_message_supports_dotted_builtin_error_keys(
+    sample_config_dict,
+) -> None:
+    config = SetuPluginConfig(**sample_config_dict)
+
+    assert config.resolve_message("error.invalid_request") == "请求参数无效"
+    assert config.resolve_message("error.internal_server") == "服务器内部错误"
+
+
 def test_message_template_override_takes_precedence(sample_config_dict) -> None:
     config_dict = sample_config_dict.copy()
     config_dict["messages"] = {

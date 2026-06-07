@@ -97,7 +97,8 @@ async def test_download_returns_bytes_without_writing_when_cache_disabled(
     monkeypatch.setattr(provider_base_module, "get_send_cache", lambda: fake_cache)
 
     class FakeResponse:
-        headers: dict[str, str] = {}
+        def __init__(self) -> None:
+            self.headers: dict[str, str] = {}
 
         def raise_for_status(self) -> None:
             return None

@@ -377,6 +377,8 @@
                                     "send_failed",
                                     "rate_limited",
                                     "config_not_loaded",
+                                    "error.invalid_request",
+                                    "error.internal_server",
                                     "invalid_count",
                                     "max_count_exceeded",
                                     "count_out_of_range",

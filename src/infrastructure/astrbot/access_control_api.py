@@ -8,6 +8,7 @@ from quart import jsonify, request
 
 from ...shared import get_logger
 from ..persistence import get_access_control_repo
+from .config import get_config
 
 PLUGIN_NAME = "astrbot_plugin_setu"
 logger = get_logger()
@@ -105,11 +106,22 @@ def _dict(value: Any) -> dict[str, Any]:
 
 def _validation_error_response(exc: Exception):
     """Return sanitized client-facing validation errors."""
-    message = str(exc).strip() or "请求参数无效"
+    message = str(exc).strip() or _resolve_api_message(
+        "error.invalid_request", "请求参数无效"
+    )
     return jsonify({"success": False, "error": message}), 400
 
 
 def _internal_error_response(exc: Exception, action: str):
     """Log full internal errors while keeping WebUI responses safe."""
     logger.exception("[access_control_api] %s failed: %s", action, exc)
-    return jsonify({"success": False, "error": "Internal server error"}), 500
+    message = _resolve_api_message("error.internal_server", "服务器内部错误")
+    return jsonify({"success": False, "error": message}), 500
+
+
+def _resolve_api_message(key: str, fallback: str) -> str:
+    """Resolve Web API messages from plugin config when available."""
+    config = get_config()
+    if not config:
+        return fallback
+    return config.resolve_message(key) or fallback
