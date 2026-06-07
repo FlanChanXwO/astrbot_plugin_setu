@@ -154,7 +154,7 @@
 | `max_count` | 单次最大图片数（1-10） | `10` |
 | `max_replenish_rounds` | 下载暂时失败时的同 URL 确认尝试次数/补图轮次 | `3` |
 | `cache_enabled` | 是否复用本地发送缓存 | `true` |
-| `exclude_ai` | 是否排除 AI 生成图片 | `false` |
+| `exclude_ai` | 是否排除 AI 生成图片 | `true` |
 
 ### 防审核配置
 

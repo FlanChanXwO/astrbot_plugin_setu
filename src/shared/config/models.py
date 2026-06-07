@@ -531,7 +531,8 @@ class SetuPluginConfig(BaseModel):
     @property
     def exclude_ai(self) -> bool:
         """Get exclude AI."""
-        return self._provider_config("lolicon").exclude_ai
+        provider = "atri" if self.api_type == "atri" else "lolicon"
+        return self._provider_config(provider).exclude_ai
 
     @property
     def image_size(self) -> str:

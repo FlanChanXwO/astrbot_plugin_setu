@@ -12,7 +12,7 @@
 | `max_count` | 整数 | 单次最大图片数 | 1-10 | `10` |
 | `max_replenish_rounds` | 整数 | 下载暂时失败时的同 URL 确认尝试次数，也是短缺时的补图轮次 | 1-3 | `3` |
 | `cache_enabled` | 布尔值 | 是否复用本地发送缓存 | `true` / `false` | `true` |
-| `exclude_ai` | 布尔值 | 是否排除 AI 生成图片 | `true` / `false` | `false` |
+| `exclude_ai` | 布尔值 | 是否排除 AI 生成图片 | `true` / `false` | `true` |
 
 图片 URL 已返回但下载出现连接错误、HTTP 错误或超时时，插件会先按 `max_replenish_rounds` 对同一 URL 做可观测的确认重试。仍失败时才进入后续补图轮次或返回无结果，避免 CDN/反代短暂抖动被直接当成最终失败。
 

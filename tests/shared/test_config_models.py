@@ -87,6 +87,42 @@ def test_provider_template_override_takes_precedence(sample_config_dict) -> None
     assert config.exclude_ai is False
 
 
+def test_exclude_ai_uses_atri_override_when_api_type_is_atri(
+    sample_config_dict,
+) -> None:
+    config_dict = sample_config_dict.copy()
+    config_dict["setu_general"] = {
+        **sample_config_dict["setu_general"],
+        "api_type": "atri",
+    }
+    config_dict["api"] = {
+        **sample_config_dict["api"],
+        "provider_overrides": [
+            {
+                "__template_key": "lolicon",
+                "image_size": "original",
+                "proxy": "",
+                "aspect_ratio": "",
+                "uid": [],
+                "keyword": "",
+                "exclude_ai": True,
+            },
+            {
+                "__template_key": "atri",
+                "image_size": "original",
+                "proxy": "",
+                "aspect_ratio": "",
+                "uid": [],
+                "keyword": "",
+                "exclude_ai": False,
+            },
+        ],
+    }
+    config = SetuPluginConfig(**config_dict)
+
+    assert config.exclude_ai is False
+
+
 def test_tag_alias_templates_override_text_default(sample_config_dict) -> None:
     config_dict = sample_config_dict.copy()
     config_dict["setu_general"] = {
