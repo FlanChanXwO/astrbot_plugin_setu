@@ -84,11 +84,13 @@ class FileBackedAccessControlRepo(AccessControlRepository):
     async def initialize(self) -> None:
         """Initialize repository, load existing config."""
         self._load_config()
+        config_exists = self._config_file.exists()
+        cache_before = dict(self._cache) if isinstance(self._cache, dict) else {}
         self._normalize_cache()
         imported = self._sync_from_astrbot_config()
         if not imported:
             self._sync_to_astrbot_config()
-        if not self._config_file.exists() or self._cache:
+        if not config_exists or self._cache != cache_before:
             await self._save_config()
 
     def _load_config(self) -> None:
@@ -470,9 +472,6 @@ class FileBackedAccessControlRepo(AccessControlRepository):
 
             if updated:
                 self._sync_legacy_lists_from_entries()
-                self._data_dir.mkdir(parents=True, exist_ok=True)
-                with open(self._config_file, "w", encoding="utf-8") as f:
-                    json.dump(self._cache, f, ensure_ascii=False, indent=2)
 
             return imported
 

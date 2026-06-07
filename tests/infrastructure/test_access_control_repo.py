@@ -25,6 +25,30 @@ class TestFileBackedAccessControlRepo:
         assert repo._config_file.exists()
 
     @pytest.mark.asyncio
+    async def test_initialize_does_not_rewrite_unchanged_config(
+        self, temp_data_dir, mock_astrbot_config, monkeypatch
+    ) -> None:
+        """Repeated initialization should not touch an unchanged config file."""
+        repo = FileBackedAccessControlRepo(temp_data_dir, mock_astrbot_config)
+        await repo.initialize()
+
+        writes: list[str] = []
+        original_write = FileBackedAccessControlRepo._write_config_file
+
+        def record_write(self, data: str) -> None:
+            writes.append(data)
+            original_write(self, data)
+
+        monkeypatch.setattr(
+            FileBackedAccessControlRepo, "_write_config_file", record_write
+        )
+
+        repo2 = FileBackedAccessControlRepo(temp_data_dir, mock_astrbot_config)
+        await repo2.initialize()
+
+        assert writes == []
+
+    @pytest.mark.asyncio
     async def test_setu_user_blacklist(
         self, temp_data_dir, mock_astrbot_config
     ) -> None:
