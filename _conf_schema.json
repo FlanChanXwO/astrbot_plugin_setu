@@ -425,7 +425,7 @@
     "messages": {
         "description": "提示消息覆盖",
         "type": "object",
-        "hint": "所有可配置提示默认不发送；只在需要某条提示时添加覆盖模板并启用。",
+        "hint": "所有内置提示默认启用；添加覆盖模板可关闭或修改对应提示文本。",
         "items": {
             "message_overrides": {
                 "type": "template_list",
@@ -477,7 +477,7 @@
                             "enabled": {
                                 "type": "bool",
                                 "description": "启用该提示",
-                                "default": false
+                                "default": true
                             },
                             "text": {
                                 "type": "string",

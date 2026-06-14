@@ -37,7 +37,8 @@ def test_conf_schema_exposes_sexnyan_and_platform_transport_templates() -> None:
         "message"
     ]["items"]
     assert "revoke_scheduled" in message_items["message_key"]["options"]
-    assert message_items["enabled"]["default"] is False
+    assert message_items["enabled"]["default"] is True
+    assert message_items["text"]["default"].strip()
 
 
 def test_dashboard_loads_bridge_before_app_script() -> None:

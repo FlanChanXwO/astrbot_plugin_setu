@@ -172,7 +172,7 @@ NapCat stream 上传的分块内容按 NapCat 协议仍为 base64 字符串；�
 | `provider_overrides` | 覆盖 provider 默认参数 |
 | `custom_api_configs` | 自定义图片 API 列表 |
 | `tag_alias_templates` | 标签别名映射 |
-| `message_overrides` | 自定义提示文案（支持占位符，默认不发送） |
+| `message_overrides` | 自定义提示文案（支持占位符；内置提示默认启用，可用覆盖模板关闭或修改） |
 
 ### 访问控制
 
