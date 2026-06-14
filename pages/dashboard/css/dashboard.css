@@ -18,6 +18,14 @@
   gap: 16px;
 }
 
+.dashboard-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .dashboard-content {
   display: flex;
   min-height: 0;
@@ -54,12 +62,23 @@
 }
 
 .table-section > .section-header {
-  padding: 18px 20px 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: stretch;
+  justify-content: stretch;
+  gap: 12px;
+  margin-bottom: 0;
+  padding: 18px 20px 12px;
+}
+
+.table-section > .section-header .action-bar {
+  width: 100%;
 }
 
 .table-section > .empty-state,
 .table-section .empty-state {
-  margin: 0 20px 20px;
+  margin: 0;
+  padding: 14px 20px 18px;
 }
 
 .table-scroll-area {
@@ -239,9 +258,13 @@
     flex-direction: column;
   }
 
+  .dashboard-actions {
+    width: 100%;
+  }
+
   .dashboard-header .btn,
   .dashboard-header button {
-    width: 100%;
+    flex: 1 1 auto;
   }
 
   .action-bar {

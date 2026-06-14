@@ -19,7 +19,7 @@ from astrbot.api import logger as _astrbot_logger
 class PrefixedLogger:
     """AstrBot 日志包装器，添加插件前缀并正确显示调用位置。"""
 
-    PREFIX = "[setu] "
+    PREFIX = "[astrbot_plugin_setu] ｜ "
     CALLER_STACKLEVEL = 2
 
     def _add_prefix(self, msg: object) -> str:

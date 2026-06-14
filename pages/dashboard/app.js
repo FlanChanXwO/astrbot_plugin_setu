@@ -3,7 +3,9 @@
   // 共享工具
   // ══════════════════════════════════════════════════════════════════════════
 
-  var bridge = window.AstrBotPluginPage || null;
+  // AstrBot 可能在 iframe HTML 末尾注入 bridge；等待窗口只覆盖注入竞态，超时后显式报错。
+  var BRIDGE_WAIT_ATTEMPTS = 50;
+  var BRIDGE_WAIT_INTERVAL_MS = 100;
   var toastTimer = null;
 
   function qs(sel, ctx) { return (ctx || document).querySelector(sel); }
@@ -22,24 +24,56 @@
     return result || {};
   }
 
-  function bridgeReady() {
-    if (!bridge || typeof bridge.ready !== 'function') {
-      return Promise.reject(new Error('AstrBot Plugin Pages bridge 未注入'));
-    }
-    return bridge.ready();
+  function getBridge() {
+    return window.AstrBotPluginPage || null;
   }
 
-  function apiGet(path) {
-    return bridgeReady().then(function () {
-      if (typeof bridge.apiGet !== 'function') throw new Error('Plugin Pages bridge 不支持 apiGet');
-      return bridge.apiGet(path);
+  function sleep(ms) {
+    return new Promise(function (resolve) {
+      window.setTimeout(resolve, ms);
+    });
+  }
+
+  function waitForBridge() {
+    var found = getBridge();
+    if (found) return Promise.resolve(found);
+
+    var attempt = 0;
+    function poll() {
+      var current = getBridge();
+      if (current) return Promise.resolve(current);
+
+      attempt += 1;
+      if (attempt >= BRIDGE_WAIT_ATTEMPTS) {
+        return Promise.reject(new Error('请从 AstrBot Plugin Pages 打开此页面'));
+      }
+      return sleep(BRIDGE_WAIT_INTERVAL_MS).then(poll);
+    }
+    return poll();
+  }
+
+  function bridgeReady() {
+    return waitForBridge().then(function (current) {
+      if (typeof current.ready !== 'function') {
+        throw new Error('Plugin Pages bridge 不支持 ready');
+      }
+      return current.ready().then(function () {
+        return current;
+      });
+    });
+  }
+
+  function apiGet(path, params) {
+    return bridgeReady().then(function (current) {
+      if (typeof current.apiGet !== 'function') throw new Error('Plugin Pages bridge 不支持 apiGet');
+      return current.apiGet(path, params);
     });
   }
 
   function apiPost(path, payload) {
-    return bridgeReady().then(function () {
-      if (typeof bridge.apiPost !== 'function') throw new Error('Plugin Pages bridge 不支持 apiPost');
-      return bridge.apiPost(path, payload);
+    return bridgeReady().then(function (current) {
+      if (typeof current.apiPost !== 'function') throw new Error('Plugin Pages bridge 不支持 apiPost');
+      return current.apiPost(path, payload);
     });
   }
 
@@ -442,6 +476,9 @@
         },
         entries: [],
         form: this.emptyForm(),
+        formError: '',
+        dialogOpen: false,
+        lastFocus: null,
         filters: { search: '', feature: '', subject_type: '', list_type: '' },
       });
 
@@ -492,14 +529,16 @@
       var s = this.store;
       var payload = Object.assign({}, s.form, { target_id: s.form.target_id.trim(), note: s.form.note.trim() });
       if (!payload.target_id) {
-        globalStore.showToast('ID 不能为空', 'error');
+        self.setFormError('ID 不能为空，请填写用户 ID 或群组 ID。');
+        qs('#field-target-id').focus();
         return;
       }
+      s.formError = '';
       s.loading = true;
       self.renderButtons();
       apiPost('access-control/entries/upsert', payload).then(apiResult).then(function () {
         s.form = self.emptyForm();
-        self.renderForm();
+        self.closeEntryModal(false, true);
         return self.reload();
       }).then(function () {
         globalStore.showToast('记录已保存');
@@ -513,8 +552,7 @@
 
     editEntry: function (entry) {
       this.store.form = Object.assign({}, this.emptyForm(), entry);
-      this.renderForm();
-      qs('#field-target-id').focus();
+      this.openEntryModal();
     },
 
     deleteEntry: function (id) {
@@ -524,7 +562,10 @@
       s.loading = true;
       self.renderButtons();
       apiPost('access-control/entries/delete', { id: id }).then(apiResult).then(function () {
-        if (s.form.id === id) s.form = self.emptyForm();
+        if (s.form.id === id) {
+          s.form = self.emptyForm();
+          self.closeEntryModal(false, true);
+        }
         return self.reload();
       }).then(function () {
         self.renderForm();
@@ -539,6 +580,43 @@
 
     resetForm: function () {
       this.store.form = this.emptyForm();
+      this.store.formError = '';
+      this.renderForm();
+      qs('#field-target-id').focus();
+    },
+
+    openCreateEntry: function () {
+      this.store.form = this.emptyForm();
+      this.openEntryModal();
+    },
+
+    openEntryModal: function () {
+      var s = this.store;
+      s.dialogOpen = true;
+      s.formError = '';
+      s.lastFocus = document.activeElement;
+      this.renderForm();
+      window.setTimeout(function () {
+        var target = qs('#field-target-id');
+        if (target) target.focus();
+      }, 0);
+    },
+
+    closeEntryModal: function (resetForm, force) {
+      var s = this.store;
+      if (s.loading && !force) return;
+      s.dialogOpen = false;
+      s.formError = '';
+      if (resetForm !== false) s.form = this.emptyForm();
+      this.renderForm();
+      if (s.lastFocus && typeof s.lastFocus.focus === 'function') {
+        s.lastFocus.focus();
+      }
+      s.lastFocus = null;
+    },
+
+    setFormError: function (message) {
+      this.store.formError = message || '';
       this.renderForm();
     },
 
@@ -592,6 +670,17 @@
       qs('#field-list-type').value = this.store.form.list_type;
       qs('#field-target-id').value = this.store.form.target_id;
       qs('#field-note').value = this.store.form.note;
+      this.renderModal();
+      var error = qs('#entry-form-error');
+      error.textContent = this.store.formError;
+      error.hidden = !this.store.formError;
+    },
+
+    renderModal: function () {
+      var modal = qs('#access-entry-modal');
+      modal.hidden = !this.store.dialogOpen;
+      modal.setAttribute('aria-hidden', this.store.dialogOpen ? 'false' : 'true');
+      document.body.classList.toggle('modal-open', this.store.dialogOpen);
     },
 
     renderEntries: function () {
@@ -643,6 +732,8 @@
 
       qsa('[data-action^="ac-"]').forEach(function (btn) {
         var action = btn.dataset.action;
+        if (action === 'ac-open-create') btn.addEventListener('click', function () { self.openCreateEntry(); });
+        if (action === 'ac-close-entry-modal') btn.addEventListener('click', function () { self.closeEntryModal(); });
         if (action === 'ac-reload') btn.addEventListener('click', function () { self.reload(); });
         if (action === 'ac-save-modes') btn.addEventListener('click', function () { self.saveModes(); });
         if (action === 'ac-save-entry') btn.addEventListener('click', function () { self.saveEntry(); });
@@ -664,6 +755,11 @@
       qs('#field-list-type').addEventListener('change', function (e) { s.form.list_type = e.target.value; });
       qs('#field-target-id').addEventListener('input', function (e) { s.form.target_id = e.target.value; });
       qs('#field-note').addEventListener('input', function (e) { s.form.note = e.target.value; });
+
+      qs('[data-modal-close="access-entry"]').addEventListener('click', function () { self.closeEntryModal(); });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && s.dialogOpen) self.closeEntryModal();
+      });
 
       qs('#filter-search').addEventListener('input', function (e) {
         s.filters.search = e.target.value;

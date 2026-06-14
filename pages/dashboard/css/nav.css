@@ -43,10 +43,10 @@
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: flex-start;
   width: 100%;
   min-height: 42px;
-  padding: 0 14px;
+  padding: 0 10px;
   border: 1px solid transparent;
   border-radius: var(--radius);
   background: transparent;
@@ -70,16 +70,6 @@
   border-color: var(--primary-color);
   color: var(--primary-color);
   font-weight: 600;
-}
-
-.nav-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-  font-size: 16px;
 }
 
 .nav-main {

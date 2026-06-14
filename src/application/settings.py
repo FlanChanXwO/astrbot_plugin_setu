@@ -27,7 +27,7 @@ class DeliverySettings:
 
     send_mode: str
     html_card_strategy: str
-    auto_revoke_r18: bool
+    auto_revoke_scope: str
     auto_revoke_delay: int
     r18_docx_mode: bool
     html_card_padding: int
@@ -84,7 +84,7 @@ def get_delivery_settings() -> DeliverySettings:
         return DeliverySettings(
             send_mode="image",
             html_card_strategy="never",
-            auto_revoke_r18=False,
+            auto_revoke_scope="none",
             auto_revoke_delay=30,
             r18_docx_mode=False,
             html_card_padding=6,
@@ -94,7 +94,7 @@ def get_delivery_settings() -> DeliverySettings:
     return DeliverySettings(
         send_mode=_config.send_mode,
         html_card_strategy=_config.html_card_strategy,
-        auto_revoke_r18=_config.auto_revoke_r18,
+        auto_revoke_scope=_config.auto_revoke_scope,
         auto_revoke_delay=_config.auto_revoke_delay,
         r18_docx_mode=_config.r18_docx_mode,
         html_card_padding=_config.html_card_padding,

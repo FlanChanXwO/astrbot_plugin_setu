@@ -168,7 +168,7 @@ def get_global_session_config_values() -> dict[str, JsonValue]:
     return {
         "setu.content_mode": setu.content_mode,
         "setu.r18_docx": delivery.r18_docx_mode,
-        "setu.auto_revoke": delivery.auto_revoke_r18,
+        "setu.auto_revoke_scope": delivery.auto_revoke_scope,
         "setu.send_mode": delivery.send_mode,
         "fortune.tags": fortune.tags,
         "fortune.content_mode": fortune.content_mode,

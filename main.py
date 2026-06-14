@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+import json
 import re
 from collections.abc import AsyncGenerator
 from contextlib import suppress
+from pathlib import Path
 from typing import Any
 
 from astrbot.api import logger
@@ -42,6 +44,7 @@ from .src.infrastructure.astrbot.commands import (
 from .src.infrastructure.astrbot.session_config_api import (
     register_session_config_web_apis,
 )
+from .src.infrastructure.config import heal_astrbot_plugin_config
 from .src.shared.send_cache import clear_send_cache, init_send_cache
 
 # Regex patterns for command triggers
@@ -147,6 +150,16 @@ def _seconds_until_next_midnight() -> float:
     return max(1.0, (next_midnight - now).total_seconds())
 
 
+def _load_conf_schema() -> dict[str, Any]:
+    """Load plugin config schema for runtime config healing."""
+    schema_path = Path(__file__).with_name("_conf_schema.json")
+    try:
+        return json.loads(schema_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("Failed to load Setu config schema: %s", exc)
+        return {}
+
+
 def _resolve_fortune_refresh_target(event: AstrMessageEvent, args: str) -> str:
     command = _get_invoked_command(event)
     if command in FORTUNE_REFRESH_COMMANDS:
@@ -206,6 +219,7 @@ class SetuPlugin(Star):
         global _setu_handler, _fortune_handler, _session_config_handler
 
         raw_config = self._runtime_plugin_config()
+        raw_config = self._heal_runtime_plugin_config(raw_config)
         cfg = init_config(raw_config)
         set_plugin_context(self.context)
         data_dir = StarTools.get_data_dir(self.name)
@@ -249,6 +263,7 @@ class SetuPlugin(Star):
             clear_repo,
             clear_session_config_repo,
         )
+        from .src.infrastructure.sending import clear_revoke_scheduler
 
         if self._fortune_pregenerate_task is not None:
             self._fortune_pregenerate_task.cancel()
@@ -267,6 +282,7 @@ class SetuPlugin(Star):
         clear_repo()
         clear_fortune_repo()
         clear_session_config_repo()
+        await clear_revoke_scheduler()
         clear_send_cache()
 
         _setu_handler = None
@@ -306,6 +322,42 @@ class SetuPlugin(Star):
         if callable(items):
             return dict(items())
         return dict(self._plugin_config)
+
+    def _heal_runtime_plugin_config(self, raw_config: dict[str, Any]) -> dict[str, Any]:
+        """Heal legacy or invalid config values before runtime initialization."""
+        schema = _load_conf_schema()
+        healed_config, changes = heal_astrbot_plugin_config(raw_config, schema)
+        if not changes:
+            return healed_config
+        logger.info("SetuPlugin healed config: %s", "; ".join(changes))
+        if not self._persist_runtime_plugin_config(healed_config):
+            logger.warning("SetuPlugin config healed for runtime but could not persist")
+        return healed_config
+
+    def _persist_runtime_plugin_config(self, healed_config: dict[str, Any]) -> bool:
+        """Best-effort write-back for AstrBotConfig-like mapping objects."""
+        target = self._plugin_config
+        try:
+            clear = getattr(target, "clear", None)
+            update = getattr(target, "update", None)
+            if callable(clear) and callable(update):
+                clear()
+                update(healed_config)
+                return True
+
+            pop = getattr(target, "pop", None)
+            keys = getattr(target, "keys", None)
+            if callable(pop) and callable(keys):
+                for key in list(keys()):
+                    if key not in healed_config:
+                        pop(key, None)
+
+            for key, value in healed_config.items():
+                target[key] = value
+            return True
+        except Exception as exc:
+            logger.debug("failed to persist healed Setu config: %s", exc)
+            return False
 
     # ==================== Setu Commands ====================
 

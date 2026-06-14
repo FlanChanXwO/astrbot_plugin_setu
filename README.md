@@ -27,22 +27,22 @@
   <table>
     <tr>
       <td align="center">
-        <img src="https://raw.githubusercontent.com/FlanChanXwO/astrbot_plugin_setu/master/assets/img_ob_preview.png" width="400" alt="色图卡片预览1"/>
+        <img src="https://raw.githubusercontent.com/FlanChanXwO/astrbot_plugin_setu/master/assets/img_ob_preview.webp" width="400" alt="色图卡片预览1"/>
         <br/>
         <sub>HTML 卡片包装提高成功率</sub>
       </td>
       <td align="center">
-        <img src="https://raw.githubusercontent.com/FlanChanXwO/astrbot_plugin_setu/master/assets/merge_send_preview.png" width="400" alt="色图卡片预览2"/>
+        <img src="https://raw.githubusercontent.com/FlanChanXwO/astrbot_plugin_setu/master/assets/merge_send_preview.webp" width="400" alt="色图卡片预览2"/>
         <br/>
         <sub>多图合并转发</sub>
       </td>
       <td align="center">
-        <img src="https://raw.githubusercontent.com/FlanChanXwO/astrbot_plugin_setu/master/assets/tag_search_preview.png" width="400" alt="色图卡片预览3"/>
+        <img src="https://raw.githubusercontent.com/FlanChanXwO/astrbot_plugin_setu/master/assets/tag_search_preview.webp" width="400" alt="色图卡片预览3"/>
         <br/>
         <sub>自定义标签搜索</sub>
       </td>
       <td align="center">
-        <img src="https://raw.githubusercontent.com/FlanChanXwO/astrbot_plugin_setu/master/assets/jrys_preview.png" width="400" alt="今日运势卡片预览"/>
+        <img src="https://raw.githubusercontent.com/FlanChanXwO/astrbot_plugin_setu/master/assets/jrys_preview.webp" width="400" alt="今日运势卡片预览"/>
         <br/>
         <sub>基于色图驱动的今日运势</sub>
       </td>
@@ -149,7 +149,7 @@
 | 配置项 | 说明 | 默认值 |
 |--------|------|--------|
 | `api_type` | API 类型（lolicon / atri / sexnyan / custom / all） | `lolicon` |
-| `send_mode` | 发送模式（auto / image / forward） | `image` |
+| `send_mode` | 发送模式（auto / image / forward） | `auto` |
 | `content_mode` | 内容模式（sfw / r18 / mix） | `sfw` |
 | `max_count` | 单次最大图片数（1-10） | `10` |
 | `max_replenish_rounds` | 下载暂时失败时的同 URL 确认尝试次数/补图轮次 | `3` |
@@ -161,11 +161,13 @@
 | 配置项 | 说明 | 默认值 |
 |--------|------|--------|
 | `html_card_strategy` | HTML 卡片策略（never / fallback / always） | `fallback` |
-| `napcat_stream_mode` | NapCat 流式上传策略 | `fallback` |
-| `auto_revoke_r18` | R18 图片是否自动撤回 | `false` |
+| `platform_transports` | 平台传输模板列表，可添加 NapCat 模板 | `[]` |
+| `auto_revoke_scope` | 自动撤回范围（none / sfw / r18 / all） | `none` |
 | `r18_docx_mode` | R18 是否使用 Docx 封装 | `true` |
 
-图片下载遇到短暂网络错误时会先按 `max_replenish_rounds` 对同一 URL 做确认重试；发送接口超时或 OneBot/NapCat 类适配器未返回 message id 时会标记为可能仍在送达，不会立刻触发降级重复发图。
+图片下载遇到短暂网络错误时会先按 `max_replenish_rounds` 对同一 URL 做确认重试；发送接口超时或 OneBot/NapCat 类适配器未返回 message id 时会标记为可能仍在送达，不会立刻触发降级重复发图。旧版 `auto_revoke_r18` 会在启动时迁移为 `auto_revoke_scope`，迁移后不再作为公开配置项展示。
+
+NapCat stream 上传的分块内容按 NapCat 协议仍为 base64 字符串；若 AstrBot 与 NapCat 共享同一图片目录，可在 `platform_transports` 添加 NapCat 模板，将共享目录加入 `local_file_allowed_roots` 并把 `local_file_mode` 设为 `always` 或 `fallback`，让直发模式通过 raw OneBot `file://` 路径绕过 AstrBot 标准链路的 base64 转换。
 
 ### 模板覆盖
 
@@ -174,7 +176,7 @@
 | `provider_overrides` | 覆盖 provider 默认参数 |
 | `custom_api_configs` | 自定义图片 API 列表 |
 | `tag_alias_templates` | 标签别名映射 |
-| `message_overrides` | 自定义提示文案（支持占位符） |
+| `message_overrides` | 自定义提示文案（支持占位符，默认不发送） |
 
 ### 访问控制
 

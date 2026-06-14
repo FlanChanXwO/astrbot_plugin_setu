@@ -30,14 +30,14 @@ Use these keys with `get_session_config`, `set_session_config`, and `clear_sessi
 |---|---|---|
 | `setu.content_mode` | `sfw`, `r18`, `mix` | Content rating for Setu image requests. |
 | `setu.r18_docx` | `true`, `false` | Whether R18 images are packaged as DOCX. |
-| `setu.auto_revoke` | `true`, `false` | Whether R18 messages are auto-revoked. |
+| `setu.auto_revoke_scope` | `none`, `sfw`, `r18`, `all` | Which Setu image sends are auto-revoked. |
 | `setu.send_mode` | `image`, `forward`, `auto` | Direct image, merged forward, or automatic send mode. |
 | `fortune.tags` | string | Default tags for fortune images. |
 | `fortune.content_mode` | `sfw`, `r18`, `mix` | Content rating for fortune images. |
 
 Boolean values can be passed as strings like `"true"` or `"false"`.
 
-Global delivery settings such as `napcat_stream_mode`, send cache TTL, and send cache size are not session preferences and are not exposed through the LLM session config tools. Tell users to change them in the AstrBot WebUI plugin config.
+Global delivery settings such as `platform_transports` NapCat options, send cache TTL, and send cache size are not session preferences and are not exposed through the LLM session config tools. Tell users to change them in the AstrBot WebUI plugin config.
 
 ## Choosing Tools
 
@@ -55,7 +55,7 @@ For fortune requests, call `get_today_fortune`. For refresh requests, use `refre
 
 Treat `set_session_config`, `clear_session_config`, and all refresh tools as privileged. If a tool reports insufficient permission, tell the user the operation requires an administrator or super administrator. Do not retry with a different tool to bypass permission checks.
 
-Use extra care with `r18`, `mix`, `setu.auto_revoke`, and `setu.r18_docx`. Change only what the user requested; do not silently enable unrelated safety or delivery settings.
+Use extra care with `r18`, `mix`, `setu.auto_revoke_scope`, and `setu.r18_docx`. Change only what the user requested; do not silently enable unrelated safety or delivery settings.
 
 ## Response Style
 
@@ -63,7 +63,7 @@ Be concise. After a fetch or fortune tool returns, say what was requested and wh
 
 For failures, surface the plugin's message directly and suggest a practical next step such as fewer images, different tags, or a different send mode. Do not tell the user to configure HTML fallback in WebUI after fallback failure; the plugin now reports fallback failure as a normal send failure.
 
-For slow image sending on NapCat/OneBot, explain that the plugin downloads images to local send cache first and defaults to `napcat_stream_mode=fallback`: it tries normal file-path sending, then uses NapCat stream upload if that fails. `always` can be enabled globally in WebUI when the platform supports stream upload and large original images are common.
+For slow image sending on NapCat/OneBot, explain that the plugin downloads images to local send cache first and the NapCat platform transport defaults to `stream_mode=fallback`: it tries normal file-path sending, then uses NapCat stream upload if that fails. `always` can be enabled globally in WebUI when the platform supports stream upload and large original images are common. NapCat stream chunks are still base64 `chunk_data`; shared-path `local_file_mode` is the route that bypasses AstrBot's normal base64 image chain.
 
 ## Examples
 
@@ -81,7 +81,7 @@ Action: `set_session_config(key="setu.send_mode", value="forward")`
 
 User: `开启 r18 自动撤回`
 
-Action: `set_session_config(key="setu.auto_revoke", value="true")`
+Action: `set_session_config(key="setu.auto_revoke_scope", value="r18")`
 
 User: `清掉这个群的色图模式`
 

@@ -9,9 +9,11 @@ Defines the strategy interface and implementations for different send modes:
 from __future__ import annotations
 
 import asyncio
+import inspect
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
 import astrbot.api.message_components as Comp
 from astrbot.api.event import AstrMessageEvent
@@ -21,6 +23,120 @@ from .dto import SendAttemptResult
 from .platform_capabilities import is_onebot_like_platform
 
 logger = get_logger()
+
+
+def extract_message_ids(response: Any) -> tuple[str, ...]:
+    """Extract OneBot message ids from common adapter response shapes."""
+    ids: list[str] = []
+
+    def collect(value: Any) -> None:
+        if value is None:
+            return
+        if isinstance(value, str | int):
+            text = str(value).strip()
+            if text:
+                ids.append(text)
+            return
+        if isinstance(value, dict):
+            for key in ("message_id", "msg_id"):
+                if key in value:
+                    collect(value[key])
+            if "message_ids" in value:
+                collect(value["message_ids"])
+            data = value.get("data")
+            if isinstance(data, dict | list | tuple):
+                collect(data)
+            return
+        if isinstance(value, list | tuple | set):
+            for item in value:
+                collect(item)
+
+    collect(response)
+    unique: list[str] = []
+    seen: set[str] = set()
+    for item in ids:
+        if item not in seen:
+            seen.add(item)
+            unique.append(item)
+    return tuple(unique)
+
+
+def _get_bot_client(event: AstrMessageEvent) -> Any | None:
+    return getattr(event, "bot", None) or getattr(event, "_bot", None)
+
+
+def _onebot_target(event: AstrMessageEvent) -> tuple[str, int] | None:
+    group_id = event.get_group_id()
+    if group_id:
+        text = str(group_id)
+        if text.isdigit():
+            return "group", int(text)
+        logger.debug("[send] skip OneBot raw send: invalid group_id=%s", group_id)
+        return None
+
+    sender_id = event.get_sender_id()
+    if sender_id:
+        text = str(sender_id)
+        if text.isdigit():
+            return "private", int(text)
+        logger.debug("[send] skip OneBot raw send: invalid user_id=%s", sender_id)
+    return None
+
+
+async def _maybe_await(value: Any) -> Any:
+    if inspect.isawaitable(value):
+        return await value
+    return value
+
+
+async def _call_onebot_action(
+    event: AstrMessageEvent,
+    action: str,
+    params: dict[str, Any],
+) -> tuple[bool, Any]:
+    bot = _get_bot_client(event)
+    if bot is None:
+        return False, None
+
+    method = _callable_attr(bot, action)
+    if callable(method):
+        return True, await _maybe_await(method(**params))
+
+    api = getattr(bot, "api", None)
+    call_action = _callable_attr(api, "call_action")
+    if callable(call_action):
+        return True, await _maybe_await(call_action(action, **params))
+
+    call_action = _callable_attr(bot, "call_action")
+    if callable(call_action):
+        return True, await _maybe_await(call_action(action, **params))
+
+    return False, None
+
+
+def _callable_attr(obj: Any, name: str) -> Any | None:
+    if obj is None:
+        return None
+    if isinstance(obj, Mock) and name not in vars(obj):
+        return None
+    attr = getattr(obj, name, None)
+    return attr if callable(attr) else None
+
+
+async def _component_to_onebot_message(comp: Any) -> dict[str, Any]:
+    if isinstance(comp, Comp.Image):
+        return {
+            "type": "image",
+            "data": {"file": str(getattr(comp, "file", "") or "")},
+        }
+    if isinstance(comp, Comp.File):
+        return await comp.to_dict()
+
+    to_dict = getattr(comp, "to_dict", None)
+    if callable(to_dict):
+        return await _maybe_await(to_dict())
+
+    return comp.toDict()
 
 
 class SendStrategy(ABC):
@@ -59,13 +175,18 @@ class SendStrategy(ABC):
 class DirectSendStrategy(SendStrategy):
     """Direct send strategy — sends images in a single message chain."""
 
-    def __init__(self, plugin_context: Any) -> None:
+    def __init__(
+        self, plugin_context: Any, *, allow_file_uri_passthrough: bool = False
+    ) -> None:
         """Initialize direct send strategy.
 
         Args:
             plugin_context: Plugin context for sending messages
+            allow_file_uri_passthrough: 是否允许可信 file:// 图片通过
+                OneBot 原始 action 绕过 AstrBot 的 base64 适配器转换。
         """
         self._context = plugin_context
+        self._allow_file_uri_passthrough = allow_file_uri_passthrough
 
     async def send(
         self,
@@ -94,7 +215,7 @@ class DirectSendStrategy(SendStrategy):
     ) -> SendAttemptResult:
         """Send images directly and keep timeout separate from confirmed failure."""
         try:
-            send_result = await self._send_message(event, chain)
+            send_result = await self._send_message(event, chain, auto_revoke)
 
             platform_name = getattr(event.platform, "name", "unknown")
 
@@ -110,12 +231,20 @@ class DirectSendStrategy(SendStrategy):
                     "adapter returned no message id"
                 )
 
+            message_ids = extract_message_ids(send_result)
+            if auto_revoke and not message_ids:
+                logger.warning(
+                    "[send] direct send accepted without message_id: platform=%s, chain=%d",
+                    platform_name,
+                    len(chain),
+                )
             logger.info(
-                "[send] direct send completed: platform=%s, chain=%d",
+                "[send] direct send completed: platform=%s, chain=%d, ids=%d",
                 platform_name,
                 len(chain),
+                len(message_ids),
             )
-            return SendAttemptResult.success()
+            return SendAttemptResult.success(message_ids)
         except TimeoutError as exc:
             # 发送接口超时后无法判断平台侧是否已经接收消息，重发 fallback 可能造成重复图片。
             logger.warning(
@@ -134,8 +263,13 @@ class DirectSendStrategy(SendStrategy):
             )
             return SendAttemptResult.failed(str(exc))
 
-    async def _send_message(self, event: AstrMessageEvent, chain: list[Any]) -> Any:
-        if self._requires_onebot_passthrough(event, chain):
+    async def _send_message(
+        self,
+        event: AstrMessageEvent,
+        chain: list[Any],
+        auto_revoke: bool,
+    ) -> Any:
+        if self._requires_onebot_passthrough(event, chain, auto_revoke):
             attempted, send_result = await self._send_onebot_image_chain(event, chain)
             if attempted:
                 return send_result
@@ -143,63 +277,58 @@ class DirectSendStrategy(SendStrategy):
         return await self._context.send_message(event.unified_msg_origin, result)
 
     def _requires_onebot_passthrough(
-        self, event: AstrMessageEvent, chain: list[Any]
+        self, event: AstrMessageEvent, chain: list[Any], auto_revoke: bool
     ) -> bool:
         platform_name = getattr(getattr(event, "platform", None), "name", "") or ""
-        return is_onebot_like_platform(platform_name) and any(
+        if not is_onebot_like_platform(platform_name):
+            return False
+        if auto_revoke and any(
+            self._is_revoke_capable_component(comp) for comp in chain
+        ):
+            return True
+        return any(
             self._is_onebot_image_ref(comp)
             for comp in chain
             if isinstance(comp, Comp.Image)
         )
 
+    def _is_revoke_capable_component(self, comp: Any) -> bool:
+        return isinstance(comp, Comp.Image | Comp.File)
+
     def _is_onebot_image_ref(self, comp: Comp.Image) -> bool:
         file_value = getattr(comp, "file", None)
-        return (
-            isinstance(file_value, str)
-            and "://" in file_value
-            and not (
-                file_value.startswith("file:///")
-                or file_value.startswith("http://")
-                or file_value.startswith("https://")
-                or file_value.startswith("base64://")
-            )
+        if not isinstance(file_value, str) or "://" not in file_value:
+            return False
+        if file_value.startswith("file://"):
+            return self._allow_file_uri_passthrough
+        return not (
+            file_value.startswith("http://")
+            or file_value.startswith("https://")
+            or file_value.startswith("base64://")
         )
 
     async def _send_onebot_image_chain(
         self, event: AstrMessageEvent, chain: list[Any]
     ) -> tuple[bool, Any]:
-        bot = getattr(event, "bot", None)
-        if bot is None:
-            return False, None
-
         message: list[dict[str, Any]] = []
         for comp in chain:
-            if isinstance(comp, Comp.Image):
-                message.append(
-                    {
-                        "type": "image",
-                        "data": {"file": str(getattr(comp, "file", ""))},
-                    }
-                )
-            else:
-                message.append(comp.toDict())
+            message.append(await _component_to_onebot_message(comp))
 
-        is_group = bool(event.get_group_id())
-        session_id = event.get_group_id() if is_group else event.get_sender_id()
-        if not session_id or not str(session_id).isdigit():
-            logger.debug(
-                "[send] skip OneBot passthrough: invalid session_id=%s",
-                session_id,
-            )
+        target = _onebot_target(event)
+        if target is None:
             return False, None
 
-        if is_group:
-            return True, await bot.send_group_msg(
-                group_id=int(session_id),
-                message=message,
+        target_type, target_id = target
+        if target_type == "group":
+            return await _call_onebot_action(
+                event,
+                "send_group_msg",
+                {"group_id": target_id, "message": message},
             )
-        return True, await bot.send_private_msg(
-            user_id=int(session_id), message=message
+        return await _call_onebot_action(
+            event,
+            "send_private_msg",
+            {"user_id": target_id, "message": message},
         )
 
 
@@ -244,10 +373,16 @@ class ForwardSendStrategy(SendStrategy):
 
         build_start = time.monotonic()
         nodes = []
+        uin = event.get_self_id()
+        if not uin:
+            logger.warning(
+                "[forward] get_self_id() returned empty, forward nodes may be rejected by platform"
+            )
+            uin = ""  # 保持空字符串而非 None,避免序列化报错
         for comp in chain:
             if isinstance(comp, Comp.Image):
                 node = Comp.Node(
-                    uin=event.get_self_id(),
+                    uin=uin,
                     name="色图",
                     content=[comp],
                 )
@@ -260,7 +395,7 @@ class ForwardSendStrategy(SendStrategy):
             build_end - build_start,
         )
 
-        return await self._send_nodes_direct_with_status(event, nodes)
+        return await self._send_nodes_direct_with_status(event, nodes, auto_revoke)
 
     async def _send_nodes_direct(
         self, event: AstrMessageEvent, nodes: list[Comp.Node]
@@ -278,18 +413,47 @@ class ForwardSendStrategy(SendStrategy):
         return result.accepted
 
     async def _send_nodes_direct_with_status(
-        self, event: AstrMessageEvent, nodes: list[Comp.Node]
+        self,
+        event: AstrMessageEvent,
+        nodes: list[Comp.Node],
+        auto_revoke: bool = False,
     ) -> SendAttemptResult:
         """Send forward nodes and expose whether fallback is safe."""
         try:
+            platform_name = getattr(getattr(event, "platform", None), "name", "")
+            if auto_revoke and is_onebot_like_platform(platform_name):
+                attempted, raw_result = await self._send_nodes_raw(event, nodes)
+                if attempted:
+                    if raw_result is None:
+                        logger.warning(
+                            "[forward] raw send returned no response; treating as pending"
+                        )
+                        return SendAttemptResult.pending_delivery(
+                            "forward adapter returned no message id"
+                        )
+                    message_ids = extract_message_ids(raw_result)
+                    if not message_ids:
+                        logger.warning(
+                            "[forward] raw send accepted without message_id: nodes=%d",
+                            len(nodes),
+                        )
+                    logger.info(
+                        "[forward] raw send completed: nodes=%d, ids=%d",
+                        len(nodes),
+                        len(message_ids),
+                    )
+                    return SendAttemptResult.success(message_ids)
+
             # AstrBot 当前版本用 Node/Nodes 作为待发送合并转发内容；
             # Forward 只表示已收到的转发消息引用，不能包装 Node 发送。
             forward_chain = [Comp.Nodes(nodes)]
             result = event.chain_result(forward_chain)
-            await self._context.send_message(event.unified_msg_origin, result)
+            send_result = await self._context.send_message(
+                event.unified_msg_origin, result
+            )
 
             logger.info("[forward] send completed: nodes=%d", len(nodes))
-            return SendAttemptResult.success()
+            return SendAttemptResult.success(extract_message_ids(send_result))
         except TimeoutError as exc:
             # 合并转发也可能在平台侧已接收后只丢失本地确认，立刻 fallback 会造成重复消息。
             logger.warning(
@@ -305,6 +469,28 @@ class ForwardSendStrategy(SendStrategy):
                 exc,
             )
             return SendAttemptResult.failed(str(exc))
+
+    async def _send_nodes_raw(
+        self, event: AstrMessageEvent, nodes: list[Comp.Node]
+    ) -> tuple[bool, Any]:
+        target = _onebot_target(event)
+        if target is None:
+            return False, None
+
+        payload = await Comp.Nodes(nodes).to_dict()
+        messages = payload.get("messages", [])
+        target_type, target_id = target
+        if target_type == "group":
+            return await _call_onebot_action(
+                event,
+                "send_group_forward_msg",
+                {"group_id": target_id, "messages": messages},
+            )
+        return await _call_onebot_action(
+            event,
+            "send_private_forward_msg",
+            {"user_id": target_id, "messages": messages},
+        )
 
 
 class HtmlCardFallbackStrategy(SendStrategy):
@@ -427,7 +613,11 @@ def resolve_send_mode(
         Effective send mode (image or forward)
     """
     if send_mode == "auto":
-        return "forward" if image_count > 1 else "image"
+        # 仅在平台支持合并转发(当前为 OneBot/aiocqhttp 类)且图片多于 1 张时
+        # 走 forward 绕开 NTQQ 单条 8 张限制;否则退回直发。
+        if image_count > 1 and supports_forward:
+            return "forward"
+        return "image"
     if send_mode == "forward" and not supports_forward:
         return "image"
     return send_mode

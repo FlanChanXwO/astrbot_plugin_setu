@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncGenerator
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, urlparse
 
 import astrbot.api.message_components as Comp
 from astrbot.api.event import AstrMessageEvent
@@ -13,13 +15,17 @@ from astrbot.api.event import AstrMessageEvent
 from ...application.session_config import SessionConfigService
 from ...application.setu.dto import ImagePayload
 from ...shared import get_logger
-from ...shared.send_cache import schedule_send_cache_cleanup
+from ...shared.config import should_auto_revoke
+from ...shared.send_cache import get_send_cache, schedule_send_cache_cleanup
 from ..astrbot.config import get_config, get_plugin_context
 from ..astrbot.session_identity import get_event_session_identity
 from ..persistence import get_session_config_repo
 from .dto import SendAttemptResult, SendOptions
+from .image_compressor import compress_image
 from .napcat_stream import upload_file_stream
-from .platform_capabilities import supports_forward_messages
+from .platform_capabilities import is_onebot_like_platform, supports_forward_messages
+from .revoke_scheduler import schedule_revoke
+from .send_batching import estimate_base64_bytes, split_send_batches
 from .send_strategies import (
     DirectSendStrategy,
     ForwardSendStrategy,
@@ -60,13 +66,17 @@ class ImageSender:
                 send_mode="image",
                 use_html_card=False,
                 auto_revoke=False,
+                auto_revoke_scope="none",
                 revoke_delay=30,
                 r18_docx_mode=False,
                 napcat_stream_mode="fallback",
+                napcat_stream_chunk_kb=64,
+                napcat_local_file_mode="disabled",
+                napcat_local_file_allowed_roots=(),
             )
 
         send_mode = config.send_mode
-        auto_revoke = config.auto_revoke_r18 if is_r18 else False
+        auto_revoke_scope = str(getattr(config, "auto_revoke_scope", "none") or "none")
         r18_docx_mode = config.r18_docx_mode if is_r18 else False
         session_label = "unknown"
 
@@ -80,8 +90,10 @@ class ImageSender:
                 identity.display_name,
             )
             send_mode = str(snapshot.effective["setu.send_mode"])
+            auto_revoke_scope = str(
+                snapshot.effective["setu.auto_revoke_scope"] or "none"
+            )
             if is_r18:
-                auto_revoke = bool(snapshot.effective["setu.auto_revoke"])
                 r18_docx_mode = bool(snapshot.effective["setu.r18_docx"])
         except Exception as exc:
             self._log.debug(
@@ -94,13 +106,23 @@ class ImageSender:
         return SendOptions(
             send_mode=send_mode,
             use_html_card=html_card_strategy != "never",
-            auto_revoke=auto_revoke,
+            auto_revoke=should_auto_revoke(auto_revoke_scope, is_r18),
+            auto_revoke_scope=auto_revoke_scope,
             revoke_delay=config.auto_revoke_delay,
             r18_docx_mode=r18_docx_mode,
             html_padding=config.html_card_padding,
             html_gap=config.html_card_gap,
             html_card_strategy=html_card_strategy,
             napcat_stream_mode=config.napcat_stream_mode,
+            napcat_stream_chunk_kb=int(getattr(config, "napcat_stream_chunk_kb", 64)),
+            napcat_local_file_mode=str(
+                getattr(config, "napcat_local_file_mode", "disabled")
+            ),
+            napcat_local_file_allowed_roots=tuple(
+                getattr(config, "napcat_local_file_allowed_roots", ()) or ()
+            ),
+            compress_enabled=bool(getattr(config, "compress_enabled", False)),
+            compress_max_mb=int(getattr(config, "compress_max_mb", 4)),
         )
 
     def set_html_renderer(self, renderer: Any) -> None:
@@ -141,11 +163,8 @@ class ImageSender:
                 schedule_send_cache_cleanup()
                 return
 
-        found_message = self._format_found_message(
-            payload.count,
-            options.revoke_delay if options.auto_revoke else None,
-        )
-        chain = self._build_image_chain(items)
+        original_chain = self._build_image_chain(items)
+        chain = original_chain
 
         if options.html_card_strategy == "always":
             self._log.info(
@@ -153,8 +172,6 @@ class ImageSender:
                 self._session_label(event),
                 payload.count,
             )
-            if found_message:
-                await self._send_plain_text(event, found_message)
             html_result = await self._try_html_card_fallback(
                 event, chain, options, payload.r18
             )
@@ -162,107 +179,135 @@ class ImageSender:
                 fail_message = self._send_failed_message()
                 if fail_message:
                     yield event.plain_result(fail_message)
-            elif html_result.pending:
+            else:
+                scheduled_count = await self._schedule_revoke_for_result(
+                    event, html_result, options
+                )
+                await self._send_post_delivery_messages(
+                    event, payload.count, options, payload.r18, scheduled_count
+                )
+                if html_result.pending:
+                    yield {
+                        "send_success": True,
+                        "image_count": payload.count,
+                        "send_pending": True,
+                    }
+                else:
+                    yield {"send_success": True, "image_count": payload.count}
+            schedule_send_cache_cleanup()
+            return
+
+        supports_forward = self._is_forward_supported(event)
+        effective_mode = resolve_send_mode(
+            options.send_mode, payload.count, supports_forward
+        )
+
+        # 压图预处理:若启用,对本地文件/bytes 图压缩后重建 chain
+        if options.compress_enabled:
+            chain = await self._compress_chain(chain, options.compress_max_mb)
+
+        # 估算每张图的 base64 体积,用于分批
+        base64_sizes = await self._estimate_chain_sizes(chain)
+        batch_indices = split_send_batches(base64_sizes, effective_mode)
+
+        self._log.info(
+            "[send] dispatch: session=%s, platform=%s, mode=%s, compress=%s, "
+            "batches=%d (images=%d)",
+            self._session_label(event),
+            self._get_platform_name(event) or "unknown",
+            effective_mode,
+            options.compress_enabled,
+            len(batch_indices),
+            len(chain),
+        )
+
+        # 逐批发送,聚合结果
+        any_pending = False
+        any_failed = False
+        all_failed = True
+        scheduled_revoke_count = 0
+
+        for batch_idx, indices in enumerate(batch_indices):
+            batch_chain = [chain[i] for i in indices]
+            original_batch_chain = [original_chain[i] for i in indices]
+            batch_num = batch_idx + 1
+            send_result = await self._send_one_batch(
+                event,
+                batch_chain,
+                original_batch_chain,
+                effective_mode,
+                options,
+                batch_num,
+                len(batch_indices),
+            )
+            if send_result.accepted:
+                all_failed = False
+                scheduled_revoke_count += await self._schedule_revoke_for_result(
+                    event, send_result, options
+                )
+                if send_result.pending:
+                    any_pending = True
+            else:
+                any_failed = True
+
+        # 聚合结果决定最终 yield
+        if all_failed:
+            self._log.warning(
+                "[send] all batches failed: session=%s, count=%d, mode=%s",
+                self._session_label(event),
+                payload.count,
+                effective_mode,
+            )
+            fail_message = self._send_failed_message()
+            if fail_message:
+                yield event.plain_result(fail_message)
+        elif any_failed:
+            self._log.warning(
+                "[send] partial batch failure: session=%s, count=%d, mode=%s",
+                self._session_label(event),
+                payload.count,
+                effective_mode,
+            )
+            fail_message = self._send_failed_message()
+            if fail_message:
+                yield event.plain_result(fail_message)
+            result: dict[str, Any] = {
+                "send_success": False,
+                "image_count": payload.count,
+                "partial_failure": True,
+            }
+            if any_pending:
+                result["send_pending"] = True
+            yield result
+        else:
+            await self._send_post_delivery_messages(
+                event,
+                payload.count,
+                options,
+                payload.r18,
+                scheduled_revoke_count,
+            )
+            if any_pending:
+                self._log.warning(
+                    "[send] some batches pending: session=%s, count=%d, mode=%s",
+                    self._session_label(event),
+                    payload.count,
+                    effective_mode,
+                )
                 yield {
                     "send_success": True,
                     "image_count": payload.count,
                     "send_pending": True,
                 }
             else:
-                yield {"send_success": True, "image_count": payload.count}
-            schedule_send_cache_cleanup()
-            return
-
-        if found_message:
-            await self._send_plain_text(event, found_message)
-
-        supports_forward = self._is_forward_supported(event)
-        effective_mode = resolve_send_mode(
-            options.send_mode, payload.count, supports_forward
-        )
-        self._log.info(
-            "[send] dispatch start: session=%s, platform=%s, mode=%s, supports_forward=%s, napcat_stream=%s, html_fallback=%s",
-            self._session_label(event),
-            self._get_platform_name(event) or "unknown",
-            effective_mode,
-            supports_forward,
-            options.napcat_stream_mode,
-            options.use_html_card,
-        )
-        send_result = await self._send_chain(event, chain, effective_mode, options)
-
-        if (
-            not send_result.accepted
-            and options.napcat_stream_mode == "fallback"
-            and self._has_local_image_paths(chain)
-        ):
-            self._log.warning(
-                "[send] primary send failed, trying NapCat stream fallback: session=%s, mode=%s",
-                self._session_label(event),
-                effective_mode,
-            )
-            stream_chain, changed = await self._stream_upload_chain(event, chain)
-            if changed:
                 self._log.info(
-                    "[send] NapCat stream upload rebuilt chain: session=%s, count=%d",
+                    "[send] completed: session=%s, count=%d, mode=%s, batches=%d",
                     self._session_label(event),
-                    len(stream_chain),
-                )
-                send_result = await self._send_chain(
-                    event,
-                    stream_chain,
+                    payload.count,
                     effective_mode,
-                    self._without_stream_upload(options),
+                    len(batch_indices),
                 )
-            else:
-                self._log.warning(
-                    "[send] NapCat stream fallback skipped: session=%s, no files uploaded",
-                    self._session_label(event),
-                )
-
-        if not send_result.accepted and options.use_html_card:
-            self._log.warning(
-                "[send] image send failed, attempting HTML card fallback: session=%s, mode=%s",
-                self._session_label(event),
-                effective_mode,
-            )
-            send_result = await self._try_html_card_fallback(
-                event, chain, options, payload.r18
-            )
-
-        if not send_result.accepted:
-            self._log.error(
-                "[send] all send strategies failed: session=%s, count=%d, mode=%s, html_strategy=%s, napcat_stream=%s",
-                self._session_label(event),
-                payload.count,
-                effective_mode,
-                options.html_card_strategy,
-                options.napcat_stream_mode,
-            )
-            fail_message = self._send_failed_message()
-            if fail_message:
-                yield event.plain_result(fail_message)
-        elif send_result.pending:
-            self._log.warning(
-                "[send] pending delivery: session=%s, count=%d, mode=%s, reason=%s",
-                self._session_label(event),
-                payload.count,
-                effective_mode,
-                send_result.reason or "-",
-            )
-            yield {
-                "send_success": True,
-                "image_count": payload.count,
-                "send_pending": True,
-            }
-        else:
-            self._log.info(
-                "[send] completed: session=%s, count=%d, mode=%s",
-                self._session_label(event),
-                payload.count,
-                effective_mode,
-            )
-            yield {"send_success": True, "image_count": payload.count}
+                yield {"send_success": True, "image_count": payload.count}
 
         schedule_send_cache_cleanup()
 
@@ -274,13 +319,15 @@ class ImageSender:
         options: SendOptions,
     ) -> SendAttemptResult:
         """Send an already-built image chain."""
-        if options.napcat_stream_mode == "always":
+        if effective_mode != "forward" and options.napcat_stream_mode == "always":
             self._log.info(
                 "[send] pre-upload via NapCat stream: session=%s, count=%d",
                 self._session_label(event),
                 len(chain),
             )
-            streamed_chain, changed = await self._stream_upload_chain(event, chain)
+            streamed_chain, changed = await self._stream_upload_chain(
+                event, chain, options
+            )
             if changed:
                 chain = streamed_chain
 
@@ -317,19 +364,143 @@ class ImageSender:
             materialized.append(Comp.Image.fromBytes(data))
         return materialized
 
+    async def _compress_chain(
+        self, chain: list[Comp.Image], max_mb: int
+    ) -> list[Comp.Image]:
+        """Compress images in chain that exceed the target size."""
+        max_bytes = max_mb * 1024 * 1024
+        compressed: list[Comp.Image] = []
+        for comp in chain:
+            data = await self._read_comp_bytes(comp)
+            if data is None or len(data) <= max_bytes:
+                compressed.append(comp)
+                continue
+            compressed_data = await asyncio.to_thread(
+                compress_image, data, max_bytes=max_bytes
+            )
+            compressed.append(Comp.Image.fromBytes(compressed_data))
+        return compressed
+
+    async def _read_comp_bytes(self, comp: Comp.Image) -> bytes | None:
+        """Extract bytes from a Comp.Image, returning None if not file/base64."""
+        file_path = self._local_file_path(comp)
+        if file_path:
+            try:
+                return await asyncio.to_thread(file_path.read_bytes)
+            except OSError:
+                return None
+        if comp.file and comp.file.startswith("base64://"):
+            import base64
+
+            try:
+                return base64.b64decode(comp.file[9:])
+            except Exception:
+                return None
+        return None
+
+    async def _estimate_chain_sizes(self, chain: list[Comp.Image]) -> list[int]:
+        """Estimate base64 byte size for each image in chain."""
+        sizes: list[int] = []
+        for comp in chain:
+            file_path = self._local_file_path(comp)
+            if file_path and file_path.exists():
+                raw_size = file_path.stat().st_size
+                sizes.append(estimate_base64_bytes(raw_size))
+                continue
+            data = await self._read_comp_bytes(comp)
+            if data:
+                sizes.append(estimate_base64_bytes(len(data)))
+            else:
+                sizes.append(1024 * 1024)  # 1MB fallback estimate
+        return sizes
+
+    async def _send_one_batch(
+        self,
+        event: AstrMessageEvent,
+        batch_chain: list[Comp.Image],
+        original_batch_chain: list[Comp.Image],
+        effective_mode: str,
+        options: SendOptions,
+        batch_num: int,
+        total_batches: int,
+    ) -> SendAttemptResult:
+        """Send one batch with fallback logic (stream → HTML card)."""
+        self._log.info(
+            "[send] batch %d/%d: session=%s, images=%d, mode=%s",
+            batch_num,
+            total_batches,
+            self._session_label(event),
+            len(batch_chain),
+            effective_mode,
+        )
+        send_result: SendAttemptResult | None = None
+
+        if effective_mode != "forward" and options.napcat_local_file_mode == "always":
+            send_result = await self._try_local_file_passthrough(
+                event, original_batch_chain, options
+            )
+            if send_result.accepted:
+                return send_result
+
+        send_result = await self._send_chain(
+            event, batch_chain, effective_mode, options
+        )
+
+        if (
+            not send_result.accepted
+            and effective_mode != "forward"
+            and options.napcat_local_file_mode == "fallback"
+        ):
+            self._log.warning(
+                "[send] batch %d failed, trying NapCat local file passthrough: "
+                "session=%s",
+                batch_num,
+                self._session_label(event),
+            )
+            local_result = await self._try_local_file_passthrough(
+                event, original_batch_chain, options
+            )
+            if local_result.accepted:
+                send_result = local_result
+
+        # forward 失败跳过 stream,直接 HTML 卡片(stream + forward 引用必崩)
+        if (
+            not send_result.accepted
+            and effective_mode != "forward"
+            and options.napcat_stream_mode == "fallback"
+            and self._has_local_image_paths(batch_chain)
+        ):
+            self._log.warning(
+                "[send] batch %d failed, trying NapCat stream: session=%s",
+                batch_num,
+                self._session_label(event),
+            )
+            streamed, changed = await self._stream_upload_chain(
+                event, batch_chain, options
+            )
+            if changed:
+                retry_options = self._without_stream_upload(options)
+                send_result = await self._send_chain(
+                    event, streamed, effective_mode, retry_options
+                )
+
+        if not send_result.accepted and options.use_html_card:
+            self._log.warning(
+                "[send] batch %d failed, trying HTML card: session=%s",
+                batch_num,
+                self._session_label(event),
+            )
+            # HTML 卡片接受 Comp.Image chain
+            html_result = await HtmlCardFallbackStrategy(
+                self._context, self._html_renderer
+            ).send_with_status(event, batch_chain, options.auto_revoke)
+            send_result = html_result
+
+        return send_result
+
     def _without_stream_upload(self, options: SendOptions) -> SendOptions:
         """Return options for a retry after stream upload has already run."""
-        return SendOptions(
-            send_mode=options.send_mode,
-            use_html_card=options.use_html_card,
-            auto_revoke=options.auto_revoke,
-            revoke_delay=options.revoke_delay,
-            r18_docx_mode=options.r18_docx_mode,
-            html_padding=options.html_padding,
-            html_gap=options.html_gap,
-            html_card_strategy=options.html_card_strategy,
-            napcat_stream_mode="disabled",
-        )
+        return replace(options, napcat_stream_mode="disabled")
 
     async def _send_r18_docx(
         self,
@@ -346,25 +517,31 @@ class ImageSender:
 
         docx_path = docx_service.create_docx_with_images(list(images), tags=list(tags))
         if docx_path:
-            if options.auto_revoke:
-                message_id = await self._send_file_with_revoke(
-                    event, str(docx_path), docx_path.name
-                )
-                if message_id:
-                    await self._schedule_revoke(event, message_id, options.revoke_delay)
-                    found_msg = self._format_found_message(
-                        len(images), options.revoke_delay
-                    )
-                    if found_msg:
-                        yield event.plain_result(found_msg)
-                    return
-
-            found_msg = self._format_found_message(len(images))
-            if found_msg:
-                yield event.plain_result(found_msg)
-            yield event.chain_result(
-                [Comp.File(file=str(docx_path), name=docx_path.name)]
+            send_result = await DirectSendStrategy(self._context).send_with_status(
+                event,
+                [Comp.File(file=str(docx_path), name=docx_path.name)],
+                options.auto_revoke,
             )
+            if not send_result.accepted:
+                fail_message = self._send_failed_message()
+                if fail_message:
+                    yield event.plain_result(fail_message)
+                return
+
+            scheduled_count = await self._schedule_revoke_for_result(
+                event, send_result, options
+            )
+            await self._send_post_delivery_messages(
+                event, len(images), options, True, scheduled_count
+            )
+            if send_result.pending:
+                yield {
+                    "send_success": True,
+                    "image_count": len(images),
+                    "send_pending": True,
+                }
+            else:
+                yield {"send_success": True, "image_count": len(images)}
         else:
             docx_failed_message = self._resolve_message("r18_docx_failed")
             if docx_failed_message:
@@ -389,9 +566,7 @@ class ImageSender:
                 "card_gap": options.html_gap,
             },
         )
-        return await strategy.send_with_status(
-            event, chain, is_r18 and options.auto_revoke
-        )
+        return await strategy.send_with_status(event, chain, options.auto_revoke)
 
     def _payload_items(self, payload: ImagePayload) -> tuple[ImageItem, ...]:
         if payload.items:
@@ -442,8 +617,106 @@ class ImageSender:
                     )
         return tuple(result)
 
+    async def _try_local_file_passthrough(
+        self,
+        event: AstrMessageEvent,
+        chain: list[Comp.Image],
+        options: SendOptions,
+    ) -> SendAttemptResult:
+        """Try trusted local file passthrough through raw OneBot image action."""
+        platform_name = self._get_platform_name(event)
+        if not is_onebot_like_platform(platform_name):
+            return SendAttemptResult.failed("platform is not OneBot-like")
+
+        passthrough_chain = self._local_file_passthrough_chain(chain, options)
+        if passthrough_chain is None:
+            return SendAttemptResult.failed("no trusted local image path")
+
+        self._log.info(
+            "[send] trying NapCat local file passthrough: session=%s, count=%d",
+            self._session_label(event),
+            len(passthrough_chain),
+        )
+        return await DirectSendStrategy(
+            self._context, allow_file_uri_passthrough=True
+        ).send_with_status(event, passthrough_chain, options.auto_revoke)
+
+    def _local_file_passthrough_chain(
+        self, chain: list[Comp.Image], options: SendOptions
+    ) -> list[Comp.Image] | None:
+        """Build a file:// chain only when every local path is trusted."""
+        converted: list[Comp.Image] = []
+        changed = False
+        for comp in chain:
+            file_path = self._local_file_path(comp)
+            if file_path is None:
+                converted.append(comp)
+                continue
+
+            trusted_path = self._trusted_local_file_path(file_path, options)
+            if trusted_path is None:
+                self._log.debug(
+                    "[send] local file passthrough rejected: path=%s", file_path
+                )
+                return None
+
+            converted.append(Comp.Image(file=trusted_path.as_uri()))
+            changed = True
+
+        return converted if changed else None
+
+    def _trusted_local_file_path(self, path: Path, options: SendOptions) -> Path | None:
+        """Return a resolved file path if it is under an allowed local root."""
+        try:
+            resolved = path.expanduser().resolve(strict=True)
+        except OSError:
+            return None
+        if not resolved.is_file():
+            return None
+
+        for root in self._allowed_local_file_roots(options):
+            if self._path_is_relative_to(resolved, root):
+                return resolved
+        return None
+
+    def _allowed_local_file_roots(self, options: SendOptions) -> tuple[Path, ...]:
+        """Return send-cache root plus explicitly configured shared roots."""
+        roots: list[Path] = []
+        cache = get_send_cache()
+        cache_root = getattr(cache, "root", None)
+        if cache_root:
+            roots.append(Path(cache_root))
+
+        for raw_root in options.napcat_local_file_allowed_roots:
+            root_text = str(raw_root).strip()
+            if root_text:
+                roots.append(Path(root_text))
+
+        normalized: list[Path] = []
+        seen: set[str] = set()
+        for root in roots:
+            try:
+                resolved = root.expanduser().resolve(strict=False)
+            except OSError:
+                continue
+            if not resolved.is_absolute():
+                continue
+            key = str(resolved)
+            if key in seen:
+                continue
+            seen.add(key)
+            normalized.append(resolved)
+        return tuple(normalized)
+
+    def _path_is_relative_to(self, path: Path, root: Path) -> bool:
+        try:
+            path.relative_to(root)
+            return True
+        except ValueError:
+            return False
+
     async def _stream_upload_chain(
-        self, event: AstrMessageEvent, chain: list[Comp.Image]
+        self, event: AstrMessageEvent, chain: list[Comp.Image], options: SendOptions
     ) -> tuple[list[Comp.Image], bool]:
         """Upload local image files through NapCat Stream API and rebuild the chain."""
         changed = False
@@ -454,7 +727,11 @@ class ImageSender:
                 streamed.append(comp)
                 continue
 
-            uploaded_path = await upload_file_stream(event, file_path)
+            uploaded_path = await upload_file_stream(
+                event,
+                file_path,
+                chunk_size=self._stream_chunk_size(options),
+            )
             if uploaded_path:
                 self._log.debug(
                     "[send] stream upload success: local=%s, remote=%s",
@@ -471,6 +748,9 @@ class ImageSender:
                 streamed.append(comp)
         return streamed, changed
 
+    def _stream_chunk_size(self, options: SendOptions) -> int:
+        return max(1, int(options.napcat_stream_chunk_kb or 64)) * 1024
+
     def _has_local_image_paths(self, chain: list[Comp.Image]) -> bool:
         return any(self._local_file_path(comp) is not None for comp in chain)
 
@@ -484,8 +764,13 @@ class ImageSender:
         file_value = getattr(comp, "file", None)
         if not isinstance(file_value, str) or not file_value:
             return None
-        if file_value.startswith("file:///"):
-            path = Path(file_value[8:])
+        if file_value.startswith("file://"):
+            parsed = urlparse(file_value)
+            if parsed.scheme != "file":
+                return None
+            if parsed.netloc and parsed.netloc != "localhost":
+                return None
+            path = Path(unquote(parsed.path))
         else:
             path = Path(file_value)
         return path if path.exists() else None
@@ -548,62 +833,78 @@ class ImageSender:
             has_call_action=has_call_action,
         )
 
-    async def _send_with_revoke_support(
+    async def _schedule_revoke_for_result(
         self,
         event: AstrMessageEvent,
-        chain: list[Any],
-        is_group: bool,
-        target_id: str,
-    ) -> str | None:
-        """Send message with revoke support."""
-        try:
-            result = event.chain_result(chain)
-            send_result = await self._context.send_message(
-                event.unified_msg_origin, result
+        send_result: SendAttemptResult,
+        options: SendOptions,
+    ) -> int:
+        """Schedule revokes for every message id carried by one send result."""
+        if not options.auto_revoke:
+            return 0
+        if not send_result.message_ids:
+            self._log.warning(
+                "[revoke] cannot schedule: no message_id returned, session=%s, scope=%s",
+                self._session_label(event),
+                options.auto_revoke_scope,
             )
-            if isinstance(send_result, dict):
-                return send_result.get("message_id")
-            if isinstance(send_result, str):
-                return send_result
-            return None
-        except Exception as exc:
-            self._log.warning("[send] revoke-capable send failed: error=%s", exc)
-            return None
+            return 0
 
-    async def _send_file_with_revoke(
-        self, event: AstrMessageEvent, file_path: str, file_name: str
-    ) -> str | None:
-        """Send a file and return its message id when available."""
-        return await self._send_with_revoke_support(
-            event,
-            [Comp.File(file=file_path, name=file_name)],
-            bool(event.get_group_id()),
-            event.get_group_id() or event.get_sender_id(),
-        )
+        scheduled = 0
+        for message_id in send_result.message_ids:
+            if await schedule_revoke(event, message_id, options.revoke_delay):
+                scheduled += 1
+        return scheduled
 
-    async def _schedule_revoke(
-        self, event: AstrMessageEvent, message_id: str, delay: int
+    async def _send_post_delivery_messages(
+        self,
+        event: AstrMessageEvent,
+        count: int,
+        options: SendOptions,
+        is_r18: bool,
+        scheduled_revoke_count: int,
     ) -> None:
-        """Schedule message revocation."""
-        try:
-            scheduler = getattr(self, "_revoke_scheduler", None)
-            if scheduler:
-                await scheduler.schedule_revoke(event, message_id, delay)
-        except AttributeError:
-            self._log.debug("[send] revoke scheduler missing schedule_revoke")
+        """Send optional plain-text notices after at least one payload was accepted."""
+        found_msg = self._format_found_message(
+            count,
+            scope=options.auto_revoke_scope,
+            r18=is_r18,
+        )
+        if found_msg:
+            await self._send_plain_text(event, found_msg)
+
+        if scheduled_revoke_count <= 0:
+            return
+        revoke_msg = self._resolve_message(
+            "revoke_scheduled",
+            count=count,
+            revoke_delay=options.revoke_delay,
+            scope=options.auto_revoke_scope,
+            r18=is_r18,
+        )
+        if revoke_msg:
+            await self._send_plain_text(event, revoke_msg)
 
     def _format_found_message(
-        self, count: int, revoke_delay: int | None = None
+        self,
+        count: int,
+        revoke_delay: int | None = None,
+        scope: str = "",
+        r18: bool | str = "",
     ) -> str | None:
         """Format found message with optional revoke delay."""
         config = self._config
         if config and not getattr(config, "msg_found_enabled", True):
             return None
         if config and hasattr(config, "format_found_message"):
-            return config.format_found_message(count, revoke_delay)
-        if revoke_delay and revoke_delay > 0:
-            return f"找到 {count} 张图，将在 {revoke_delay} 秒后撤回"
-        return f"找到 {count} 张图"
+            return config.format_found_message(count, revoke_delay, scope, r18)
+        return self._resolve_message(
+            "found",
+            count=count,
+            revoke_delay=revoke_delay or "",
+            scope=scope,
+            r18=r18,
+        )
 
     def _send_failed_message(self) -> str | None:
         config = self._config
@@ -629,7 +930,10 @@ class ImageSender:
         raw_bytes = sum(isinstance(item, bytes) for item in items)
         image_components = sum(isinstance(item, Comp.Image) for item in items)
         self._log.info(
-            "[send] payload ready: session=%s, platform=%s, count=%d, r18=%s, tags=%s, items=%d(paths=%d,bytes=%d,components=%d), config_mode=%s, html_strategy=%s, napcat_stream=%s",
+            "[send] payload ready: session=%s, platform=%s, count=%d, "
+            "r18=%s, tags=%s, items=%d(paths=%d,bytes=%d,components=%d), "
+            "config_mode=%s, html_strategy=%s, napcat_stream=%s, "
+            "stream_chunk_kb=%d, local_file=%s",
             self._session_label(event),
             self._get_platform_name(event) or "unknown",
             payload.count,
@@ -642,6 +946,8 @@ class ImageSender:
             options.send_mode,
             options.html_card_strategy,
             options.napcat_stream_mode,
+            options.napcat_stream_chunk_kb,
+            options.napcat_local_file_mode,
         )
 
     def _session_label(self, event: AstrMessageEvent) -> str:
