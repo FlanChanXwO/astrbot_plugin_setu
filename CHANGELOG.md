@@ -14,8 +14,8 @@
 ### Changed
 - **默认发送模式收敛为 auto**：`send_mode` 默认使用 `auto`，多图且平台支持时优先合并转发，否则直发
 - **Provider 默认图片尺寸改为 regular**：降低原图体积对发送链路的压力，需要原图时可在 provider override 中显式选择 `original`
-- **提示文案默认关闭**：所有可配置提示默认 `enabled=false`；命令入口会跳过空文案，避免发送空白消息
-- **撤回提示时机调整**：`found` 不再在图片发送前承诺撤回；`revoke_scheduled` 仅在至少一个 `message_id` 成功调度后发送，且默认关闭
+- **提示文案默认开启**：所有内置提示默认 `enabled=true` 并带默认文本；仍可通过 `message_overrides` 关闭或改写单条提示
+- **撤回提示时机调整**：`found` 不再在图片发送前承诺撤回；`revoke_scheduled` 仅在至少一个 `message_id` 成功调度后发送，并沿用消息配置开关控制
 - **NapCat stream 语义明确化**：`stream_chunk_kb` 只控制每块原始字节大小，`upload_file_stream.chunk_data` 仍按 NapCat 协议使用 base64 字符串
 - **Plugin Pages 加载顺序加固**：Dashboard 显式在 `app.js` 前加载 bridge SDK，并动态等待 bridge 注入，减少 iframe 加载竞态
 - **访问控制表单改为对话框**：访问控制标签页主视图保留模式设置与记录表格，新增/编辑记录改由 modal 承载，减少页面拥挤
@@ -26,7 +26,7 @@
 - **发送结果聚合更准确**：修复字符串 `message_id` 被拆成字符列表，以及部分批次失败时仍误报整体成功的问题
 - **forward + stream 死路规避**：forward 模式失败时不再尝试 NapCat stream 回退，避免 `Node.to_dict()` 对 `stream://` 强制 base64 转换后崩溃
 - **本地直通安全校验**：`file://` 直通只允许真实文件、发送缓存目录或配置的绝对共享目录，拒绝不存在路径、目录、相对路径与跳出根目录的 symlink
-- **命令空文案保护**：Setu 与 Fortune 命令均跳过空配置提示，避免 message config 默认关闭后发出空白消息
+- **命令空文案保护**：Setu 与 Fortune 命令均跳过空配置提示，避免关闭或清空 message config 后发出空白消息
 
 ### Documentation
 - **配置与命令文档同步**：README、配置参考、聊天命令、Plugin Pages、测试说明与 `get-setu` skill 均更新为 `auto_revoke_scope` 与 NapCat 模板语义

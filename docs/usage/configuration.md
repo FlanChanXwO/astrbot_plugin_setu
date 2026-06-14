@@ -76,10 +76,10 @@ NapCat `upload_file_stream` 的 `chunk_data` 仍是 base64 字符串，这是 Na
 | `provider_overrides` | template_list | 可选覆盖 provider 默认参数；Lolicon/Atri 支持图片尺寸、代理、UID、关键词、AI 过滤，SexNyan 支持代理、作者 UID、关键词 |
 | `custom_api_configs` | template_list | 自定义图片 API 列表 |
 | `tag_alias_templates` | template_list | 标签别名映射；添加后优先于旧文本格式 `tag_alias` |
-| `message_overrides` | template_list | 只在需要自定义某条提示时添加；所有提示默认不发送 |
+| `message_overrides` | template_list | 只在需要关闭或自定义某条提示时添加；所有内置提示默认启用并带默认文本 |
 
 访问控制 Web API 错误提示也可通过 `message_overrides` 覆盖，内置键为 `error.invalid_request` 和 `error.internal_server`。
-自动撤回成功调度后的提示 key 为 `revoke_scheduled`，占位符支持 `{count}`、`{revoke_delay}`、`{scope}`、`{r18}`，默认关闭。
+自动撤回成功调度后的提示 key 为 `revoke_scheduled`，占位符支持 `{count}`、`{revoke_delay}`、`{scope}`、`{r18}`，默认启用。
 
 ## 访问控制配置
 
