@@ -62,7 +62,17 @@
 }
 
 .table-section > .section-header {
-  padding: 18px 20px 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: stretch;
+  justify-content: stretch;
+  gap: 12px;
+  margin-bottom: 0;
+  padding: 18px 20px 12px;
+}
+
+.table-section > .section-header .action-bar {
+  width: 100%;
 }
 
 .table-section > .empty-state,
