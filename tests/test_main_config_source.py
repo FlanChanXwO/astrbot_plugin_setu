@@ -80,6 +80,22 @@ def test_access_control_entry_form_is_modal_dialog() -> None:
     assert 'data-action="ac-save-entry"' in modal_html
 
 
+def test_dashboard_nav_and_empty_state_stay_plain_and_compact() -> None:
+    dashboard_dir = Path(__file__).resolve().parents[1] / "pages" / "dashboard"
+    html = (dashboard_dir / "index.html").read_text(encoding="utf-8")
+    nav_css = (dashboard_dir / "css" / "nav.css").read_text(encoding="utf-8")
+    components_css = (dashboard_dir / "css" / "components.css").read_text(
+        encoding="utf-8"
+    )
+
+    assert "📋" not in html
+    assert "🛡" not in html
+    assert "nav-icon" not in html
+    assert ".nav-icon" not in nav_css
+    assert "justify-content: flex-start" in nav_css
+    assert "border: 1px dashed" not in components_css
+
+
 def test_setu_config_not_loaded_message_uses_resolver() -> None:
     source_path = (
         Path(__file__).resolve().parents[1]

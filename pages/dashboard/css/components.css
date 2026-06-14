@@ -169,10 +169,9 @@ button:disabled {
 
 .empty-state {
   margin: 0;
-  padding: 40px 24px;
-  border: 1px dashed var(--border-color);
-  border-radius: var(--radius);
-  background: var(--bg-secondary);
+  padding: 20px 16px;
+  border: 0;
+  background: transparent;
   color: var(--text-tertiary);
   text-align: center;
 }

@@ -67,7 +67,8 @@
 
 .table-section > .empty-state,
 .table-section .empty-state {
-  margin: 0 20px 20px;
+  margin: 0;
+  padding: 14px 20px 18px;
 }
 
 .table-scroll-area {
