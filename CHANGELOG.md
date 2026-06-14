@@ -1,5 +1,35 @@
 # Changelog
 
+## [2.1.0] - 2026-06-14
+
+### Added
+- **NapCat 平台传输模板**：新增 `delivery.platform_transports` 的 NapCat 模板，支持配置 stream 上传策略、`stream_chunk_kb` 分块大小、本地 `file://` 直通模式与额外共享目录
+- **可信本地文件直通**：AstrBot 与 NapCat 共享发送缓存或显式共享目录时，直发模式可通过 raw OneBot `file://` 发送，绕过 AstrBot 标准链路的图片 base64 转换
+- **发送前压缩与自动分批**：新增大图压缩与按 base64 估算体积分批发送能力，降低 original 多图撞 WebSocket 单帧上限或 direct 8 图限制的概率
+- **自动撤回范围枚举**：新增 `delivery.auto_revoke_scope` 与会话覆盖 `setu.auto_revoke_scope`，支持 `none`、`sfw`、`r18`、`all` 四档范围
+- **撤回调度器**：新增 OneBot `delete_msg` 延迟调度与插件退出清理，direct、stream、`file://`、HTML fallback、forward、R18 Docx 均在可拿到 `message_id` 时支持自动撤回
+- **SexNyan 配置模板**：新增 SexNyan provider 模板，支持 `proxy`、`uid`、`keyword`，`uid` 会按 SexNyan V2 的 `author_uuid` 参数发送
+- **发送限制文档**：新增 `docs/project/sending-limits.md`，记录 OneBot/NapCat 标准链路 base64、stream base64 分块、`file://` 直通与多图限制的诊断结论
+
+### Changed
+- **默认发送模式收敛为 auto**：`send_mode` 默认使用 `auto`，多图且平台支持时优先合并转发，否则直发
+- **Provider 默认图片尺寸改为 regular**：降低原图体积对发送链路的压力，需要原图时可在 provider override 中显式选择 `original`
+- **提示文案默认关闭**：所有可配置提示默认 `enabled=false`；命令入口会跳过空文案，避免发送空白消息
+- **撤回提示时机调整**：`found` 不再在图片发送前承诺撤回；`revoke_scheduled` 仅在至少一个 `message_id` 成功调度后发送，且默认关闭
+- **NapCat stream 语义明确化**：`stream_chunk_kb` 只控制每块原始字节大小，`upload_file_stream.chunk_data` 仍按 NapCat 协议使用 base64 字符串
+- **Plugin Pages 加载顺序加固**：Dashboard 显式在 `app.js` 前加载 bridge SDK，并动态等待 bridge 注入，减少 iframe 加载竞态
+
+### Fixed
+- **旧自动撤回配置迁移**：`delivery.auto_revoke_r18` 会迁移为 `auto_revoke_scope`，旧会话覆盖 `setu.auto_revoke` 会迁移为 `setu.auto_revoke_scope` 并写回 `session_overrides.json`
+- **撤回失败不影响发图**：拿不到 `message_id`、平台不支持 `delete_msg` 或删除失败时只记录 warning，不阻止图片发送，也不触发重复 fallback
+- **forward + stream 死路规避**：forward 模式失败时不再尝试 NapCat stream 回退，避免 `Node.to_dict()` 对 `stream://` 强制 base64 转换后崩溃
+- **本地直通安全校验**：`file://` 直通只允许真实文件、发送缓存目录或配置的绝对共享目录，拒绝不存在路径、目录、相对路径与跳出根目录的 symlink
+- **命令空文案保护**：Setu 与 Fortune 命令均跳过空配置提示，避免 message config 默认关闭后发出空白消息
+
+### Documentation
+- **配置与命令文档同步**：README、配置参考、聊天命令、Plugin Pages、测试说明与 `get-setu` skill 均更新为 `auto_revoke_scope` 与 NapCat 模板语义
+- **Dashboard 测试说明更新**：记录 bridge 注入时序、`node --check` 与 Plugin Pages iframe 验证入口
+
 ## [2.0.3] - 2026-06-07
 
 ### Added

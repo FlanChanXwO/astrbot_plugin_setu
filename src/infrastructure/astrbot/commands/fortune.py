@@ -51,12 +51,14 @@ class FortuneCommandHandler:
         """Handle /今日运势 command (/今日运势, /jrys)."""
         config = get_config()
         if not config:
-            yield event.plain_result(self._message("config_not_loaded"))
+            if result := self._plain(event, self._message("config_not_loaded")):
+                yield result
             return
 
         has_perm, msg = await self._check_access(event, config)
         if not has_perm:
-            yield event.plain_result(msg)
+            if result := self._plain(event, msg):
+                yield result
             return
 
         request = self._build_fortune_request(event)
@@ -71,7 +73,9 @@ class FortuneCommandHandler:
             else:
                 yield event.plain_result(self._format_fortune(result))
         except Exception as e:
-            yield event.plain_result(self._message("fortune_get_failed", error=e))
+            text = self._message("fortune_get_failed", error=e)
+            if result := self._plain(event, text):
+                yield result
 
     async def refresh_fortune_command(
         self, event: AstrMessageEvent
@@ -79,12 +83,14 @@ class FortuneCommandHandler:
         """Handle /刷新今日运势 command."""
         has_perm, msg = PermissionService.require_admin(event)
         if not has_perm:
-            yield event.plain_result(msg)
+            if result := self._plain(event, msg):
+                yield result
             return
 
         config = get_config()
         if not config:
-            yield event.plain_result(self._message("config_not_loaded"))
+            if result := self._plain(event, self._message("config_not_loaded")):
+                yield result
             return
 
         request = self._build_fortune_request(event)
@@ -95,7 +101,9 @@ class FortuneCommandHandler:
             result = await service.refresh_fortune(request)
             yield event.plain_result(self._format_fortune(result))
         except Exception as e:
-            yield event.plain_result(self._message("fortune_refresh_failed", error=e))
+            text = self._message("fortune_refresh_failed", error=e)
+            if result := self._plain(event, text):
+                yield result
 
     async def refresh_group_fortune_command(
         self, event: AstrMessageEvent
@@ -103,30 +111,33 @@ class FortuneCommandHandler:
         """Handle /刷新本群今日运势 command."""
         has_perm, msg = PermissionService.require_admin(event)
         if not has_perm:
-            yield event.plain_result(msg)
+            if result := self._plain(event, msg):
+                yield result
             return
 
         group_id = event.get_group_id()
         if not group_id:
-            yield event.plain_result(self._message("fortune_group_only"))
+            if result := self._plain(event, self._message("fortune_group_only")):
+                yield result
             return
 
         config = get_config()
         if not config:
-            yield event.plain_result(self._message("config_not_loaded"))
+            if result := self._plain(event, self._message("config_not_loaded")):
+                yield result
             return
 
         try:
             repo = get_fortune_repo()
             service = FortuneService(repository=repo)
             refreshed_count = await service.pregenerate_active_users()
-            yield event.plain_result(
-                self._message("fortune_refresh_group_done", count=refreshed_count)
-            )
+            text = self._message("fortune_refresh_group_done", count=refreshed_count)
+            if result := self._plain(event, text):
+                yield result
         except Exception as e:
-            yield event.plain_result(
-                self._message("fortune_refresh_group_failed", error=e)
-            )
+            text = self._message("fortune_refresh_group_failed", error=e)
+            if result := self._plain(event, text):
+                yield result
 
     async def refresh_all_fortune_command(
         self, event: AstrMessageEvent
@@ -134,25 +145,27 @@ class FortuneCommandHandler:
         """Handle /刷新全局今日运势 command."""
         has_perm, msg = PermissionService.require_super_user(event)
         if not has_perm:
-            yield event.plain_result(msg)
+            if result := self._plain(event, msg):
+                yield result
             return
 
         config = get_config()
         if not config:
-            yield event.plain_result(self._message("config_not_loaded"))
+            if result := self._plain(event, self._message("config_not_loaded")):
+                yield result
             return
 
         try:
             repo = get_fortune_repo()
             service = FortuneService(repository=repo)
             refreshed_count = await service.pregenerate_active_users()
-            yield event.plain_result(
-                self._message("fortune_refresh_all_done", count=refreshed_count)
-            )
+            text = self._message("fortune_refresh_all_done", count=refreshed_count)
+            if result := self._plain(event, text):
+                yield result
         except Exception as e:
-            yield event.plain_result(
-                self._message("fortune_refresh_all_failed", error=e)
-            )
+            text = self._message("fortune_refresh_all_failed", error=e)
+            if result := self._plain(event, text):
+                yield result
 
     async def enable_fortune_group_command(
         self, event: AstrMessageEvent, args: str = ""
@@ -160,17 +173,20 @@ class FortuneCommandHandler:
         """Handle /开启运势 command (enable Fortune for current group)."""
         has_perm, msg = PermissionService.require_admin(event)
         if not has_perm:
-            yield event.plain_result(msg)
+            if result := self._plain(event, msg):
+                yield result
             return
 
         group_id = event.get_group_id()
         if not group_id:
-            yield event.plain_result(self._message("fortune_group_only"))
+            if result := self._plain(event, self._message("fortune_group_only")):
+                yield result
             return
 
         repo = get_access_control_repo()
         await repo.remove_fortune_blocked_group(str(group_id))
-        yield event.plain_result(self._message("fortune_enabled_group_done"))
+        if result := self._plain(event, self._message("fortune_enabled_group_done")):
+            yield result
 
     async def disable_fortune_group_command(
         self, event: AstrMessageEvent, args: str = ""
@@ -178,17 +194,20 @@ class FortuneCommandHandler:
         """Handle /关闭运势 command (disable Fortune for current group)."""
         has_perm, msg = PermissionService.require_admin(event)
         if not has_perm:
-            yield event.plain_result(msg)
+            if result := self._plain(event, msg):
+                yield result
             return
 
         group_id = event.get_group_id()
         if not group_id:
-            yield event.plain_result(self._message("fortune_group_only"))
+            if result := self._plain(event, self._message("fortune_group_only")):
+                yield result
             return
 
         repo = get_access_control_repo()
         await repo.add_fortune_blocked_group(str(group_id))
-        yield event.plain_result(self._message("fortune_disabled_group_done"))
+        if result := self._plain(event, self._message("fortune_disabled_group_done")):
+            yield result
 
     async def block_fortune_user_command(
         self, event: AstrMessageEvent, args: str = ""
@@ -196,19 +215,21 @@ class FortuneCommandHandler:
         """Handle /拉黑运势用户 command (add user to Fortune blacklist)."""
         has_perm, msg = PermissionService.require_admin(event)
         if not has_perm:
-            yield event.plain_result(msg)
+            if result := self._plain(event, msg):
+                yield result
             return
 
         target_id = args.strip() or event.get_sender_id()
         if not target_id:
-            yield event.plain_result(self._message("fortune_missing_user_id"))
+            if result := self._plain(event, self._message("fortune_missing_user_id")):
+                yield result
             return
 
         repo = get_access_control_repo()
         await repo.add_fortune_blocked_user(str(target_id))
-        yield event.plain_result(
-            self._message("fortune_block_user_done", user_id=target_id)
-        )
+        text = self._message("fortune_block_user_done", user_id=target_id)
+        if result := self._plain(event, text):
+            yield result
 
     async def unblock_fortune_user_command(
         self, event: AstrMessageEvent, args: str = ""
@@ -216,19 +237,21 @@ class FortuneCommandHandler:
         """Handle /解除运势拉黑 command (remove user from Fortune blacklist)."""
         has_perm, msg = PermissionService.require_admin(event)
         if not has_perm:
-            yield event.plain_result(msg)
+            if result := self._plain(event, msg):
+                yield result
             return
 
         target_id = args.strip()
         if not target_id:
-            yield event.plain_result(self._message("fortune_missing_user_id"))
+            if result := self._plain(event, self._message("fortune_missing_user_id")):
+                yield result
             return
 
         repo = get_access_control_repo()
         await repo.remove_fortune_blocked_user(str(target_id))
-        yield event.plain_result(
-            self._message("fortune_unblock_user_done", user_id=target_id)
-        )
+        text = self._message("fortune_unblock_user_done", user_id=target_id)
+        if result := self._plain(event, text):
+            yield result
 
     async def trust_fortune_user_command(
         self, event: AstrMessageEvent, args: str = ""
@@ -236,19 +259,21 @@ class FortuneCommandHandler:
         """Handle /信任运势用户 command (add user to Fortune whitelist)."""
         has_perm, msg = PermissionService.require_admin(event)
         if not has_perm:
-            yield event.plain_result(msg)
+            if result := self._plain(event, msg):
+                yield result
             return
 
         target_id = args.strip() or event.get_sender_id()
         if not target_id:
-            yield event.plain_result(self._message("fortune_missing_user_id"))
+            if result := self._plain(event, self._message("fortune_missing_user_id")):
+                yield result
             return
 
         repo = get_access_control_repo()
         await repo.add_fortune_whitelist_user(str(target_id))
-        yield event.plain_result(
-            self._message("fortune_trust_user_done", user_id=target_id)
-        )
+        text = self._message("fortune_trust_user_done", user_id=target_id)
+        if result := self._plain(event, text):
+            yield result
 
     async def untrust_fortune_user_command(
         self, event: AstrMessageEvent, args: str = ""
@@ -256,19 +281,21 @@ class FortuneCommandHandler:
         """Handle /取消运势信任 command (remove user from Fortune whitelist)."""
         has_perm, msg = PermissionService.require_admin(event)
         if not has_perm:
-            yield event.plain_result(msg)
+            if result := self._plain(event, msg):
+                yield result
             return
 
         target_id = args.strip()
         if not target_id:
-            yield event.plain_result(self._message("fortune_missing_user_id"))
+            if result := self._plain(event, self._message("fortune_missing_user_id")):
+                yield result
             return
 
         repo = get_access_control_repo()
         await repo.remove_fortune_whitelist_user(str(target_id))
-        yield event.plain_result(
-            self._message("fortune_untrust_user_done", user_id=target_id)
-        )
+        text = self._message("fortune_untrust_user_done", user_id=target_id)
+        if result := self._plain(event, text):
+            yield result
 
     # ==================== LLM Tool Handlers ====================
 
@@ -462,6 +489,12 @@ class FortuneCommandHandler:
             f"⭐ {'★' * result.star_count}{'☆' * (result.max_stars - result.star_count)}\n"
             f"💬 {result.description}"
         )
+
+    def _plain(self, event: AstrMessageEvent, text: str | None) -> Any | None:
+        """Build a plain result only when the configured text is not empty."""
+        if not text:
+            return None
+        return event.plain_result(text)
 
     async def _render_fortune_image(
         self, record: FortuneRecord, service: FortuneService

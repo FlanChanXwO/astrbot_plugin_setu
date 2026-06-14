@@ -29,14 +29,16 @@
 /session_config get json
 /session_config set setu.content_mode r18
 /session_config set setu.r18_docx true
-/session_config set setu.auto_revoke false
+/session_config set setu.auto_revoke_scope r18
 /session_config set setu.send_mode forward
 /session_config set fortune.tags 白丝,猫耳
 /session_config clear setu.send_mode
 /session_config clear
 ```
 
-可用配置项：`setu.content_mode`、`setu.r18_docx`、`setu.auto_revoke`、`setu.send_mode`、`fortune.tags`、`fortune.content_mode`。
+可用配置项：`setu.content_mode`、`setu.r18_docx`、`setu.auto_revoke_scope`、`setu.send_mode`、`fortune.tags`、`fortune.content_mode`。
+
+`setu.auto_revoke_scope` 可选 `none`、`sfw`、`r18`、`all`，只作用于 Setu 图片发送；今日运势不自动撤回。
 
 ## 黑白名单管理命令（管理员）
 

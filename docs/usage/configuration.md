@@ -7,7 +7,7 @@
 | 配置项 | 类型 | 说明 | 可选值 | 默认值 |
 |--------|------|------|--------|--------|
 | `api_type` | 字符串 | API 类型 | `lolicon` / `atri` / `sexnyan` / `custom` / `all` | `lolicon` |
-| `send_mode` | 字符串 | 发送模式 | `auto` / `image` / `forward` | `image` |
+| `send_mode` | 字符串 | 发送模式 | `auto` / `image` / `forward` | `auto` |
 | `content_mode` | 字符串 | 内容模式 | `sfw` / `r18` / `mix` | `sfw` |
 | `max_count` | 整数 | 单次最大图片数 | 1-10 | `10` |
 | `max_replenish_rounds` | 整数 | 下载暂时失败时的同 URL 确认尝试次数，也是短缺时的补图轮次 | 1-3 | `3` |
@@ -21,8 +21,8 @@
 | 配置项 | 类型 | 说明 | 可选值 | 默认值 |
 |--------|------|------|--------|--------|
 | `html_card_strategy` | 字符串 | HTML 卡片策略 | `never` / `fallback` / `always` | `fallback` |
-| `napcat_stream_mode` | 字符串 | NapCat 流式上传策略 | `disabled` / `fallback` / `always` | `fallback` |
-| `auto_revoke_r18` | 布尔值 | R18 图片是否自动撤回 | `true` / `false` | `false` |
+| `platform_transports` | template_list | 平台传输能力模板；当前内置 NapCat 模板 | 见下文 | `[]` |
+| `auto_revoke_scope` | 字符串 | Setu 图片自动撤回范围 | `none` / `sfw` / `r18` / `all` | `none` |
 | `r18_docx_mode` | 布尔值 | R18 是否使用 Docx 封装 | `true` / `false` | `true` |
 
 ### HTML 卡片策略详解
@@ -35,16 +35,51 @@
 
 发送接口超时或 OneBot/NapCat 类适配器未返回 message id 时，插件会把结果标记为“可能仍在送达”，不会立刻触发 NapCat 流式或 HTML 卡片 fallback，避免原图稍后送达时又重复发送降级图片。明确抛出的发送异常仍会进入原有 fallback 链路。
 
+### 自动撤回范围
+
+`auto_revoke_scope` 只作用于 Setu 图片发送，不作用于今日运势。可选值：
+
+| 值 | 说明 |
+|----|------|
+| `none` | 不自动撤回 |
+| `sfw` | 只撤回 SFW Setu 图片 |
+| `r18` | 只撤回 R18 Setu 图片或 R18 Docx 文件 |
+| `all` | SFW 与 R18 Setu 发送都撤回 |
+
+撤回依赖 OneBot-like 平台返回的 `message_id`。如果平台不支持 `delete_msg`、发送返回里没有 `message_id`，或删除失败，插件只记录 warning，不阻止图片发送。旧版 `delivery.auto_revoke_r18` 启动时会迁移为 `auto_revoke_scope`：`true` → `r18`，`false` → `none`，迁移后旧字段会被移除。
+
+### NapCat 本地文件直通
+
+标准 AstrBot OneBot 发送链路会把 `Image` 转成 `base64://`，因此只把图片做成 `file://` 组件并不能绕过 base64。在 `platform_transports` 添加 NapCat 模板并启用 `local_file_mode` 后，插件会在直发模式下改走 raw OneBot 图片 action，把受信任本地文件路径作为 `file://` 交给 NapCat 读取。
+
+| NapCat 模板字段 | 类型 | 说明 | 可选值 | 默认值 |
+|-----------------|------|------|--------|--------|
+| `stream_mode` | 字符串 | NapCat 流式上传策略 | `disabled` / `fallback` / `always` | `fallback` |
+| `stream_chunk_kb` | 整数 | NapCat stream 单块原始字节大小（KiB） | ≥1 | `64` |
+| `local_file_mode` | 字符串 | NapCat 本地 `file://` 直通策略 | `disabled` / `fallback` / `always` | `disabled` |
+| `local_file_allowed_roots` | 列表 | NapCat 也能读取的额外共享目录 | 绝对路径列表 | `[]` |
+
+| 策略 | 说明 |
+|------|------|
+| `disabled`（默认） | 保持现有 base64 链路 |
+| `fallback` | 确认普通发送失败后先尝试 `file://` 直通，再尝试 stream / HTML |
+| `always` | 直发模式优先尝试 `file://` 直通，失败后回到原链路 |
+
+只有满足以下条件时才会直通：平台为 OneBot/NapCat 类；图片是本地真实文件；路径 resolve 后位于发送缓存目录或 NapCat 模板的 `local_file_allowed_roots` 中。Docker 部署需要 AstrBot 与 NapCat 共享同一路径，例如都能读取 `/AstrBot/data`。
+
+NapCat `upload_file_stream` 的 `chunk_data` 仍是 base64 字符串，这是 NapCat 当前接口约束；`stream_chunk_kb` 只控制每个 base64 分块对应的原始字节大小。旧版 `delivery.napcat_*` 平铺字段仍会被读取作为兼容兜底，新配置建议使用 `platform_transports`。
+
 ## 模板覆盖配置
 
 | 配置项 | 类型 | 说明 |
 |--------|------|------|
-| `provider_overrides` | template_list | 可选覆盖 Lolicon/Atri 的默认图片尺寸、代理、UID、关键词、AI 过滤等设置 |
+| `provider_overrides` | template_list | 可选覆盖 provider 默认参数；Lolicon/Atri 支持图片尺寸、代理、UID、关键词、AI 过滤，SexNyan 支持代理、作者 UID、关键词 |
 | `custom_api_configs` | template_list | 自定义图片 API 列表 |
 | `tag_alias_templates` | template_list | 标签别名映射；添加后优先于旧文本格式 `tag_alias` |
-| `message_overrides` | template_list | 只在需要自定义某条提示时添加，未添加时使用内置默认提示 |
+| `message_overrides` | template_list | 只在需要自定义某条提示时添加；所有提示默认不发送 |
 
 访问控制 Web API 错误提示也可通过 `message_overrides` 覆盖，内置键为 `error.invalid_request` 和 `error.internal_server`。
+自动撤回成功调度后的提示 key 为 `revoke_scheduled`，占位符支持 `{count}`、`{revoke_delay}`、`{scope}`、`{r18}`，默认关闭。
 
 ## 访问控制配置
 
@@ -75,7 +110,9 @@
 
 | 参数 | 说明 | 推荐值 |
 |------|------|--------|
-| `napcat_stream_mode` | NapCat/OneBot 图片传输策略 | `fallback` |
+| `platform_transports.napcat.stream_mode` | NapCat/OneBot 图片传输策略 | `fallback` |
+| `platform_transports.napcat.stream_chunk_kb` | NapCat stream 单块大小；接口仍为 base64 分块 | `64` 起，网络稳定可逐步增大 |
+| `platform_transports.napcat.local_file_mode` | 共享路径部署下绕过 AstrBot 标准 base64 链路 | 已确认共享目录后用 `always` |
 | `cache_enabled` | 是否复用发送缓存 | `true` |
 | `max_replenish_rounds` | 图片 URL 短暂下载失败时的确认重试和补图轮次 | `3` |
 
@@ -90,7 +127,7 @@
   },
   "delivery": {
     "send_mode": "auto",
-    "auto_revoke_r18": true,
+    "auto_revoke_scope": "r18",
     "r18_docx_mode": false
   },
   "messages": {

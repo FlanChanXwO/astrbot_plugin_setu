@@ -8,6 +8,7 @@ from typing import Any, Literal
 from .dto import JsonValue
 
 ValueType = Literal["enum", "bool", "string"]
+AUTO_REVOKE_SCOPE_OPTIONS = ("none", "sfw", "r18", "all")
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,11 +46,12 @@ SESSION_CONFIG_KEYS: dict[str, SessionConfigKey] = {
         value_type="bool",
         description="当前会话发送 R18 图片时是否优先打包为 Docx。",
     ),
-    "setu.auto_revoke": SessionConfigKey(
-        key="setu.auto_revoke",
-        label="R18 自动撤回",
-        value_type="bool",
-        description="当前会话发送 R18 内容后是否自动撤回。",
+    "setu.auto_revoke_scope": SessionConfigKey(
+        key="setu.auto_revoke_scope",
+        label="自动撤回范围",
+        value_type="enum",
+        options=AUTO_REVOKE_SCOPE_OPTIONS,
+        description="当前会话发送 Setu 图片后的自动撤回范围。",
     ),
     "setu.send_mode": SessionConfigKey(
         key="setu.send_mode",
@@ -137,6 +139,11 @@ def normalize_config_value(key: str, value: Any) -> JsonValue:
             )
         return text
     return "" if value is None else str(value).strip()
+
+
+def legacy_auto_revoke_value_to_scope(value: Any) -> str:
+    """Map legacy setu.auto_revoke boolean values to the new scope enum."""
+    return "r18" if _normalize_bool(value) else "none"
 
 
 def _normalize_bool(value: Any) -> bool:

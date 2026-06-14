@@ -1,10 +1,66 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from astrbot_plugin_setu.main import SetuPlugin
+
+
+def test_conf_schema_exposes_sexnyan_and_platform_transport_templates() -> None:
+    schema_path = Path(__file__).resolve().parents[1] / "_conf_schema.json"
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+
+    delivery_items = schema["delivery"]["items"]
+    assert "auto_revoke_r18" not in delivery_items
+    assert delivery_items["auto_revoke_scope"]["default"] == "none"
+    assert delivery_items["auto_revoke_scope"]["options"] == [
+        "none",
+        "sfw",
+        "r18",
+        "all",
+    ]
+
+    transport_templates = delivery_items["platform_transports"]["templates"]
+    napcat_items = transport_templates["napcat"]["items"]
+    assert napcat_items["local_file_mode"]["default"] == "disabled"
+    assert napcat_items["stream_chunk_kb"]["default"] == 64
+    assert napcat_items["local_file_allowed_roots"]["default"] == []
+
+    provider_templates = schema["api"]["items"]["provider_overrides"]["templates"]
+    assert set(provider_templates["sexnyan"]["items"]) == {"proxy", "uid", "keyword"}
+
+    message_items = schema["messages"]["items"]["message_overrides"]["templates"][
+        "message"
+    ]["items"]
+    assert "revoke_scheduled" in message_items["message_key"]["options"]
+    assert message_items["enabled"]["default"] is False
+
+
+def test_dashboard_loads_bridge_before_app_script() -> None:
+    dashboard_dir = Path(__file__).resolve().parents[1] / "pages" / "dashboard"
+    html = (dashboard_dir / "index.html").read_text(encoding="utf-8")
+
+    bridge_index = html.index("/api/plugin/page/bridge-sdk.js")
+    app_index = html.index("./app.js")
+
+    assert bridge_index < app_index
+
+
+def test_dashboard_bridge_is_resolved_dynamically() -> None:
+    app_js_path = Path(__file__).resolve().parents[1] / "pages" / "dashboard" / "app.js"
+    app_js = app_js_path.read_text(encoding="utf-8")
+
+    assert "var bridge = window.AstrBotPluginPage || null;" not in app_js
+    assert "function getBridge()" in app_js
+    assert "function waitForBridge()" in app_js
+    assert "return window.AstrBotPluginPage || null;" in app_js
+    assert "function bridgeReady()" in app_js
+    assert "return bridgeReady().then(function (current)" in app_js
+    assert "current.apiGet(path, params)" in app_js
+    assert "current.apiPost(path, payload)" in app_js
 
 
 @pytest.mark.asyncio

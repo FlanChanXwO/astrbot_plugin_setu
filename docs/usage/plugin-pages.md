@@ -15,7 +15,7 @@
 - 查看所有会话的覆盖配置
 - 为指定群聊/私聊设置覆盖配置
 - 清除指定会话的覆盖配置
-- 支持的覆盖项：`setu.content_mode`、`setu.r18_docx`、`setu.auto_revoke`、`setu.send_mode`、`fortune.tags`、`fortune.content_mode`
+- 支持的覆盖项：`setu.content_mode`、`setu.r18_docx`、`setu.auto_revoke_scope`、`setu.send_mode`、`fortune.tags`、`fortune.content_mode`
 
 ### 布局
 
@@ -44,10 +44,18 @@
 - CSS 分为 `base.css`、`components.css`、`forms.css`、`dashboard.css`、`nav.css`
 - JS 为原生 JS（Proxy 响应式 store），无框架依赖
 - 侧边导航：桌面端固定左侧，移动端通过汉堡按钮展开
+- Dashboard 运行在 AstrBot Plugin Pages iframe 内，依赖 `/api/plugin/page/bridge-sdk.js` 提供的 `window.AstrBotPluginPage`
+- `index.html` 会在 `app.js` 前显式加载 bridge SDK；`app.js` 仍会动态等待 bridge 注入，避免 iframe 注入时序导致页面不可用
 - 会话配置 API：`session-config`（GET/POST），实现位于 `src/infrastructure/astrbot/session_config_api.py`
 - 访问控制 API：`access-control`（GET/POST），实现位于 `src/infrastructure/astrbot/access_control_api.py`
 - 数据持久化到插件数据目录
 - 旧版 `safety.*` 配置仅在初始化时导入一次
+
+## 运行时约束
+
+- 支持目标是 AstrBot 管理面板中的 Plugin Pages iframe，不保证直接用 `file://` 打开 `pages/dashboard/index.html`
+- bridge 未注入或不是从 AstrBot Plugin Pages 打开时，页面会保留可见布局并弹出错误提示
+- 开发环境可访问 `/api/plugin/page/content/astrbot_plugin_setu/dashboard/` 验证页面加载、标签切换、会话配置和访问控制接口
 
 ## 不负责
 

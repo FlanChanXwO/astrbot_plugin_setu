@@ -8,6 +8,7 @@ from .keys import (
     SessionConfigKey,
     SessionConfigValidationError,
     get_key_definition,
+    legacy_auto_revoke_value_to_scope,
     normalize_config_value,
     normalize_session_type,
 )
@@ -24,6 +25,7 @@ __all__ = [
     "SessionType",
     "get_global_session_config_values",
     "get_key_definition",
+    "legacy_auto_revoke_value_to_scope",
     "normalize_config_value",
     "normalize_session_type",
 ]

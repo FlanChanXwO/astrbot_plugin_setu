@@ -3,7 +3,9 @@
   // 共享工具
   // ══════════════════════════════════════════════════════════════════════════
 
-  var bridge = window.AstrBotPluginPage || null;
+  // AstrBot 可能在 iframe HTML 末尾注入 bridge；等待窗口只覆盖注入竞态，超时后显式报错。
+  var BRIDGE_WAIT_ATTEMPTS = 50;
+  var BRIDGE_WAIT_INTERVAL_MS = 100;
   var toastTimer = null;
 
   function qs(sel, ctx) { return (ctx || document).querySelector(sel); }
@@ -22,24 +24,56 @@
     return result || {};
   }
 
-  function bridgeReady() {
-    if (!bridge || typeof bridge.ready !== 'function') {
-      return Promise.reject(new Error('AstrBot Plugin Pages bridge 未注入'));
-    }
-    return bridge.ready();
+  function getBridge() {
+    return window.AstrBotPluginPage || null;
   }
 
-  function apiGet(path) {
-    return bridgeReady().then(function () {
-      if (typeof bridge.apiGet !== 'function') throw new Error('Plugin Pages bridge 不支持 apiGet');
-      return bridge.apiGet(path);
+  function sleep(ms) {
+    return new Promise(function (resolve) {
+      window.setTimeout(resolve, ms);
+    });
+  }
+
+  function waitForBridge() {
+    var found = getBridge();
+    if (found) return Promise.resolve(found);
+
+    var attempt = 0;
+    function poll() {
+      var current = getBridge();
+      if (current) return Promise.resolve(current);
+
+      attempt += 1;
+      if (attempt >= BRIDGE_WAIT_ATTEMPTS) {
+        return Promise.reject(new Error('请从 AstrBot Plugin Pages 打开此页面'));
+      }
+      return sleep(BRIDGE_WAIT_INTERVAL_MS).then(poll);
+    }
+    return poll();
+  }
+
+  function bridgeReady() {
+    return waitForBridge().then(function (current) {
+      if (typeof current.ready !== 'function') {
+        throw new Error('Plugin Pages bridge 不支持 ready');
+      }
+      return current.ready().then(function () {
+        return current;
+      });
+    });
+  }
+
+  function apiGet(path, params) {
+    return bridgeReady().then(function (current) {
+      if (typeof current.apiGet !== 'function') throw new Error('Plugin Pages bridge 不支持 apiGet');
+      return current.apiGet(path, params);
     });
   }
 
   function apiPost(path, payload) {
-    return bridgeReady().then(function () {
-      if (typeof bridge.apiPost !== 'function') throw new Error('Plugin Pages bridge 不支持 apiPost');
-      return bridge.apiPost(path, payload);
+    return bridgeReady().then(function (current) {
+      if (typeof current.apiPost !== 'function') throw new Error('Plugin Pages bridge 不支持 apiPost');
+      return current.apiPost(path, payload);
     });
   }
 

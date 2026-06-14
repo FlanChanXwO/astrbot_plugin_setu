@@ -145,3 +145,6 @@ class TestSendOptions:
         assert options.r18_docx_mode is True
         assert options.html_padding == 6
         assert options.html_gap == 6
+        assert options.napcat_stream_chunk_kb == 64
+        assert options.napcat_local_file_mode == "disabled"
+        assert options.napcat_local_file_allowed_roots == ()

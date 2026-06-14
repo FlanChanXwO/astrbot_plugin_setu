@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from .dto import SendOptions
 from .image_sender import ImageSender
+from .revoke_scheduler import clear_revoke_scheduler, schedule_revoke
 from .send_filters import (
     SendFilter,
     SendResult,
@@ -25,6 +26,8 @@ __all__ = [
     "ForwardSendStrategy",
     "HtmlCardFallbackStrategy",
     "SendOptions",
+    "schedule_revoke",
+    "clear_revoke_scheduler",
     "resolve_send_mode",
     # Filter chain (new)
     "send_with_filter_chain",

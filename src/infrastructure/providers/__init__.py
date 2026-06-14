@@ -51,6 +51,7 @@ def init_provider(
     multi_api_strategy: str = "round_robin",
     lolicon_config: dict[str, Any] | None = None,
     atri_config: dict[str, Any] | None = None,
+    sexnyan_config: dict[str, Any] | None = None,
 ) -> SetuImageProvider:
     """Initialize provider singleton.
 
@@ -62,6 +63,7 @@ def init_provider(
         multi_api_strategy: Multi-API strategy ('round_robin', 'random', 'failover').
         lolicon_config: Lolicon provider config.
         atri_config: Atri provider config.
+        sexnyan_config: SexNyan provider config.
 
     Returns:
         The initialized provider instance.
@@ -75,6 +77,7 @@ def init_provider(
         multi_api_strategy=multi_api_strategy,
         lolicon_config=lolicon_config,
         atri_config=atri_config,
+        sexnyan_config=sexnyan_config,
     )
     return _provider
 
@@ -98,6 +101,11 @@ def init_provider_from_config(config: Any) -> SetuImageProvider:
             "aspect_ratio": getattr(config, "atri_aspect_ratio", None) or "",
             "uid": getattr(config, "atri_uid", None) or [],
             "keyword": getattr(config, "atri_keyword", None) or "",
+        },
+        sexnyan_config={
+            "proxy": getattr(config, "sexnyan_proxy", None) or "",
+            "uid": getattr(config, "sexnyan_uid", None) or [],
+            "keyword": getattr(config, "sexnyan_keyword", None) or "",
         },
     )
     logger.info(
@@ -123,6 +131,7 @@ def _create_provider(
     multi_api_strategy: str = "round_robin",
     lolicon_config: dict[str, Any] | None = None,
     atri_config: dict[str, Any] | None = None,
+    sexnyan_config: dict[str, Any] | None = None,
 ) -> SetuImageProvider | MultiApiProvider:
     """根据类型名称获取提供商实例。
 
@@ -134,6 +143,7 @@ def _create_provider(
         multi_api_strategy: 多 API 策略（'round_robin'、'random'、'failover'）。
         lolicon_config: Lolicon 专属配置参数。
         atri_config: Atri 专属配置参数。
+        sexnyan_config: SexNyan 专属配置参数。
 
     返回:
         提供商实例（如果类型未知则默认返回 lolicon）。
@@ -146,6 +156,8 @@ def _create_provider(
                 provider = LoliconProvider(**lolicon_config)
             elif name == "atri" and atri_config:
                 provider = AtriProvider(**atri_config)
+            elif name == "sexnyan" and sexnyan_config:
+                provider = SexNyanRunProvider(**sexnyan_config)
             else:
                 provider = PROVIDERS[name]()
             providers.append(provider)
@@ -206,6 +218,8 @@ def _create_provider(
         return provider_cls(**lolicon_config)
     if api_type == "atri" and atri_config:
         return provider_cls(**atri_config)
+    if api_type == "sexnyan" and sexnyan_config:
+        return provider_cls(**sexnyan_config)
     return provider_cls()
 
 

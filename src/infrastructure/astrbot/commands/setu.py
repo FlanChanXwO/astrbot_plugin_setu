@@ -91,7 +91,8 @@ class SetuCommandHandler:
     ) -> AsyncGenerator[Any, None]:
         """Handle natural language setu requests (regex trigger)."""
         if not await _rate_limiter.acquire(event):
-            yield event.plain_result(self._message("rate_limited"))
+            if result := self._plain(event, self._message("rate_limited")):
+                yield result
             return
 
         try:
@@ -115,7 +116,8 @@ class SetuCommandHandler:
 
         has_perm, msg = await self._check_access(event, config)
         if not has_perm:
-            yield event.plain_result(msg)
+            if result := self._plain(event, msg):
+                yield result
             return
 
         num_str = match.group(2)
@@ -124,19 +126,15 @@ class SetuCommandHandler:
 
         if num < 1 or num > max_count:
             if num == -1:
-                yield event.plain_result(
-                    self._message("invalid_count", min_count=1, max_count=max_count)
-                )
+                text = self._message("invalid_count", min_count=1, max_count=max_count)
             elif num > max_count:
-                yield event.plain_result(
-                    self._message("max_count_exceeded", max_count=max_count)
-                )
+                text = self._message("max_count_exceeded", max_count=max_count)
             else:
-                yield event.plain_result(
-                    self._message(
-                        "count_out_of_range", min_count=1, max_count=max_count
-                    )
+                text = self._message(
+                    "count_out_of_range", min_count=1, max_count=max_count
                 )
+            if result := self._plain(event, text):
+                yield result
             return
 
         tag_str = match.group(4).strip()
@@ -152,10 +150,12 @@ class SetuCommandHandler:
                 yield result
         except asyncio.TimeoutError:
             logger.warning("get_random_picture timeout (>60s)")
-            yield event.plain_result(self._message("fetch_timeout"))
+            if result := self._plain(event, self._message("fetch_timeout")):
+                yield result
         except Exception:
             logger.exception("get_random_picture failed")
-            yield event.plain_result(self._message("fetch_failed"))
+            if result := self._plain(event, self._message("fetch_failed")):
+                yield result
 
     async def setu_command(
         self, event: AstrMessageEvent, count: str = "1", *, tags: str = ""
@@ -166,7 +166,8 @@ class SetuCommandHandler:
         Example: /setu 3 girl cute
         """
         if not await _rate_limiter.acquire(event):
-            yield event.plain_result(self._message("rate_limited"))
+            if result := self._plain(event, self._message("rate_limited")):
+                yield result
             return
 
         try:
@@ -186,7 +187,8 @@ class SetuCommandHandler:
 
         has_perm, msg = await self._check_access(event, config)
         if not has_perm:
-            yield event.plain_result(msg)
+            if result := self._plain(event, msg):
+                yield result
             return
 
         max_count = config.max_count or 10
@@ -202,9 +204,9 @@ class SetuCommandHandler:
             all_tags = f"{extra_tag} {all_tags}".strip()
 
         if num > max_count:
-            yield event.plain_result(
-                self._message("max_count_exceeded", max_count=max_count)
-            )
+            text = self._message("max_count_exceeded", max_count=max_count)
+            if result := self._plain(event, text):
+                yield result
             return
 
         parsed_tags = self._resolve_tags(all_tags, config)
@@ -219,10 +221,12 @@ class SetuCommandHandler:
                 yield result
         except asyncio.TimeoutError:
             logger.warning("setu command timeout (>60s)")
-            yield event.plain_result(self._message("fetch_timeout"))
+            if result := self._plain(event, self._message("fetch_timeout")):
+                yield result
         except Exception:
             logger.exception("setu command failed")
-            yield event.plain_result(self._message("fetch_failed"))
+            if result := self._plain(event, self._message("fetch_failed")):
+                yield result
 
     # ==================== LLM Tool Handlers ====================
 
@@ -295,13 +299,16 @@ class SetuCommandHandler:
             result = await use_case.execute(num, tags, is_r18)
         except asyncio.TimeoutError:
             logger.warning("image fetch timeout (>60s)")
-            yield event.plain_result(self._message("fetch_timeout"))
+            if result := self._plain(event, self._message("fetch_timeout")):
+                yield result
             return
 
         payload = result.payload
         if payload is None:
             tags_info = f"标签: {', '.join(tags)}" if tags else ""
-            yield event.plain_result(self._message("no_result", tags_info=tags_info))
+            text = self._message("no_result", tags_info=tags_info)
+            if result := self._plain(event, text):
+                yield result
             return
 
         from ...sending import ImageSender
@@ -371,6 +378,12 @@ class SetuCommandHandler:
                 return 10
 
         return -1
+
+    def _plain(self, event: AstrMessageEvent, text: str | None) -> Any | None:
+        """Build a plain result only when the configured text is not empty."""
+        if not text:
+            return None
+        return event.plain_result(text)
 
     def _message(self, key: str, **kwargs: Any) -> str:
         """Resolve configured message text."""

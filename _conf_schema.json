@@ -66,6 +66,171 @@
             }
         }
     },
+    "api": {
+        "description": "提供者详情",
+        "type": "object",
+        "hint": "提供者特定的设置。",
+        "items": {
+            "provider_overrides": {
+                "type": "template_list",
+                "description": "Provider 配置",
+                "hint": "provider 专属配置；未添加对应模板时使用内置默认（regular 尺寸、无代理）。SexNyan 仅支持代理、作者 UID、关键词。",
+                "default": [],
+                "templates": {
+                    "lolicon": {
+                        "name": "Lolicon 配置",
+                        "hint": "Lolicon 提供者的专属配置。",
+                        "items": {
+                            "image_size": {
+                                "type": "string",
+                                "description": "图片尺寸",
+                                "default": "regular",
+                                "options": ["original", "regular", "small", "thumb", "mini"]
+                            },
+                            "proxy": {
+                                "type": "string",
+                                "description": "图片代理主机",
+                                "default": ""
+                            },
+                            "aspect_ratio": {
+                                "type": "string",
+                                "description": "宽高比过滤",
+                                "default": "",
+                                "options": ["", "horizontal", "vertical", "square"]
+                            },
+                            "uid": {
+                                "type": "list",
+                                "description": "作者 UID 列表",
+                                "hint": "每行一个 UID。",
+                                "default": []
+                            },
+                            "keyword": {
+                                "type": "string",
+                                "description": "关键词过滤",
+                                "default": ""
+                            },
+                            "exclude_ai": {
+                                "type": "bool",
+                                "description": "排除 AI 生成作品",
+                                "default": true
+                            }
+                        }
+                    },
+                    "atri": {
+                        "name": "Atri 配置",
+                        "hint": "Atri 提供者的专属配置。",
+                        "items": {
+                            "image_size": {
+                                "type": "string",
+                                "description": "图片尺寸",
+                                "default": "regular",
+                                "options": ["original", "regular", "small", "thumb", "mini"]
+                            },
+                            "proxy": {
+                                "type": "string",
+                                "description": "图片代理主机",
+                                "default": ""
+                            },
+                            "aspect_ratio": {
+                                "type": "string",
+                                "description": "宽高比过滤",
+                                "default": "",
+                                "options": ["", "horizontal", "vertical", "square"]
+                            },
+                            "uid": {
+                                "type": "list",
+                                "description": "作者 UID 列表",
+                                "hint": "每行一个 UID。",
+                                "default": []
+                            },
+                            "keyword": {
+                                "type": "string",
+                                "description": "关键词过滤",
+                                "default": ""
+                            },
+                            "exclude_ai": {
+                                "type": "bool",
+                                "description": "排除 AI 生成作品",
+                                "default": true
+                            }
+                        }
+                    },
+                    "sexnyan": {
+                        "name": "SexNyan 配置",
+                        "hint": "SexNyan V2 支持 author_uuid、keyword、tag；不支持图片尺寸和宽高比过滤。",
+                        "items": {
+                            "proxy": {
+                                "type": "string",
+                                "description": "图片代理主机",
+                                "default": ""
+                            },
+                            "uid": {
+                                "type": "list",
+                                "description": "作者 UID 列表",
+                                "hint": "每行一个 UID，会作为 author_uuid 重复参数传给 SexNyan。",
+                                "default": []
+                            },
+                            "keyword": {
+                                "type": "string",
+                                "description": "关键词过滤",
+                                "default": ""
+                            }
+                        }
+                    }
+                }
+            },
+            "custom_api_configs": {
+                "type": "template_list",
+                "description": "自定义 API 列表",
+                "hint": "配置一个或多个自定义图片 API。",
+                "default": [],
+                "obvious_hint": true,
+                "templates": {
+                    "api_template": {
+                        "name": "自定义 API",
+                        "hint": "一个自定义 API 配置。",
+                        "items": {
+                            "name": {
+                                "type": "string",
+                                "description": "API 配置名称",
+                                "default": "My custom API"
+                            },
+                            "url": {
+                                "type": "string",
+                                "description": "API 地址",
+                                "hint": "支持 {num}、{r18}、{tags} 占位符。",
+                                "default": "https://api.example.com/images?num={num}&tag={tags}"
+                            },
+                            "method": {
+                                "type": "string",
+                                "description": "HTTP 方法",
+                                "default": "GET",
+                                "options": ["GET", "POST"]
+                            },
+                            "timeout": {
+                                "type": "int",
+                                "description": "超时秒数",
+                                "default": 30
+                            },
+                            "parser_type": {
+                                "type": "string",
+                                "description": "解析器类型",
+                                "hint": "auto/json",
+                                "default": "auto",
+                                "options": ["auto", "json"]
+                            },
+                            "json_path": {
+                                "type": "string",
+                                "description": "JSON 路径",
+                                "hint": "当 parser_type=json 时使用。示例：$.data[*].url",
+                                "default": ""
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
     "delivery": {
         "description": "发送模式",
         "type": "object",
@@ -74,8 +239,8 @@
             "send_mode": {
                 "type": "string",
                 "description": "发送模式",
-                "hint": "auto 在图片数量>1时使用转发。",
-                "default": "image",
+                "hint": "auto 在图片数量>1且平台支持时使用合并转发（仅 aiocqhttp/OneBot 类平台支持，其它平台自动回退直发）；image 始终直发；forward 始终尝试合并转发。",
+                "default": "auto",
                 "options": ["image", "forward", "auto"]
             },
             "r18_docx_mode": {
@@ -84,24 +249,72 @@
                 "hint": "将 R18 图片打包到 docx 文件中。",
                 "default": true
             },
-            "auto_revoke_r18": {
-                "type": "bool",
-                "description": "自动撤回 R18 图片/文件",
-                "hint": "发送 R18 分级内容后，是否自动撤回消息（mix 模式随机到 r18 也算）。",
-                "default": false
+            "auto_revoke_scope": {
+                "type": "string",
+                "description": "自动撤回范围",
+                "hint": "none=不撤回；sfw=仅撤回全年龄图片；r18=仅撤回 R18 图片/文件；all=全部 Setu 图片都会撤回。",
+                "default": "none",
+                "options": ["none", "sfw", "r18", "all"]
             },
             "auto_revoke_delay": {
                 "type": "int",
-                "description": "R18 撤回延迟时间(秒)",
-                "hint": "发送 R18 内容后多久自动撤回，默认 30 秒。",
+                "description": "撤回延迟时间(秒)",
+                "hint": "命中自动撤回范围后多久撤回，默认 30 秒。",
                 "default": 30
             },
-            "napcat_stream_mode": {
-                "type": "string",
-                "description": "NapCat 流式上传",
-                "hint": "disabled=不用流式上传，fallback=确认普通发送失败后流式重试，always=发送前优先流式上传。",
-                "default": "fallback",
-                "options": ["disabled", "fallback", "always"]
+            "platform_transports": {
+                "type": "template_list",
+                "description": "平台传输配置",
+                "hint": "按平台添加传输能力配置；未添加模板时使用内置默认。NapCat stream 的 chunk_data 仍按 NapCat 协议传 base64 字符串。",
+                "default": [],
+                "templates": {
+                    "napcat": {
+                        "name": "NapCat / OneBot 配置",
+                        "hint": "用于 NapCat 类 OneBot 平台的 stream 上传和本地 file:// 直通。",
+                        "items": {
+                            "stream_mode": {
+                                "type": "string",
+                                "description": "流式上传",
+                                "hint": "disabled=不用流式上传，fallback=确认发送失败后流式重试，always=发送前优先流式上传。",
+                                "default": "fallback",
+                                "options": ["disabled", "fallback", "always"]
+                            },
+                            "stream_chunk_kb": {
+                                "type": "int",
+                                "description": "流式分块(KiB)",
+                                "hint": "仅影响 upload_file_stream 的单块原始字节大小；chunk_data 仍为 base64 字符串。",
+                                "default": 64,
+                                "slider": {"min": 1, "max": 4096, "step": 1}
+                            },
+                            "local_file_mode": {
+                                "type": "string",
+                                "description": "本地文件直通",
+                                "hint": "disabled=保持现有 base64 链路；fallback=确认普通发送失败后尝试 file:// 直通；always=直发模式优先尝试 file:// 直通。仅 NapCat 能读取对应路径时有效。",
+                                "default": "disabled",
+                                "options": ["disabled", "fallback", "always"]
+                            },
+                            "local_file_allowed_roots": {
+                                "type": "list",
+                                "description": "本地直通额外共享目录",
+                                "hint": "每行一个 NapCat 容器也能读取的绝对目录；发送缓存目录会自动允许，无需填写。",
+                                "default": []
+                            }
+                        }
+                    }
+                }
+            },
+            "compress_enabled": {
+                "type": "bool",
+                "description": "发送前压缩大图",
+                "hint": "开启后对超过目标体积的图片在发送前压缩（JPEG 质量阶梯+必要时缩放），降低撞 WebSocket 单帧上限的概率。默认关闭。",
+                "default": false
+            },
+            "compress_max_mb": {
+                "type": "int",
+                "description": "单图压缩目标体积(MB)",
+                "hint": "仅在开启“发送前压缩大图”时生效；单张图片压到该体积以内。",
+                "default": 4,
+                "slider": {"min": 1, "max": 30, "step": 1}
             }
         }
     },
@@ -209,158 +422,15 @@
             }
         }
     },
-    "api": {
-        "description": "提供者详情",
-        "type": "object",
-        "hint": "提供者特定的设置。",
-        "items": {
-            "provider_overrides": {
-                "type": "template_list",
-                "description": "Provider 配置",
-                "hint": "provider 专属配置；未添加对应模板时使用内置默认（original 尺寸、无代理）。",
-                "default": [],
-                "templates": {
-                    "lolicon": {
-                        "name": "Lolicon 配置",
-                        "hint": "Lolicon 提供者的专属配置。",
-                        "items": {
-                            "image_size": {
-                                "type": "string",
-                                "description": "图片尺寸",
-                                "default": "original",
-                                "options": ["original", "regular", "small", "thumb", "mini"]
-                            },
-                            "proxy": {
-                                "type": "string",
-                                "description": "图片代理主机",
-                                "default": ""
-                            },
-                            "aspect_ratio": {
-                                "type": "string",
-                                "description": "宽高比过滤",
-                                "default": "",
-                                "options": ["", "horizontal", "vertical", "square"]
-                            },
-                            "uid": {
-                                "type": "list",
-                                "description": "作者 UID 列表",
-                                "hint": "每行一个 UID。",
-                                "default": []
-                            },
-                            "keyword": {
-                                "type": "string",
-                                "description": "关键词过滤",
-                                "default": ""
-                            },
-                            "exclude_ai": {
-                                "type": "bool",
-                                "description": "排除 AI 生成作品",
-                                "default": true
-                            }
-                        }
-                    },
-                    "atri": {
-                        "name": "Atri 配置",
-                        "hint": "Atri 提供者的专属配置。",
-                        "items": {
-                            "image_size": {
-                                "type": "string",
-                                "description": "图片尺寸",
-                                "default": "original",
-                                "options": ["original", "regular", "small", "thumb", "mini"]
-                            },
-                            "proxy": {
-                                "type": "string",
-                                "description": "图片代理主机",
-                                "default": ""
-                            },
-                            "aspect_ratio": {
-                                "type": "string",
-                                "description": "宽高比过滤",
-                                "default": "",
-                                "options": ["", "horizontal", "vertical", "square"]
-                            },
-                            "uid": {
-                                "type": "list",
-                                "description": "作者 UID 列表",
-                                "hint": "每行一个 UID。",
-                                "default": []
-                            },
-                            "keyword": {
-                                "type": "string",
-                                "description": "关键词过滤",
-                                "default": ""
-                            },
-                            "exclude_ai": {
-                                "type": "bool",
-                                "description": "排除 AI 生成作品",
-                                "default": true
-                            }
-                        }
-                    }
-                }
-            },
-            "custom_api_configs": {
-                "type": "template_list",
-                "description": "自定义 API 列表",
-                "hint": "配置一个或多个自定义图片 API。",
-                "default": [],
-                "obvious_hint": true,
-                "templates": {
-                    "api_template": {
-                        "name": "自定义 API",
-                        "hint": "一个自定义 API 配置。",
-                        "items": {
-                            "name": {
-                                "type": "string",
-                                "description": "API 配置名称",
-                                "default": "My custom API"
-                            },
-                            "url": {
-                                "type": "string",
-                                "description": "API 地址",
-                                "hint": "支持 {num}、{r18}、{tags} 占位符。",
-                                "default": "https://api.example.com/images?num={num}&tag={tags}"
-                            },
-                            "method": {
-                                "type": "string",
-                                "description": "HTTP 方法",
-                                "default": "GET",
-                                "options": ["GET", "POST"]
-                            },
-                            "timeout": {
-                                "type": "int",
-                                "description": "超时秒数",
-                                "default": 30
-                            },
-                            "parser_type": {
-                                "type": "string",
-                                "description": "解析器类型",
-                                "hint": "auto/json",
-                                "default": "auto",
-                                "options": ["auto", "json"]
-                            },
-                            "json_path": {
-                                "type": "string",
-                                "description": "JSON 路径",
-                                "hint": "当 parser_type=json 时使用。示例：$.data[*].url",
-                                "default": ""
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    },
     "messages": {
         "description": "提示消息覆盖",
         "type": "object",
-        "hint": "默认使用内置提示；只在需要自定义某条提示时添加覆盖模板。",
+        "hint": "所有可配置提示默认不发送；只在需要某条提示时添加覆盖模板并启用。",
         "items": {
             "message_overrides": {
                 "type": "template_list",
                 "description": "提示消息覆盖",
-                "hint": "添加后按 message_key 覆盖对应内置提示文本。",
+                "hint": "添加后按 message_key 启用或覆盖对应提示文本。",
                 "default": [],
                 "templates": {
                     "message": {
@@ -375,6 +445,7 @@
                                     "fetching",
                                     "found",
                                     "send_failed",
+                                    "revoke_scheduled",
                                     "rate_limited",
                                     "config_not_loaded",
                                     "error.invalid_request",
@@ -406,7 +477,7 @@
                             "enabled": {
                                 "type": "bool",
                                 "description": "启用该提示",
-                                "default": true
+                                "default": false
                             },
                             "text": {
                                 "type": "string",

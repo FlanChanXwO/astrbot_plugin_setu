@@ -153,9 +153,9 @@ def sample_config_dict() -> dict[str, Any]:
         "delivery": {
             "send_mode": "auto",
             "r18_docx_mode": True,
-            "auto_revoke_r18": False,
+            "auto_revoke_scope": "none",
             "auto_revoke_delay": 30,
-            "napcat_stream_mode": "fallback",
+            "platform_transports": [],
         },
         "html_card": {
             "strategy": "fallback",
@@ -197,13 +197,19 @@ def sample_config_dict() -> dict[str, Any]:
                     "keyword": "",
                     "exclude_ai": True,
                 },
+                {
+                    "__template_key": "sexnyan",
+                    "proxy": "",
+                    "uid": [],
+                    "keyword": "",
+                },
             ],
             "custom_api_configs": [],
         },
         "messages": {
-            "fetching": {"enabled": True, "text": "正在获取图片，请稍候..."},
-            "found": {"enabled": True, "text": "找到 {count} 张符合要求的图片~"},
-            "send_failed": {"enabled": True, "text": "图片发送失败，请稍后再试。"},
+            "fetching": {"enabled": False, "text": "正在获取图片，请稍候..."},
+            "found": {"enabled": False, "text": "找到 {count} 张符合要求的图片~"},
+            "send_failed": {"enabled": False, "text": "图片发送失败，请稍后再试。"},
         },
         "safety": {
             "setu_user_access_control_mode": "none",

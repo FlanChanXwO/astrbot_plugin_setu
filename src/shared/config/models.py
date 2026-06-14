@@ -64,8 +64,37 @@ class SendModeStr(str, Enum):
     AUTO = "auto"
 
 
+class AutoRevokeScopeStr(str, Enum):
+    """Content scopes that should be auto-revoked after Setu sends."""
+
+    NONE = "none"
+    SFW = "sfw"
+    R18 = "r18"
+    ALL = "all"
+
+
+def should_auto_revoke(scope: str | AutoRevokeScopeStr, is_r18: bool) -> bool:
+    """Return whether a Setu payload should be auto-revoked for this scope."""
+    normalized = str(scope.value if isinstance(scope, AutoRevokeScopeStr) else scope)
+    if normalized == AutoRevokeScopeStr.ALL.value:
+        return True
+    if normalized == AutoRevokeScopeStr.R18.value:
+        return is_r18
+    if normalized == AutoRevokeScopeStr.SFW.value:
+        return not is_r18
+    return False
+
+
 class NapcatStreamModeStr(str, Enum):
     """NapCat stream upload modes."""
+
+    DISABLED = "disabled"
+    FALLBACK = "fallback"
+    ALWAYS = "always"
+
+
+class NapcatLocalFileModeStr(str, Enum):
+    """NapCat local file passthrough modes."""
 
     DISABLED = "disabled"
     FALLBACK = "fallback"
@@ -91,7 +120,7 @@ class AccessControlModeStr(str, Enum):
 class ProviderConfig(BaseModel):
     """Configuration for a single API provider (Lolicon or Atri)."""
 
-    image_size: ImageSize = ImageSize.ORIGINAL
+    image_size: ImageSize = ImageSize.REGULAR
     proxy: str = ""
     aspect_ratio: AspectRatio | None = None
     uid: list[int] = Field(default_factory=list)
@@ -136,6 +165,18 @@ class TagAliasTemplateConfig(BaseModel):
     aliases: list[str] = Field(default_factory=list)
 
 
+class PlatformTransportConfig(BaseModel):
+    """Optional platform transport config supplied via template_list."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    template_key: str = Field("", alias="__template_key")
+    stream_mode: NapcatStreamModeStr = NapcatStreamModeStr.FALLBACK
+    stream_chunk_kb: int = Field(default=64, ge=1)
+    local_file_mode: NapcatLocalFileModeStr = NapcatLocalFileModeStr.DISABLED
+    local_file_allowed_roots: list[str] = Field(default_factory=list)
+
+
 class SetuGeneralConfig(BaseModel):
     """Setu general configuration."""
 
@@ -150,11 +191,18 @@ class SetuGeneralConfig(BaseModel):
 class DeliveryConfig(BaseModel):
     """Image delivery configuration."""
 
-    send_mode: SendModeStr = SendModeStr.IMAGE
+    send_mode: SendModeStr = SendModeStr.AUTO
     r18_docx_mode: bool = True
-    auto_revoke_r18: bool = False
+    auto_revoke_scope: AutoRevokeScopeStr = AutoRevokeScopeStr.NONE
     auto_revoke_delay: int = Field(default=30, ge=5, le=300)
+    platform_transports: list[PlatformTransportConfig] = Field(default_factory=list)
+    # 兼容旧版平铺 NapCat 配置；新配置入口是 platform_transports 模板。
     napcat_stream_mode: NapcatStreamModeStr = NapcatStreamModeStr.FALLBACK
+    napcat_stream_chunk_kb: int = Field(default=64, ge=1)
+    napcat_local_file_mode: NapcatLocalFileModeStr = NapcatLocalFileModeStr.DISABLED
+    napcat_local_file_allowed_roots: list[str] = Field(default_factory=list)
+    compress_enabled: bool = False
+    compress_max_mb: int = Field(default=4, ge=1, le=30)
 
 
 class HtmlCardConfig(BaseModel):
@@ -189,28 +237,28 @@ class CacheConfig(BaseModel):
 class MessagesFetchingConfig(BaseModel):
     """Fetching message configuration."""
 
-    enabled: bool = True
+    enabled: bool = False
     text: str = "正在获取图片，请稍候..."
 
 
 class MessagesFoundConfig(BaseModel):
     """Found message configuration."""
 
-    enabled: bool = True
+    enabled: bool = False
     text: str = "找到 {count} 张符合要求的图片~"
 
 
 class MessagesSendFailedConfig(BaseModel):
     """Send failed message configuration."""
 
-    enabled: bool = True
+    enabled: bool = False
     text: str = "图片发送失败，请稍后再试。"
 
 
 class MessageTextConfig(BaseModel):
     """Generic user-facing message configuration."""
 
-    enabled: bool = True
+    enabled: bool = False
     text: str = ""
 
 
@@ -221,7 +269,7 @@ class MessageOverrideConfig(BaseModel):
 
     template_key: str = Field("", alias="__template_key")
     message_key: str = ""
-    enabled: bool = True
+    enabled: bool = False
     text: str = ""
 
 
@@ -233,6 +281,11 @@ class MessagesConfig(BaseModel):
     found: MessagesFoundConfig = Field(default_factory=MessagesFoundConfig)
     send_failed: MessagesSendFailedConfig = Field(
         default_factory=MessagesSendFailedConfig
+    )
+    revoke_scheduled: MessageTextConfig = Field(
+        default_factory=lambda: MessageTextConfig(
+            text="已设置自动撤回，将在 {revoke_delay} 秒后撤回。"
+        )
     )
     rate_limited: MessageTextConfig = Field(
         default_factory=lambda: MessageTextConfig(
@@ -364,7 +417,7 @@ class SessionTemplateItem(BaseModel):
     session_type: str = "group"
     content_mode: str = ""
     r18_docx_mode: str = ""
-    auto_revoke_r18: str = ""
+    auto_revoke_scope: str = ""
     send_mode: str = ""
 
 
@@ -479,9 +532,14 @@ class SetuPluginConfig(BaseModel):
         return self.delivery.r18_docx_mode
 
     @property
+    def auto_revoke_scope(self) -> str:
+        """Get auto-revoke content scope."""
+        return self.delivery.auto_revoke_scope.value
+
+    @property
     def auto_revoke_r18(self) -> bool:
-        """Get auto-revoke R18."""
-        return self.delivery.auto_revoke_r18
+        """Compatibility view: true when the current scope revokes R18."""
+        return should_auto_revoke(self.delivery.auto_revoke_scope, is_r18=True)
 
     @property
     def auto_revoke_delay(self) -> int:
@@ -491,7 +549,44 @@ class SetuPluginConfig(BaseModel):
     @property
     def napcat_stream_mode(self) -> str:
         """Get NapCat stream upload mode."""
+        transport = self._platform_transport("napcat")
+        if transport is not None:
+            return transport.stream_mode.value
         return self.delivery.napcat_stream_mode.value
+
+    @property
+    def napcat_stream_chunk_kb(self) -> int:
+        """Get NapCat stream upload chunk size in KiB."""
+        transport = self._platform_transport("napcat")
+        if transport is not None:
+            return transport.stream_chunk_kb
+        return self.delivery.napcat_stream_chunk_kb
+
+    @property
+    def napcat_local_file_mode(self) -> str:
+        """Get NapCat local file passthrough mode."""
+        transport = self._platform_transport("napcat")
+        if transport is not None:
+            return transport.local_file_mode.value
+        return self.delivery.napcat_local_file_mode.value
+
+    @property
+    def napcat_local_file_allowed_roots(self) -> list[str]:
+        """Get extra local roots allowed for NapCat file passthrough."""
+        transport = self._platform_transport("napcat")
+        if transport is not None:
+            return list(transport.local_file_allowed_roots)
+        return list(self.delivery.napcat_local_file_allowed_roots)
+
+    @property
+    def compress_enabled(self) -> bool:
+        """Get whether pre-send image compression is enabled."""
+        return self.delivery.compress_enabled
+
+    @property
+    def compress_max_mb(self) -> int:
+        """Get per-image compression target size in MiB."""
+        return self.delivery.compress_max_mb
 
     @property
     def html_card_strategy(self) -> str:
@@ -592,6 +687,21 @@ class SetuPluginConfig(BaseModel):
         return self._provider_config("atri").exclude_ai
 
     @property
+    def sexnyan_proxy(self) -> str:
+        """Get SexNyan proxy."""
+        return self._provider_config("sexnyan").proxy
+
+    @property
+    def sexnyan_uid(self) -> list[int]:
+        """Get SexNyan author UID list."""
+        return self._provider_config("sexnyan").uid
+
+    @property
+    def sexnyan_keyword(self) -> str:
+        """Get SexNyan keyword."""
+        return self._provider_config("sexnyan").keyword
+
+    @property
     def fortune_api_type(self) -> str:
         """Get fortune API type."""
         return self.fortune.api_type
@@ -642,6 +752,13 @@ class SetuPluginConfig(BaseModel):
             if item.template_key == provider:
                 return item
         return ProviderConfig()
+
+    def _platform_transport(self, platform: str) -> PlatformTransportConfig | None:
+        """Return platform transport config from matching template."""
+        for item in self.delivery.platform_transports:
+            if item.template_key == platform:
+                return item
+        return None
 
     @property
     def msg_fetching_enabled(self) -> bool:
@@ -737,10 +854,22 @@ class SetuPluginConfig(BaseModel):
         """Get Fortune group access control mode."""
         return self.safety.fortune_group_access_control_mode.value
 
-    def format_found_message(self, count: int, revoke_delay: int | None = None) -> str:
+    def format_found_message(
+        self,
+        count: int,
+        revoke_delay: int | None = None,
+        scope: str = "",
+        r18: bool | str = "",
+    ) -> str:
         """Format found message with placeholders."""
         return (
-            self.resolve_message("found", count=count, revoke_delay=revoke_delay or "")
+            self.resolve_message(
+                "found",
+                count=count,
+                revoke_delay=revoke_delay or "",
+                scope=scope,
+                r18=r18,
+            )
             or ""
         )
 
