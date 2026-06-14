@@ -18,6 +18,7 @@
 - **撤回提示时机调整**：`found` 不再在图片发送前承诺撤回；`revoke_scheduled` 仅在至少一个 `message_id` 成功调度后发送，且默认关闭
 - **NapCat stream 语义明确化**：`stream_chunk_kb` 只控制每块原始字节大小，`upload_file_stream.chunk_data` 仍按 NapCat 协议使用 base64 字符串
 - **Plugin Pages 加载顺序加固**：Dashboard 显式在 `app.js` 前加载 bridge SDK，并动态等待 bridge 注入，减少 iframe 加载竞态
+- **访问控制表单改为对话框**：访问控制标签页主视图保留模式设置与记录表格，新增/编辑记录改由 modal 承载，减少页面拥挤
 
 ### Fixed
 - **旧自动撤回配置迁移**：`delivery.auto_revoke_r18` 会迁移为 `auto_revoke_scope`，旧会话覆盖 `setu.auto_revoke` 会迁移为 `setu.auto_revoke_scope` 并写回 `session_overrides.json`

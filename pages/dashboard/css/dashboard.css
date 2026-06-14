@@ -18,6 +18,14 @@
   gap: 16px;
 }
 
+.dashboard-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .dashboard-content {
   display: flex;
   min-height: 0;
@@ -239,9 +247,13 @@
     flex-direction: column;
   }
 
+  .dashboard-actions {
+    width: 100%;
+  }
+
   .dashboard-header .btn,
   .dashboard-header button {
-    width: 100%;
+    flex: 1 1 auto;
   }
 
   .action-bar {

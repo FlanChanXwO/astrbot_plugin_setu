@@ -63,6 +63,22 @@ def test_dashboard_bridge_is_resolved_dynamically() -> None:
     assert "current.apiPost(path, payload)" in app_js
 
 
+def test_access_control_entry_form_is_modal_dialog() -> None:
+    dashboard_dir = Path(__file__).resolve().parents[1] / "pages" / "dashboard"
+    html = (dashboard_dir / "index.html").read_text(encoding="utf-8")
+
+    access_tab_start = html.index('id="tab-accessControl"')
+    modal_start = html.index('id="access-entry-modal"')
+    access_main = html[access_tab_start:modal_start]
+    modal_html = html[modal_start:]
+
+    assert 'data-action="ac-open-create"' in access_main
+    assert 'data-action="ac-save-entry"' not in access_main
+    assert 'role="dialog"' in modal_html
+    assert 'aria-modal="true"' in modal_html
+    assert 'data-action="ac-save-entry"' in modal_html
+
+
 @pytest.mark.asyncio
 async def test_initialize_uses_plugin_config_not_context_config(
     monkeypatch, tmp_path, sample_config_dict

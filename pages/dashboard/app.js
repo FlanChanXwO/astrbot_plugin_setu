@@ -476,6 +476,9 @@
         },
         entries: [],
         form: this.emptyForm(),
+        formError: '',
+        dialogOpen: false,
+        lastFocus: null,
         filters: { search: '', feature: '', subject_type: '', list_type: '' },
       });
 
@@ -526,14 +529,16 @@
       var s = this.store;
       var payload = Object.assign({}, s.form, { target_id: s.form.target_id.trim(), note: s.form.note.trim() });
       if (!payload.target_id) {
-        globalStore.showToast('ID 不能为空', 'error');
+        self.setFormError('ID 不能为空，请填写用户 ID 或群组 ID。');
+        qs('#field-target-id').focus();
         return;
       }
+      s.formError = '';
       s.loading = true;
       self.renderButtons();
       apiPost('access-control/entries/upsert', payload).then(apiResult).then(function () {
         s.form = self.emptyForm();
-        self.renderForm();
+        self.closeEntryModal(false, true);
         return self.reload();
       }).then(function () {
         globalStore.showToast('记录已保存');
@@ -547,8 +552,7 @@
 
     editEntry: function (entry) {
       this.store.form = Object.assign({}, this.emptyForm(), entry);
-      this.renderForm();
-      qs('#field-target-id').focus();
+      this.openEntryModal();
     },
 
     deleteEntry: function (id) {
@@ -558,7 +562,10 @@
       s.loading = true;
       self.renderButtons();
       apiPost('access-control/entries/delete', { id: id }).then(apiResult).then(function () {
-        if (s.form.id === id) s.form = self.emptyForm();
+        if (s.form.id === id) {
+          s.form = self.emptyForm();
+          self.closeEntryModal(false, true);
+        }
         return self.reload();
       }).then(function () {
         self.renderForm();
@@ -573,6 +580,43 @@
 
     resetForm: function () {
       this.store.form = this.emptyForm();
+      this.store.formError = '';
+      this.renderForm();
+      qs('#field-target-id').focus();
+    },
+
+    openCreateEntry: function () {
+      this.store.form = this.emptyForm();
+      this.openEntryModal();
+    },
+
+    openEntryModal: function () {
+      var s = this.store;
+      s.dialogOpen = true;
+      s.formError = '';
+      s.lastFocus = document.activeElement;
+      this.renderForm();
+      window.setTimeout(function () {
+        var target = qs('#field-target-id');
+        if (target) target.focus();
+      }, 0);
+    },
+
+    closeEntryModal: function (resetForm, force) {
+      var s = this.store;
+      if (s.loading && !force) return;
+      s.dialogOpen = false;
+      s.formError = '';
+      if (resetForm !== false) s.form = this.emptyForm();
+      this.renderForm();
+      if (s.lastFocus && typeof s.lastFocus.focus === 'function') {
+        s.lastFocus.focus();
+      }
+      s.lastFocus = null;
+    },
+
+    setFormError: function (message) {
+      this.store.formError = message || '';
       this.renderForm();
     },
 
@@ -626,6 +670,17 @@
       qs('#field-list-type').value = this.store.form.list_type;
       qs('#field-target-id').value = this.store.form.target_id;
       qs('#field-note').value = this.store.form.note;
+      this.renderModal();
+      var error = qs('#entry-form-error');
+      error.textContent = this.store.formError;
+      error.hidden = !this.store.formError;
+    },
+
+    renderModal: function () {
+      var modal = qs('#access-entry-modal');
+      modal.hidden = !this.store.dialogOpen;
+      modal.setAttribute('aria-hidden', this.store.dialogOpen ? 'false' : 'true');
+      document.body.classList.toggle('modal-open', this.store.dialogOpen);
     },
 
     renderEntries: function () {
@@ -677,6 +732,8 @@
 
       qsa('[data-action^="ac-"]').forEach(function (btn) {
         var action = btn.dataset.action;
+        if (action === 'ac-open-create') btn.addEventListener('click', function () { self.openCreateEntry(); });
+        if (action === 'ac-close-entry-modal') btn.addEventListener('click', function () { self.closeEntryModal(); });
         if (action === 'ac-reload') btn.addEventListener('click', function () { self.reload(); });
         if (action === 'ac-save-modes') btn.addEventListener('click', function () { self.saveModes(); });
         if (action === 'ac-save-entry') btn.addEventListener('click', function () { self.saveEntry(); });
@@ -698,6 +755,11 @@
       qs('#field-list-type').addEventListener('change', function (e) { s.form.list_type = e.target.value; });
       qs('#field-target-id').addEventListener('input', function (e) { s.form.target_id = e.target.value; });
       qs('#field-note').addEventListener('input', function (e) { s.form.note = e.target.value; });
+
+      qs('[data-modal-close="access-entry"]').addEventListener('click', function () { self.closeEntryModal(); });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && s.dialogOpen) self.closeEntryModal();
+      });
 
       qs('#filter-search').addEventListener('input', function (e) {
         s.filters.search = e.target.value;
