@@ -223,6 +223,7 @@ class ImageSender:
 
         # 逐批发送,聚合结果
         any_pending = False
+        any_failed = False
         all_failed = True
         scheduled_revoke_count = 0
 
@@ -246,6 +247,8 @@ class ImageSender:
                 )
                 if send_result.pending:
                     any_pending = True
+            else:
+                any_failed = True
 
         # 聚合结果决定最终 yield
         if all_failed:
@@ -258,6 +261,24 @@ class ImageSender:
             fail_message = self._send_failed_message()
             if fail_message:
                 yield event.plain_result(fail_message)
+        elif any_failed:
+            self._log.warning(
+                "[send] partial batch failure: session=%s, count=%d, mode=%s",
+                self._session_label(event),
+                payload.count,
+                effective_mode,
+            )
+            fail_message = self._send_failed_message()
+            if fail_message:
+                yield event.plain_result(fail_message)
+            result: dict[str, Any] = {
+                "send_success": False,
+                "image_count": payload.count,
+                "partial_failure": True,
+            }
+            if any_pending:
+                result["send_pending"] = True
+            yield result
         else:
             await self._send_post_delivery_messages(
                 event,
@@ -877,9 +898,13 @@ class ImageSender:
             return None
         if config and hasattr(config, "format_found_message"):
             return config.format_found_message(count, revoke_delay, scope, r18)
-        if revoke_delay and revoke_delay > 0:
-            return f"找到 {count} 张图，将在 {revoke_delay} 秒后撤回"
-        return f"找到 {count} 张图"
+        return self._resolve_message(
+            "found",
+            count=count,
+            revoke_delay=revoke_delay or "",
+            scope=scope,
+            r18=r18,
+        )
 
     def _send_failed_message(self) -> str | None:
         config = self._config

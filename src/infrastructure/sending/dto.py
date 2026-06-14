@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from collections.abc import Iterable
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -37,23 +37,34 @@ class SendAttemptResult:
     message_ids: tuple[str, ...] = ()
 
     @classmethod
-    def success(cls, message_ids: Iterable[str] = ()) -> "SendAttemptResult":
+    def success(cls, message_ids: str | Iterable[object] = ()) -> "SendAttemptResult":
         """发送链路已确认成功。"""
-        return cls(accepted=True, message_ids=tuple(str(item) for item in message_ids))
+        return cls(accepted=True, message_ids=_normalize_message_ids(message_ids))
 
     @classmethod
     def pending_delivery(
-        cls, reason: str, message_ids: Iterable[str] = ()
+        cls, reason: str, message_ids: str | Iterable[object] = ()
     ) -> "SendAttemptResult":
         """平台侧可能已接收，但本地未拿到最终确认。"""
         return cls(
             accepted=True,
             pending=True,
             reason=reason,
-            message_ids=tuple(str(item) for item in message_ids),
+            message_ids=_normalize_message_ids(message_ids),
         )
 
     @classmethod
     def failed(cls, reason: str = "") -> "SendAttemptResult":
         """发送链路已确认失败，可以进入后续 fallback。"""
         return cls(accepted=False, reason=reason)
+
+
+def _normalize_message_ids(message_ids: str | Iterable[object]) -> tuple[str, ...]:
+    """Normalize message ids without treating one string id as a character list."""
+    items = (message_ids,) if isinstance(message_ids, str) else message_ids
+    normalized: list[str] = []
+    for item in items:
+        text = str(item).strip()
+        if text:
+            normalized.append(text)
+    return tuple(normalized)

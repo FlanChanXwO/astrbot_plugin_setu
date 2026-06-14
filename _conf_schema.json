@@ -282,7 +282,7 @@
                             "stream_chunk_kb": {
                                 "type": "int",
                                 "description": "流式分块(KiB)",
-                                "hint": "仅影响 upload_file_stream 的单块原始字节大小；chunk_data 仍为 base64 字符串。",
+                                "hint": "仅影响 upload_file_stream 的单块原始字节大小；chunk_data 仍为 base64 字符串，体积约增加 1/3。过大分块可能被部分 WebSocket 实现拒绝，不确定时建议保持 64-512 KiB。",
                                 "default": 64,
                                 "slider": {"min": 1, "max": 4096, "step": 1}
                             },

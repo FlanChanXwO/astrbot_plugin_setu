@@ -8,6 +8,7 @@ from astrbot_plugin_setu.src.domain.access_control import AccessPolicy
 from astrbot_plugin_setu.src.domain.fortune import FortuneResult, FortuneSeed
 from astrbot_plugin_setu.src.domain.setu import SetuRequest
 from astrbot_plugin_setu.src.infrastructure.sending import SendOptions
+from astrbot_plugin_setu.src.infrastructure.sending.dto import SendAttemptResult
 
 
 class TestSetuRequest:
@@ -148,3 +149,21 @@ class TestSendOptions:
         assert options.napcat_stream_chunk_kb == 64
         assert options.napcat_local_file_mode == "disabled"
         assert options.napcat_local_file_allowed_roots == ()
+
+
+class TestSendAttemptResult:
+    """Test SendAttemptResult value object."""
+
+    def test_message_id_string_is_one_id(self) -> None:
+        """A single string message id should not be split into characters."""
+        result = SendAttemptResult.success("123")
+
+        assert result.message_ids == ("123",)
+
+    def test_message_ids_are_trimmed_and_filtered(self) -> None:
+        """Empty ids should not be carried into revoke scheduling."""
+        result = SendAttemptResult.pending_delivery(
+            "pending", ["  abc  ", "", "   ", 42]
+        )
+
+        assert result.message_ids == ("abc", "42")

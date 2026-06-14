@@ -862,13 +862,14 @@ class SetuPluginConfig(BaseModel):
         r18: bool | str = "",
     ) -> str:
         """Format found message with placeholders."""
+        r18_text = "是" if r18 is True else "否" if r18 is False else r18
         return (
             self.resolve_message(
                 "found",
                 count=count,
                 revoke_delay=revoke_delay or "",
                 scope=scope,
-                r18=r18,
+                r18=r18_text,
             )
             or ""
         )

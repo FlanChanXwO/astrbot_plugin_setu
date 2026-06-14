@@ -107,7 +107,8 @@ class SetuCommandHandler:
         """Internal handler for regex-triggered setu requests."""
         config = get_config()
         if not config:
-            yield event.plain_result("配置未加载")
+            if result := self._plain(event, self._message("config_not_loaded")):
+                yield result
             return
 
         match = re.match(SETU_REGEX_PATTERN, event.message_str.strip())
@@ -182,7 +183,8 @@ class SetuCommandHandler:
         """Internal handler for /setu command."""
         config = get_config()
         if not config:
-            yield event.plain_result("配置未加载")
+            if result := self._plain(event, self._message("config_not_loaded")):
+                yield result
             return
 
         has_perm, msg = await self._check_access(event, config)

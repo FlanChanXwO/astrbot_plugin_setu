@@ -23,6 +23,7 @@
 ### Fixed
 - **旧自动撤回配置迁移**：`delivery.auto_revoke_r18` 会迁移为 `auto_revoke_scope`，旧会话覆盖 `setu.auto_revoke` 会迁移为 `setu.auto_revoke_scope` 并写回 `session_overrides.json`
 - **撤回失败不影响发图**：拿不到 `message_id`、平台不支持 `delete_msg` 或删除失败时只记录 warning，不阻止图片发送，也不触发重复 fallback
+- **发送结果聚合更准确**：修复字符串 `message_id` 被拆成字符列表，以及部分批次失败时仍误报整体成功的问题
 - **forward + stream 死路规避**：forward 模式失败时不再尝试 NapCat stream 回退，避免 `Node.to_dict()` 对 `stream://` 强制 base64 转换后崩溃
 - **本地直通安全校验**：`file://` 直通只允许真实文件、发送缓存目录或配置的绝对共享目录，拒绝不存在路径、目录、相对路径与跳出根目录的 symlink
 - **命令空文案保护**：Setu 与 Fortune 命令均跳过空配置提示，避免 message config 默认关闭后发出空白消息

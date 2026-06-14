@@ -176,6 +176,64 @@ async def test_send_images_treats_napcat_none_ack_as_pending(
 
 
 @pytest.mark.asyncio
+async def test_send_images_reports_partial_batch_failure(
+    tmp_path: Path, mock_event, sample_config_dict
+) -> None:
+    """部分批次失败时不能把整体发送报告为成功。"""
+    image_paths: list[Path] = []
+    for index in range(9):
+        image_path = tmp_path / f"image-{index}.jpg"
+        image_path.write_bytes(f"image-data-{index}".encode())
+        image_paths.append(image_path)
+
+    context = MagicMock()
+    sent_results: list[Any] = []
+
+    async def send_message(_origin: str, result: Any) -> dict[str, str]:
+        sent_results.append(result)
+        if len(sent_results) == 2:
+            raise RuntimeError("second batch failed")
+        return {"message_id": "first-batch"}
+
+    context.send_message = AsyncMock(side_effect=send_message)
+    set_plugin_context(context)
+
+    mock_event.platform.name = "aiocqhttp"
+    mock_event.bot = MagicMock()
+    mock_event.bot.call_action = AsyncMock()
+
+    config_dict = sample_config_dict.copy()
+    config_dict["delivery"] = {
+        **sample_config_dict["delivery"],
+        "send_mode": "image",
+        "napcat_stream_mode": "disabled",
+    }
+    config_dict["html_card"] = {
+        **sample_config_dict["html_card"],
+        "strategy": "never",
+    }
+    config = SetuPluginConfig(**config_dict)
+    payload = ImagePayload(
+        urls=tuple(f"https://example.com/image-{index}.jpg" for index in range(9)),
+        raw_bytes=(),
+        file_paths=tuple(image_paths),
+        items=tuple(image_paths),
+        r18=False,
+        tags=(),
+    )
+
+    results = [
+        item async for item in ImageSender(config).send_images(payload, mock_event)
+    ]
+
+    assert results == [
+        {"send_success": False, "image_count": 9, "partial_failure": True}
+    ]
+    assert context.send_message.await_count == 2
+    mock_event.bot.call_action.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_send_images_does_not_fallback_when_forward_ack_times_out(
     tmp_path: Path, mock_event, sample_config_dict
 ) -> None:

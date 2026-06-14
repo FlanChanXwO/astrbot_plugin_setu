@@ -5,7 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-_TRUE_VALUES = {"1", "true", "yes", "on", "enable", "enabled", "开", "开启", "启用"}
+from ...application.session_config.keys import TRUE_VALUES
 
 
 def record_config_heal(changes: list[str], path: str, reason: str) -> None:
@@ -64,4 +64,4 @@ def _legacy_revoke_bool_to_scope(value: Any) -> str:
     if isinstance(value, bool):
         return "r18" if value else "none"
     text = str(value or "").strip().lower()
-    return "r18" if text in _TRUE_VALUES else "none"
+    return "r18" if text in TRUE_VALUES else "none"

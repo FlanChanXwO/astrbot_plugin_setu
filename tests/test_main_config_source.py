@@ -27,6 +27,7 @@ def test_conf_schema_exposes_sexnyan_and_platform_transport_templates() -> None:
     napcat_items = transport_templates["napcat"]["items"]
     assert napcat_items["local_file_mode"]["default"] == "disabled"
     assert napcat_items["stream_chunk_kb"]["default"] == 64
+    assert "WebSocket" in napcat_items["stream_chunk_kb"]["hint"]
     assert napcat_items["local_file_allowed_roots"]["default"] == []
 
     provider_templates = schema["api"]["items"]["provider_overrides"]["templates"]
@@ -77,6 +78,21 @@ def test_access_control_entry_form_is_modal_dialog() -> None:
     assert 'role="dialog"' in modal_html
     assert 'aria-modal="true"' in modal_html
     assert 'data-action="ac-save-entry"' in modal_html
+
+
+def test_setu_config_not_loaded_message_uses_resolver() -> None:
+    source_path = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "infrastructure"
+        / "astrbot"
+        / "commands"
+        / "setu.py"
+    )
+    source = source_path.read_text(encoding="utf-8")
+
+    assert 'plain_result("配置未加载")' not in source
+    assert 'self._message("config_not_loaded")' in source
 
 
 @pytest.mark.asyncio

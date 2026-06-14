@@ -70,6 +70,21 @@ def test_resolve_message_supports_placeholders(sample_config_dict) -> None:
     assert text == "一次最多只能获取7张哦~"
 
 
+def test_format_found_message_normalizes_bool_r18_placeholder(
+    sample_config_dict,
+) -> None:
+    config_dict = sample_config_dict.copy()
+    config_dict["messages"] = {
+        **sample_config_dict["messages"],
+        "found": {"enabled": True, "text": "r18={r18}"},
+    }
+    config = SetuPluginConfig(**config_dict)
+
+    assert config.format_found_message(1, r18=True) == "r18=是"
+    assert config.format_found_message(1, r18=False) == "r18=否"
+    assert config.format_found_message(1, r18="R18") == "r18=R18"
+
+
 def test_config_healer_migrates_legacy_auto_revoke_scope() -> None:
     schema = {
         "delivery": {
@@ -94,6 +109,11 @@ def test_config_healer_migrates_legacy_auto_revoke_scope() -> None:
         {"delivery": {"auto_revoke_r18": False}}, schema
     )
     assert healed["delivery"] == {"auto_revoke_scope": "none"}
+
+    healed, _ = heal_astrbot_plugin_config(
+        {"delivery": {"auto_revoke_r18": "是"}}, schema
+    )
+    assert healed["delivery"] == {"auto_revoke_scope": "r18"}
 
 
 def test_config_healer_keeps_new_auto_revoke_scope_when_legacy_exists() -> None:
@@ -120,7 +140,7 @@ def test_config_healer_keeps_new_auto_revoke_scope_when_legacy_exists() -> None:
 
 def test_config_healer_migrates_legacy_session_template_revoke_scope() -> None:
     healed, changes = heal_astrbot_plugin_config(
-        {"session_configs": [{"session_id": "g1", "auto_revoke_r18": "true"}]},
+        {"session_configs": [{"session_id": "g1", "auto_revoke_r18": "y"}]},
         {},
     )
 
