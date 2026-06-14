@@ -216,7 +216,7 @@
       } else {
         delete this.store.form.overrides[key];
       }
-      this.renderKeyCards();
+      this.refreshKeyCard(key);
     },
 
     effectiveValue: function (key) {
@@ -350,10 +350,39 @@
       });
     },
 
+    findKeyItem: function (key) {
+      return this.store.keys.find(function (item) { return item.key === key; });
+    },
+
+    findKeyCard: function (key) {
+      return qsa('.key-card', qs('#key-list')).find(function (card) {
+        return card.dataset.key === key;
+      });
+    },
+
+    refreshKeyCard: function (key) {
+      var item = this.findKeyItem(key);
+      var oldCard = this.findKeyCard(key);
+      if (!item || !oldCard) {
+        this.renderKeyCards();
+        return;
+      }
+      var card = this.buildKeyCard(item, this.hasOverride(key), this.effectiveValue(key));
+      oldCard.replaceWith(card);
+    },
+
+    updateKeyCardValue: function (key) {
+      var card = this.findKeyCard(key);
+      if (!card) return;
+      var effectiveValue = card.querySelector('.key-effective-value');
+      if (effectiveValue) effectiveValue.textContent = this.displayValue(this.effectiveValue(key));
+    },
+
     buildKeyCard: function (item, hasOv, effVal) {
       var self = this;
       var card = document.createElement('div');
       card.className = 'key-card';
+      card.dataset.key = item.key;
 
       var labelDiv = document.createElement('div');
       labelDiv.innerHTML = '<strong>' + escHtml(item.label) + '</strong><div class="key-name">' + escHtml(item.key) + '</div>';
@@ -374,7 +403,7 @@
       card.appendChild(globalDiv);
 
       var effDiv = document.createElement('div');
-      effDiv.innerHTML = '<div class="key-name">生效值</div><strong>' + escHtml(self.displayValue(effVal)) + '</strong>';
+      effDiv.innerHTML = '<div class="key-name">生效值</div><strong class="key-effective-value">' + escHtml(self.displayValue(effVal)) + '</strong>';
       card.appendChild(effDiv);
 
       if (hasOv) {
@@ -392,7 +421,7 @@
           });
           sel.addEventListener('change', function (e) {
             self.store.form.overrides[item.key] = e.target.value;
-            self.renderKeyCards();
+            self.updateKeyCardValue(item.key);
           });
           inputRow.appendChild(sel);
         } else if (item.type === 'bool') {
@@ -403,16 +432,24 @@
           boolCb.checked = !!self.store.form.overrides[item.key];
           boolCb.addEventListener('change', function (e) {
             self.store.form.overrides[item.key] = e.target.checked;
-            self.renderKeyCards();
+            var value = boolDiv.querySelector('.toggle-value');
+            if (value) value.textContent = self.displayValue(e.target.checked);
+            self.updateKeyCardValue(item.key);
           });
           boolDiv.appendChild(boolCb);
-          boolDiv.appendChild(document.createTextNode(self.displayValue(self.store.form.overrides[item.key])));
+          var boolValue = document.createElement('span');
+          boolValue.className = 'toggle-value';
+          boolValue.textContent = self.displayValue(self.store.form.overrides[item.key]);
+          boolDiv.appendChild(boolValue);
           inputRow.appendChild(boolDiv);
         } else {
           var inp = document.createElement('input');
           inp.className = 'search-input';
           inp.value = self.store.form.overrides[item.key] != null ? self.store.form.overrides[item.key] : '';
-          inp.addEventListener('input', function (e) { self.store.form.overrides[item.key] = e.target.value; });
+          inp.addEventListener('input', function (e) {
+            self.store.form.overrides[item.key] = e.target.value;
+            self.updateKeyCardValue(item.key);
+          });
           inputRow.appendChild(inp);
         }
         card.appendChild(inputRow);

@@ -20,6 +20,9 @@
   --soft-primary: rgba(60, 150, 202, 0.08);
   --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08);
   --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.08);
+  --motion-fast: 120ms ease;
+  --focus-ring: rgba(60, 150, 202, 0.22);
+  --pressed-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.12);
   --radius: 8px;
   --font-sans: -apple-system, "BlinkMacSystemFont", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "PingFang SC", "Microsoft YaHei", sans-serif;
   --font-mono: "SF Mono", "Monaco", "Cascadia Code", "Liberation Mono", monospace;
@@ -40,6 +43,8 @@
     --soft-primary: rgba(96, 165, 250, 0.14);
     --shadow-sm: 0 1px 3px rgba(2, 6, 23, 0.24);
     --shadow-md: 0 12px 28px rgba(2, 6, 23, 0.32);
+    --focus-ring: rgba(96, 165, 250, 0.28);
+    --pressed-shadow: inset 0 1px 2px rgba(2, 6, 23, 0.32);
   }
 }
 
@@ -58,6 +63,8 @@
   --soft-primary: rgba(96, 165, 250, 0.14);
   --shadow-sm: 0 1px 3px rgba(2, 6, 23, 0.24);
   --shadow-md: 0 12px 28px rgba(2, 6, 23, 0.32);
+  --focus-ring: rgba(96, 165, 250, 0.28);
+  --pressed-shadow: inset 0 1px 2px rgba(2, 6, 23, 0.32);
 }
 
 html {
@@ -163,5 +170,20 @@ body.ready #boot-mask {
   .section-header-actions,
   .actions {
     width: 100%;
+  }
+}
+
+/* 遵循系统减弱动态效果设置，只保留必要状态变化。 */
+@media (prefers-reduced-motion: reduce) {
+  .btn,
+  button,
+  input,
+  select,
+  textarea,
+  .search-input,
+  .select-input,
+  .nav-item,
+  .sub-table tbody tr {
+    transition: none !important;
   }
 }

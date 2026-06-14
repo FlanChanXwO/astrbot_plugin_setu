@@ -19,7 +19,7 @@ textarea,
   color: var(--text-primary);
   font: inherit;
   font-size: 13px;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  transition: border-color var(--motion-fast), background-color var(--motion-fast), color var(--motion-fast);
 }
 
 textarea {
@@ -35,7 +35,16 @@ textarea:focus,
   outline: none;
   border-color: var(--primary-color);
   background: var(--card-bg);
-  box-shadow: 0 0 0 3px rgba(60, 150, 202, 0.12);
+  box-shadow: none;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+.search-input:focus-visible,
+.select-input:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 input::placeholder,

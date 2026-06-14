@@ -83,10 +83,12 @@ def test_access_control_entry_form_is_modal_dialog() -> None:
 def test_dashboard_nav_and_empty_state_stay_plain_and_compact() -> None:
     dashboard_dir = Path(__file__).resolve().parents[1] / "pages" / "dashboard"
     html = (dashboard_dir / "index.html").read_text(encoding="utf-8")
+    base_css = (dashboard_dir / "css" / "base.css").read_text(encoding="utf-8")
     nav_css = (dashboard_dir / "css" / "nav.css").read_text(encoding="utf-8")
     dashboard_css = (dashboard_dir / "css" / "dashboard.css").read_text(
         encoding="utf-8"
     )
+    forms_css = (dashboard_dir / "css" / "forms.css").read_text(encoding="utf-8")
     components_css = (dashboard_dir / "css" / "components.css").read_text(
         encoding="utf-8"
     )
@@ -99,6 +101,24 @@ def test_dashboard_nav_and_empty_state_stay_plain_and_compact() -> None:
     assert ".table-section > .section-header .action-bar" in dashboard_css
     assert "width: 100%" in dashboard_css
     assert "border: 1px dashed" not in components_css
+    assert "transform: translateY" not in components_css
+    assert "transform 0.18s" not in components_css
+    assert ":focus-visible" in forms_css
+    assert "box-shadow 0.15s" not in forms_css
+    assert "prefers-reduced-motion: reduce" in base_css
+    assert "transition: none !important" in base_css
+    assert "0 4px 12px" not in components_css
+
+
+def test_dashboard_session_key_cards_update_locally() -> None:
+    app_js_path = Path(__file__).resolve().parents[1] / "pages" / "dashboard" / "app.js"
+    app_js = app_js_path.read_text(encoding="utf-8")
+
+    assert "refreshKeyCard: function (key)" in app_js
+    assert "updateKeyCardValue: function (key)" in app_js
+    assert "card.dataset.key = item.key;" in app_js
+    assert "oldCard.replaceWith(card);" in app_js
+    assert "self.updateKeyCardValue(item.key);" in app_js
 
 
 def test_setu_config_not_loaded_message_uses_resolver() -> None:
