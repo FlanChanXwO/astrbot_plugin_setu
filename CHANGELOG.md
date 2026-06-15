@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.1.1] - 2026-06-15
+
+### Changed
+- **移除未使用的 Playwright 依赖**：`requirements.txt` 不再声明 `playwright>=1.45.0`。经全仓库静态/动态引用面诊断确认，插件代码从未直接或间接引用 Playwright；运势卡片渲染经 AstrBot `html_renderer.render_custom_template()` 走 network t2i 终结点（HTTP），本插件进程无需 Playwright。移除后减少约 4.5GB 浏览器二进制与 148MB pip 包的无谓占用，渲染行为与失败语义不变（t2i 不可用时照常返回失败）
+
 ## [2.1.0] - 2026-06-14
 
 ### Added
