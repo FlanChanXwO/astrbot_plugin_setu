@@ -7,9 +7,9 @@ Each section mirrors the _conf_schema.json structure for WebUI compatibility.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any
+from typing import Any, ClassVar
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class ImageSize(str, Enum):
@@ -237,28 +237,28 @@ class CacheConfig(BaseModel):
 class MessagesFetchingConfig(BaseModel):
     """Fetching message configuration."""
 
-    enabled: bool = False
+    enabled: bool = True
     text: str = "正在获取图片，请稍候..."
 
 
 class MessagesFoundConfig(BaseModel):
     """Found message configuration."""
 
-    enabled: bool = False
+    enabled: bool = True
     text: str = "找到 {count} 张符合要求的图片~"
 
 
 class MessagesSendFailedConfig(BaseModel):
     """Send failed message configuration."""
 
-    enabled: bool = False
+    enabled: bool = True
     text: str = "图片发送失败，请稍后再试。"
 
 
 class MessageTextConfig(BaseModel):
     """Generic user-facing message configuration."""
 
-    enabled: bool = False
+    enabled: bool = True
     text: str = ""
 
 
@@ -268,13 +268,59 @@ class MessageOverrideConfig(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     template_key: str = Field("", alias="__template_key")
-    message_key: str = ""
-    enabled: bool = False
-    text: str = ""
+    message_key: str = "fetching"
+    enabled: bool = True
+    text: str = "正在获取图片，请稍候..."
 
 
 class MessagesConfig(BaseModel):
     """User-facing message configuration."""
+
+    _DEFAULT_TEXTS: ClassVar[dict[str, str]] = {
+        "fetching": "正在获取图片，请稍候...",
+        "found": "找到 {count} 张符合要求的图片~",
+        "send_failed": "图片发送失败，请稍后再试。",
+        "revoke_scheduled": "已设置自动撤回，将在 {revoke_delay} 秒后撤回。",
+        "rate_limited": "你有一个请求正在处理中，请稍后再试~",
+        "config_not_loaded": "配置未加载",
+        "error_invalid_request": "请求参数无效",
+        "error_internal_server": "服务器内部错误",
+        "invalid_count": "数量解析失败，图片数量必须在{min_count}-{max_count}之间",
+        "max_count_exceeded": "一次最多只能获取{max_count}张哦~",
+        "count_out_of_range": "图片数量必须在{min_count}-{max_count}之间哦~",
+        "fetch_timeout": "获取图片超时，网络可能不稳定，请稍后再试。",
+        "fetch_failed": "获取图片失败，请稍后再试",
+        "no_result": "未找到{tags_info}符合要求的图片~",
+        "empty_payload": "运气不好，一张图都没拿到...",
+        "r18_docx_failed": "R18 Docx 封装失败，请稍后再试或联系管理员。",
+        "fortune_group_only": "此命令仅支持群聊",
+        "fortune_missing_user_id": "请指定用户ID",
+        "fortune_get_failed": "获取运势失败: {error}",
+        "fortune_refresh_failed": "刷新运势失败: {error}",
+        "fortune_refresh_group_failed": "刷新群运势失败: {error}",
+        "fortune_refresh_all_failed": "刷新全局运势失败: {error}",
+        "fortune_refresh_group_done": "已刷新本群 {count} 位用户的今日运势",
+        "fortune_refresh_all_done": "已刷新全局 {count} 位用户的今日运势",
+        "fortune_enabled_group_done": "运势功能已开启",
+        "fortune_disabled_group_done": "运势功能已关闭",
+        "fortune_block_user_done": "用户 {user_id} 已添加到运势黑名单",
+        "fortune_unblock_user_done": "用户 {user_id} 已从运势黑名单移除",
+        "fortune_trust_user_done": "用户 {user_id} 已添加到运势白名单",
+        "fortune_untrust_user_done": "用户 {user_id} 已从运势白名单移除",
+    }
+
+    @model_validator(mode="before")
+    @classmethod
+    def fill_missing_message_text(cls, data: Any) -> Any:
+        """Fill default text when a message object omits the text field."""
+        if not isinstance(data, dict):
+            return data
+        patched = dict(data)
+        for key, default_text in cls._DEFAULT_TEXTS.items():
+            value = patched.get(key)
+            if isinstance(value, dict) and "text" not in value:
+                patched[key] = {**value, "text": default_text}
+        return patched
 
     message_overrides: list[MessageOverrideConfig] = Field(default_factory=list)
     fetching: MessagesFetchingConfig = Field(default_factory=MessagesFetchingConfig)

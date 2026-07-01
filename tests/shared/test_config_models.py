@@ -4,7 +4,12 @@ import pytest
 from pydantic import ValidationError
 
 from astrbot_plugin_setu.src.infrastructure.config import heal_astrbot_plugin_config
-from astrbot_plugin_setu.src.shared.config import SetuPluginConfig, should_auto_revoke
+from astrbot_plugin_setu.src.shared.config import (
+    MessageOverrideConfig,
+    MessagesConfig,
+    SetuPluginConfig,
+    should_auto_revoke,
+)
 
 
 def test_provider_config_accepts_empty_aspect_ratio(sample_config_dict) -> None:
@@ -48,10 +53,44 @@ def test_auto_revoke_scope_validation(sample_config_dict) -> None:
         SetuPluginConfig(**invalid)
 
 
-def test_message_send_failed_enabled_default_false() -> None:
+def test_message_defaults_are_enabled_with_non_empty_text() -> None:
+    messages = MessagesConfig()
+    dumped = messages.model_dump()
+
+    for key, value in dumped.items():
+        if key == "message_overrides":
+            continue
+        assert value["enabled"] is True, key
+        assert value["text"].strip(), key
+
+
+def test_message_override_template_default_is_enabled_with_text() -> None:
+    override = MessageOverrideConfig()
+
+    assert override.message_key == "fetching"
+    assert override.enabled is True
+    assert override.text == "正在获取图片，请稍候..."
+
+
+def test_message_send_failed_enabled_default_true() -> None:
     config = SetuPluginConfig()
-    assert config.msg_send_failed_enabled is False
-    assert config.resolve_message("send_failed") is None
+    assert config.msg_send_failed_enabled is True
+    assert config.resolve_message("send_failed") == "图片发送失败，请稍后再试。"
+
+
+def test_message_defaults_fill_text_when_message_object_omits_text() -> None:
+    config = SetuPluginConfig(
+        messages={
+            "fetch_failed": {"enabled": True},
+            "revoke_scheduled": {"enabled": True},
+        }
+    )
+
+    assert config.resolve_message("fetch_failed") == "获取图片失败，请稍后再试"
+    assert (
+        config.resolve_message("revoke_scheduled", revoke_delay=30)
+        == "已设置自动撤回，将在 30 秒后撤回。"
+    )
 
 
 def test_resolve_message_supports_placeholders(sample_config_dict) -> None:
