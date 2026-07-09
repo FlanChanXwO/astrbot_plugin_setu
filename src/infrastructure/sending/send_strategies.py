@@ -24,6 +24,14 @@ from .platform_capabilities import is_onebot_like_platform
 
 logger = get_logger()
 
+_UNKNOWN_PLATFORM_NAME = "unknown"
+_ONEBOT_UNCERTAIN_DELIVERY_RETCODE = "1200"
+_ONEBOT_SENDMSG_TIMEOUT_MARKERS = (
+    "Timeout",
+    "NodeIKernelMsgService/sendMsg",
+    "NodeIKernelMsgListener/onMsgInfoListUpdate",
+)
+
 
 def extract_message_ids(response: Any) -> tuple[str, ...]:
     """Extract OneBot message ids from common adapter response shapes."""
@@ -63,6 +71,14 @@ def extract_message_ids(response: Any) -> tuple[str, ...]:
 
 def _get_bot_client(event: AstrMessageEvent) -> Any | None:
     return getattr(event, "bot", None) or getattr(event, "_bot", None)
+
+
+def _platform_name(event: AstrMessageEvent) -> str:
+    """统一提取平台名，避免不同发送策略对缺省值处理不一致。"""
+    return (
+        str(getattr(getattr(event, "platform", None), "name", "") or "")
+        or _UNKNOWN_PLATFORM_NAME
+    )
 
 
 def _onebot_target(event: AstrMessageEvent) -> tuple[str, int] | None:
@@ -137,6 +153,23 @@ async def _component_to_onebot_message(comp: Any) -> dict[str, Any]:
         return await _maybe_await(to_dict())
 
     return comp.toDict()
+
+
+def _is_onebot_uncertain_delivery_error(exc: Exception) -> bool:
+    """识别 OneBot/NapCat 已提交但确认超时的发送错误。"""
+    retcode = getattr(exc, "retcode", None)
+    text = " ".join(
+        str(value)
+        for value in (
+            getattr(exc, "message", ""),
+            getattr(exc, "wording", ""),
+            str(exc),
+        )
+        if value
+    )
+    return str(retcode) == _ONEBOT_UNCERTAIN_DELIVERY_RETCODE and all(
+        marker in text for marker in _ONEBOT_SENDMSG_TIMEOUT_MARKERS
+    )
 
 
 class SendStrategy(ABC):
@@ -217,7 +250,7 @@ class DirectSendStrategy(SendStrategy):
         try:
             send_result = await self._send_message(event, chain, auto_revoke)
 
-            platform_name = getattr(event.platform, "name", "unknown")
+            platform_name = _platform_name(event)
 
             # AstrBot/OneBot 适配器偶尔会在平台侧已接收消息时返回 None。
             # 这里不把不确定返回当作失败，避免图片仍在延迟送达时误触发回退策略。
@@ -246,18 +279,34 @@ class DirectSendStrategy(SendStrategy):
             )
             return SendAttemptResult.success(message_ids)
         except TimeoutError as exc:
+            platform_name = _platform_name(event)
             # 发送接口超时后无法判断平台侧是否已经接收消息，重发 fallback 可能造成重复图片。
             logger.warning(
                 "[send] direct send confirmation timed out, treating as pending delivery: platform=%s, chain=%d, error=%s",
-                getattr(event.platform, "name", "unknown"),
+                platform_name,
                 len(chain),
                 exc,
             )
             return SendAttemptResult.pending_delivery("send confirmation timed out")
         except Exception as exc:
+            platform_name = _platform_name(event)
+            if is_onebot_like_platform(
+                platform_name
+            ) and _is_onebot_uncertain_delivery_error(exc):
+                # NapCat/NTQQ 可能已经发送成功但没有等到本地确认；
+                # 此时进入 stream/HTML fallback 会把同一张图再发一遍。
+                logger.warning(
+                    "[send] direct send returned uncertain OneBot timeout, treating as pending delivery: platform=%s, chain=%d, error=%s",
+                    platform_name,
+                    len(chain),
+                    exc,
+                )
+                return SendAttemptResult.pending_delivery(
+                    "onebot send confirmation timed out"
+                )
             logger.exception(
                 "[send] direct send failed: platform=%s, chain=%d, error=%s",
-                getattr(event.platform, "name", "unknown"),
+                platform_name,
                 len(chain),
                 exc,
             )
@@ -279,7 +328,7 @@ class DirectSendStrategy(SendStrategy):
     def _requires_onebot_passthrough(
         self, event: AstrMessageEvent, chain: list[Any], auto_revoke: bool
     ) -> bool:
-        platform_name = getattr(getattr(event, "platform", None), "name", "") or ""
+        platform_name = _platform_name(event)
         if not is_onebot_like_platform(platform_name):
             return False
         if auto_revoke and any(
@@ -420,7 +469,7 @@ class ForwardSendStrategy(SendStrategy):
     ) -> SendAttemptResult:
         """Send forward nodes and expose whether fallback is safe."""
         try:
-            platform_name = getattr(getattr(event, "platform", None), "name", "")
+            platform_name = _platform_name(event)
             if auto_revoke and is_onebot_like_platform(platform_name):
                 attempted, raw_result = await self._send_nodes_raw(event, nodes)
                 if attempted:
@@ -455,14 +504,28 @@ class ForwardSendStrategy(SendStrategy):
             logger.info("[forward] send completed: nodes=%d", len(nodes))
             return SendAttemptResult.success(extract_message_ids(send_result))
         except TimeoutError as exc:
+            platform_name = _platform_name(event)
             # 合并转发也可能在平台侧已接收后只丢失本地确认，立刻 fallback 会造成重复消息。
             logger.warning(
-                "[forward] send confirmation timed out, treating as pending delivery: nodes=%d, error=%s",
+                "[forward] send confirmation timed out, treating as pending delivery: platform=%s, nodes=%d, error=%s",
+                platform_name,
                 len(nodes),
                 exc,
             )
             return SendAttemptResult.pending_delivery("forward confirmation timed out")
         except Exception as exc:
+            platform_name = _platform_name(event)
+            if is_onebot_like_platform(
+                platform_name
+            ) and _is_onebot_uncertain_delivery_error(exc):
+                logger.warning(
+                    "[forward] send returned uncertain OneBot timeout, treating as pending delivery: nodes=%d, error=%s",
+                    len(nodes),
+                    exc,
+                )
+                return SendAttemptResult.pending_delivery(
+                    "forward onebot confirmation timed out"
+                )
             logger.exception(
                 "[forward] send failed: nodes=%d, error=%s",
                 len(nodes),

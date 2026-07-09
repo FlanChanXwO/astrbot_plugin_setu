@@ -53,6 +53,21 @@ def without_delivery_notices(config_dict: dict[str, Any]) -> dict[str, Any]:
     return updated
 
 
+class OneBotActionTimeout(Exception):
+    retcode = 1200
+    message = (
+        "Timeout: NTEvent serviceAndMethod:NodeIKernelMsgService/sendMsg "
+        "ListenerName:NodeIKernelMsgListener/onMsgInfoListUpdate EventRet:\n{}\n"
+    )
+    wording = message
+
+
+class GenericRetcodeTimeout(Exception):
+    retcode = 1200
+    message = "Timeout while waiting for an unrelated operation"
+    wording = message
+
+
 @pytest.fixture(autouse=True)
 def reset_singletons() -> None:
     """Keep config/context singletons isolated."""
@@ -188,6 +203,134 @@ async def test_send_images_treats_napcat_none_ack_as_pending(
     assert results == [{"send_success": True, "image_count": 1, "send_pending": True}]
     assert context.send_message.await_count == 1
     mock_event.bot.call_action.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_send_images_treats_onebot_action_timeout_as_pending(
+    tmp_path: Path, mock_event, sample_config_dict
+) -> None:
+    """NapCat raw action 超时确认不触发 stream fallback，避免同图重复发送。"""
+    image_path = tmp_path / "shared" / "image.jpg"
+    image_path.parent.mkdir()
+    image_path.write_bytes(b"image-data")
+
+    context = MagicMock()
+    context.send_message = AsyncMock()
+    set_plugin_context(context)
+
+    mock_event.platform.name = "aiocqhttp"
+    mock_event.get_group_id.return_value = "123456"
+    mock_event.get_sender_id.return_value = "654321"
+    mock_event.bot = MagicMock()
+    mock_event.bot.send_group_msg = AsyncMock(side_effect=OneBotActionTimeout())
+    mock_event.bot.call_action = AsyncMock()
+
+    config_dict = with_napcat_transport(
+        without_delivery_notices(sample_config_dict),
+        local_file_mode="always",
+        local_file_allowed_roots=[str(tmp_path / "shared")],
+        stream_mode="fallback",
+    )
+    config = SetuPluginConfig(**config_dict)
+    payload = ImagePayload(
+        urls=("https://example.com/image.jpg",),
+        raw_bytes=(),
+        file_paths=(image_path,),
+        items=(image_path,),
+        r18=False,
+        tags=(),
+    )
+
+    results = [
+        item async for item in ImageSender(config).send_images(payload, mock_event)
+    ]
+
+    assert results == [{"send_success": True, "image_count": 1, "send_pending": True}]
+    mock_event.bot.send_group_msg.assert_awaited_once()
+    mock_event.bot.call_action.assert_not_called()
+    context.send_message.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_direct_send_strategy_keeps_action_timeout_failure_on_non_onebot(
+    mock_event,
+) -> None:
+    """非 OneBot 平台不把 NapCat/NTQQ timeout 归类为待确认投递。"""
+    context = MagicMock()
+    context.send_message = AsyncMock(side_effect=OneBotActionTimeout())
+    strategy = DirectSendStrategy(context)
+
+    mock_event.platform.name = "telegram"
+
+    result = await strategy.send_with_status(
+        mock_event,
+        [Comp.Image.fromBytes(b"image-data")],
+    )
+
+    assert result.accepted is False
+    assert result.pending is False
+
+
+@pytest.mark.asyncio
+async def test_forward_send_strategy_keeps_action_timeout_failure_on_non_onebot(
+    mock_event,
+) -> None:
+    """合并转发同样只在 OneBot-like 平台识别 NapCat/NTQQ 待确认投递。"""
+    context = MagicMock()
+    context.send_message = AsyncMock(side_effect=OneBotActionTimeout())
+    strategy = ForwardSendStrategy(context)
+
+    mock_event.platform.name = "telegram"
+    mock_event.get_self_id.return_value = "10000"
+
+    result = await strategy.send_with_status(
+        mock_event,
+        [Comp.Image.fromBytes(b"image-data")],
+    )
+
+    assert result.accepted is False
+    assert result.pending is False
+
+
+@pytest.mark.asyncio
+async def test_forward_send_strategy_treats_onebot_action_timeout_as_pending(
+    mock_event,
+) -> None:
+    """OneBot-like 合并转发遇到 NapCat/NTQQ 确认超时时不触发后续 fallback。"""
+    context = MagicMock()
+    context.send_message = AsyncMock(side_effect=OneBotActionTimeout())
+    strategy = ForwardSendStrategy(context)
+
+    mock_event.platform.name = "aiocqhttp"
+    mock_event.get_self_id.return_value = "10000"
+
+    result = await strategy.send_with_status(
+        mock_event,
+        [Comp.Image.fromBytes(b"image-data")],
+    )
+
+    assert result.accepted is True
+    assert result.pending is True
+
+
+@pytest.mark.asyncio
+async def test_direct_send_strategy_rejects_unrelated_onebot_retcode_timeout(
+    mock_event,
+) -> None:
+    """OneBot retcode 1200 也必须匹配已知 sendMsg 超时模式才视为待投递。"""
+    context = MagicMock()
+    context.send_message = AsyncMock(side_effect=GenericRetcodeTimeout())
+    strategy = DirectSendStrategy(context)
+
+    mock_event.platform.name = "aiocqhttp"
+
+    result = await strategy.send_with_status(
+        mock_event,
+        [Comp.Image.fromBytes(b"image-data")],
+    )
+
+    assert result.accepted is False
+    assert result.pending is False
 
 
 @pytest.mark.asyncio
