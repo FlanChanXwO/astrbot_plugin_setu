@@ -191,6 +191,60 @@ async def test_send_images_treats_napcat_none_ack_as_pending(
 
 
 @pytest.mark.asyncio
+async def test_send_images_treats_onebot_action_timeout_as_pending(
+    tmp_path: Path, mock_event, sample_config_dict
+) -> None:
+    """NapCat raw action 超时确认不触发 stream fallback，避免同图重复发送。"""
+    image_path = tmp_path / "shared" / "image.jpg"
+    image_path.parent.mkdir()
+    image_path.write_bytes(b"image-data")
+
+    class ActionTimeout(Exception):
+        retcode = 1200
+        message = (
+            "Timeout: NTEvent serviceAndMethod:NodeIKernelMsgService/sendMsg "
+            "ListenerName:NodeIKernelMsgListener/onMsgInfoListUpdate EventRet:\n{}\n"
+        )
+        wording = message
+
+    context = MagicMock()
+    context.send_message = AsyncMock()
+    set_plugin_context(context)
+
+    mock_event.platform.name = "aiocqhttp"
+    mock_event.get_group_id.return_value = "123456"
+    mock_event.get_sender_id.return_value = "654321"
+    mock_event.bot = MagicMock()
+    mock_event.bot.send_group_msg = AsyncMock(side_effect=ActionTimeout())
+    mock_event.bot.call_action = AsyncMock()
+
+    config_dict = with_napcat_transport(
+        without_delivery_notices(sample_config_dict),
+        local_file_mode="always",
+        local_file_allowed_roots=[str(tmp_path / "shared")],
+        stream_mode="fallback",
+    )
+    config = SetuPluginConfig(**config_dict)
+    payload = ImagePayload(
+        urls=("https://example.com/image.jpg",),
+        raw_bytes=(),
+        file_paths=(image_path,),
+        items=(image_path,),
+        r18=False,
+        tags=(),
+    )
+
+    results = [
+        item async for item in ImageSender(config).send_images(payload, mock_event)
+    ]
+
+    assert results == [{"send_success": True, "image_count": 1, "send_pending": True}]
+    mock_event.bot.send_group_msg.assert_awaited_once()
+    mock_event.bot.call_action.assert_not_called()
+    context.send_message.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_send_images_reports_partial_batch_failure(
     tmp_path: Path, mock_event, sample_config_dict
 ) -> None:

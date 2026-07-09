@@ -139,6 +139,23 @@ async def _component_to_onebot_message(comp: Any) -> dict[str, Any]:
     return comp.toDict()
 
 
+def _is_onebot_uncertain_delivery_error(exc: Exception) -> bool:
+    """识别 OneBot/NapCat 已提交但确认超时的发送错误。"""
+    retcode = getattr(exc, "retcode", None)
+    text = " ".join(
+        str(value)
+        for value in (
+            getattr(exc, "message", ""),
+            getattr(exc, "wording", ""),
+            str(exc),
+        )
+        if value
+    )
+    return str(retcode) == "1200" and (
+        "Timeout" in text or "sendMsg" in text or "onMsgInfoListUpdate" in text
+    )
+
+
 class SendStrategy(ABC):
     """Abstract base class for send strategies."""
 
@@ -255,9 +272,24 @@ class DirectSendStrategy(SendStrategy):
             )
             return SendAttemptResult.pending_delivery("send confirmation timed out")
         except Exception as exc:
+            platform_name = getattr(event.platform, "name", "unknown")
+            if is_onebot_like_platform(
+                platform_name
+            ) and _is_onebot_uncertain_delivery_error(exc):
+                # NapCat/NTQQ 可能已经发送成功但没有等到本地确认；
+                # 此时进入 stream/HTML fallback 会把同一张图再发一遍。
+                logger.warning(
+                    "[send] direct send returned uncertain OneBot timeout, treating as pending delivery: platform=%s, chain=%d, error=%s",
+                    platform_name,
+                    len(chain),
+                    exc,
+                )
+                return SendAttemptResult.pending_delivery(
+                    "onebot send confirmation timed out"
+                )
             logger.exception(
                 "[send] direct send failed: platform=%s, chain=%d, error=%s",
-                getattr(event.platform, "name", "unknown"),
+                platform_name,
                 len(chain),
                 exc,
             )
@@ -463,6 +495,18 @@ class ForwardSendStrategy(SendStrategy):
             )
             return SendAttemptResult.pending_delivery("forward confirmation timed out")
         except Exception as exc:
+            platform_name = getattr(getattr(event, "platform", None), "name", "")
+            if is_onebot_like_platform(
+                platform_name
+            ) and _is_onebot_uncertain_delivery_error(exc):
+                logger.warning(
+                    "[forward] send returned uncertain OneBot timeout, treating as pending delivery: nodes=%d, error=%s",
+                    len(nodes),
+                    exc,
+                )
+                return SendAttemptResult.pending_delivery(
+                    "forward onebot confirmation timed out"
+                )
             logger.exception(
                 "[forward] send failed: nodes=%d, error=%s",
                 len(nodes),
