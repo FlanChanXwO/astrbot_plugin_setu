@@ -31,6 +31,42 @@ class DownloadAttemptResult:
         return self.item is not None
 
 
+def select_replenish_urls(
+    urls: list[str],
+    missing: int,
+    *,
+    reported_urls: set[str],
+    completed_urls: set[str],
+    download_attempts: dict[str, int],
+    max_rounds: int,
+) -> tuple[list[str], int]:
+    """从一次 provider 响应中选择不超过当前缺口数量的候选 URL。"""
+    selected: list[str] = []
+    retry_candidates: list[str] = []
+    round_seen: set[str] = set()
+    exhausted_urls = 0
+
+    for url in urls:
+        if not url or url in completed_urls or url in round_seen:
+            continue
+        round_seen.add(url)
+        if download_attempts.get(url, 0) >= max_rounds:
+            exhausted_urls += 1
+            continue
+        if url in reported_urls:
+            retry_candidates.append(url)
+            continue
+        if len(selected) < missing:
+            selected.append(url)
+
+    for url in retry_candidates:
+        if len(selected) >= missing:
+            break
+        selected.append(url)
+
+    return selected, exhausted_urls
+
+
 class DownloadingSetuImageProvider(SetuImageProvider):
     """Provider base that materializes image URLs into sendable local data."""
 
@@ -69,17 +105,15 @@ class DownloadingSetuImageProvider(SetuImageProvider):
                     break
 
                 urls = await self._fetch_replenish_urls(request, missing, round_index)
-                round_seen: set[str] = set()
-                fresh_urls = []
-                exhausted_urls = 0
-                for url in urls:
-                    if not url or url in completed_urls or url in round_seen:
-                        continue
-                    round_seen.add(url)
-                    if download_attempts.get(url, 0) >= max_rounds:
-                        exhausted_urls += 1
-                        continue
-                    fresh_urls.append(url)
+                fresh_urls, exhausted_urls = select_replenish_urls(
+                    urls,
+                    missing,
+                    reported_urls=reported_urls,
+                    completed_urls=completed_urls,
+                    download_attempts=download_attempts,
+                    max_rounds=max_rounds,
+                )
+                for url in fresh_urls:
                     if url not in reported_urls:
                         reported_urls.add(url)
                         all_urls.append(url)
