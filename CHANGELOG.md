@@ -4,6 +4,7 @@
 
 ### Fixed
 - **Provider over-return 数量保护**：修复部分上游 API 在请求 `num=1` 时返回多个图片 URL，导致插件连续发送 2 张图片的问题。下载层现在会按本轮缺口裁剪候选 URL，只下载并交付用户请求数量的图片；正常补齐、下载重试、缓存落盘和 sender 发送策略不变。新增回归测试覆盖「请求 1 张但 provider 返回 2 个 URL」场景。
+- **NapCat 发送确认超时去重**：修复 OneBot/NapCat `send_group_msg` 返回 retcode `1200` 且 wording 为 NTQQ `sendMsg` 超时时被误判为可重试失败的问题。此类结果现在仅在 OneBot-like 平台且匹配已知 NTQQ `sendMsg` 超时标记时视为 pending delivery，不再继续触发普通发送、stream 或 HTML fallback，避免平台实际已送达但确认丢失时把同一张图片重复发送；非 OneBot 平台和不相关的 retcode `1200` 超时仍按普通失败处理。
 
 ## [2.1.1] - 2026-06-15
 
