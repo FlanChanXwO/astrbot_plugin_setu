@@ -28,7 +28,7 @@ _DIMENSION_LADDER: tuple[int, ...] = (2560, 1920, 1280)
 
 def _try_import_pil():
     try:
-        from PIL import Image  # noqa: PLC0415
+        from PIL import Image
 
         return Image
     except Exception:  # pragma: no cover - environment without Pillow

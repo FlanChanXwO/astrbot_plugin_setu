@@ -186,8 +186,8 @@ async def send_with_filter_chain(
 
 
 __all__ = [
-    "SendResult",
     "SendFilter",
+    "SendResult",
     "direct_send_filter",
     "forward_send_filter",
     "html_card_filter",

@@ -49,8 +49,9 @@ def test_compress_image_handles_invalid_image_data():
 )
 def test_compress_image_reduces_jpeg_below_target():
     """Valid JPEG should be compressed toward the target size."""
-    from PIL import Image
     import io
+
+    from PIL import Image
 
     # Create a large test JPEG
     img = Image.new("RGB", (2000, 2000), color=(255, 0, 0))

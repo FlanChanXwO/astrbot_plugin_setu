@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from astrbot_plugin_setu.src.domain.exceptions import (
     AccessDeniedError,
     FortuneException,

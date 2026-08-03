@@ -15,8 +15,8 @@ from .keys import (
 from .service import SessionConfigService, get_global_session_config_values
 
 __all__ = [
-    "JsonValue",
     "SESSION_CONFIG_KEYS",
+    "JsonValue",
     "SessionConfigKey",
     "SessionConfigRecord",
     "SessionConfigService",

@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from astrbot_plugin_setu.src.infrastructure.persistence import (
     FileBackedAccessControlRepo,
 )

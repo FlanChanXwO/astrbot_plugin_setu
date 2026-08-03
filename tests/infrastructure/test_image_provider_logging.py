@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
-
+from astrbot_plugin_setu.src.domain.setu import SetuRequest
 from astrbot_plugin_setu.src.infrastructure.providers import (
     base as provider_base_module,
 )
@@ -12,7 +12,6 @@ from astrbot_plugin_setu.src.infrastructure.providers.base import (
     DownloadingSetuImageProvider,
     select_replenish_urls,
 )
-from astrbot_plugin_setu.src.domain.setu import SetuRequest
 
 
 class DummyProvider(DownloadingSetuImageProvider):

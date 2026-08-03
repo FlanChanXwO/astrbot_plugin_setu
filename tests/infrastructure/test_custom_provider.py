@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from astrbot_plugin_setu.src.infrastructure.providers.custom import CustomApiProvider
 
 

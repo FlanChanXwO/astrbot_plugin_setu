@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 import astrbot.api.message_components as Comp
+import pytest
 from astrbot_plugin_setu.src.application.setu import ImagePayload
 from astrbot_plugin_setu.src.infrastructure.astrbot.config import (
     clear_config,
@@ -24,8 +24,8 @@ from astrbot_plugin_setu.src.infrastructure.sending.send_strategies import (
     DirectSendStrategy,
     ForwardSendStrategy,
 )
-from astrbot_plugin_setu.src.shared.send_cache import clear_send_cache, init_send_cache
 from astrbot_plugin_setu.src.shared.config import SetuPluginConfig
+from astrbot_plugin_setu.src.shared.send_cache import clear_send_cache, init_send_cache
 
 
 def with_napcat_transport(config_dict: dict[str, Any], **values: Any) -> dict[str, Any]:

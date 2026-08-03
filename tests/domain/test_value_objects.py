@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 from astrbot_plugin_setu.src.application.setu import ImagePayload
 from astrbot_plugin_setu.src.domain.access_control import AccessPolicy
 from astrbot_plugin_setu.src.domain.fortune import FortuneResult, FortuneSeed

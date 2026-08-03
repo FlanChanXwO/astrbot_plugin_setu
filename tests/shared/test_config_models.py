@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
-
 from astrbot_plugin_setu.src.infrastructure.config import heal_astrbot_plugin_config
 from astrbot_plugin_setu.src.shared.config import (
     MessageOverrideConfig,
@@ -10,6 +8,7 @@ from astrbot_plugin_setu.src.shared.config import (
     SetuPluginConfig,
     should_auto_revoke,
 )
+from pydantic import ValidationError
 
 
 def test_provider_config_accepts_empty_aspect_ratio(sample_config_dict) -> None:

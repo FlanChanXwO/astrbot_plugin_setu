@@ -3,7 +3,6 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from astrbot_plugin_setu.src.application.setu.dto import ImagePayload
 from astrbot_plugin_setu.src.application.setu.get_images import GetSetuImagesUseCase
 

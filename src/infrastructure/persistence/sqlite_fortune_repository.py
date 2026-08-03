@@ -39,10 +39,9 @@ class SQLiteFortuneRepo(FortuneRepository):
         """Initialize database tables."""
         import aiosqlite
 
-        async with self._db_lock:
-            async with aiosqlite.connect(str(self._db_path)) as db:
-                await db.execute(
-                    """
+        async with self._db_lock, aiosqlite.connect(str(self._db_path)) as db:
+            await db.execute(
+                """
                     CREATE TABLE IF NOT EXISTS fortune_data (
                         user_id   TEXT NOT NULL,
                         username  TEXT,
@@ -59,9 +58,9 @@ class SQLiteFortuneRepo(FortuneRepository):
                         PRIMARY KEY (user_id, date_str)
                     )
                     """
-                )
-                await db.commit()
-                await self._migrate_db(db)
+            )
+            await db.commit()
+            await self._migrate_db(db)
 
     async def _migrate_db(self, db: Any) -> None:
         """Database migration: add missing columns."""
@@ -203,20 +202,19 @@ class SQLiteFortuneRepo(FortuneRepository):
         """Delete all fortune records for a given date."""
         import aiosqlite
 
-        async with self._db_lock:
-            async with aiosqlite.connect(str(self._db_path)) as db:
-                cursor = await db.execute(
-                    "SELECT COUNT(*) FROM fortune_data WHERE date_str = ?",
-                    (date_str,),
-                )
-                row = await cursor.fetchone()
-                count = row[0] if row else 0
+        async with self._db_lock, aiosqlite.connect(str(self._db_path)) as db:
+            cursor = await db.execute(
+                "SELECT COUNT(*) FROM fortune_data WHERE date_str = ?",
+                (date_str,),
+            )
+            row = await cursor.fetchone()
+            count = row[0] if row else 0
 
-                await db.execute(
-                    "DELETE FROM fortune_data WHERE date_str = ?",
-                    (date_str,),
-                )
-                await db.commit()
+            await db.execute(
+                "DELETE FROM fortune_data WHERE date_str = ?",
+                (date_str,),
+            )
+            await db.commit()
 
         return count
 
@@ -242,10 +240,9 @@ class SQLiteFortuneRepo(FortuneRepository):
 
         target_date = date_str or datetime.date.today().isoformat()
         cutoff = (datetime.date.today() - datetime.timedelta(days=days)).isoformat()
-        async with self._db_lock:
-            async with aiosqlite.connect(str(self._db_path)) as db:
-                cursor = await db.execute(
-                    """
+        async with self._db_lock, aiosqlite.connect(str(self._db_path)) as db:
+            cursor = await db.execute(
+                """
                     SELECT user_id,
                            COALESCE(NULLIF(username, ''), user_id) AS username,
                            group_id
@@ -256,9 +253,9 @@ class SQLiteFortuneRepo(FortuneRepository):
                              date_str DESC,
                              rowid DESC
                     """,
-                    (cutoff,),
-                )
-                rows = await cursor.fetchall()
+                (cutoff,),
+            )
+            rows = await cursor.fetchall()
 
         requests: list[FortuneGenerationRequest] = []
         seen: set[str] = set()
@@ -294,14 +291,13 @@ class SQLiteFortuneRepo(FortuneRepository):
 
         import aiosqlite
 
-        async with self._db_lock:
-            async with aiosqlite.connect(str(self._db_path)) as db:
-                await db.execute(
-                    "UPDATE fortune_data SET image_cached = 1, img_url = ? "
-                    "WHERE user_id = ? AND date_str = ?",
-                    (img_url, user_id, date_str),
-                )
-                await db.commit()
+        async with self._db_lock, aiosqlite.connect(str(self._db_path)) as db:
+            await db.execute(
+                "UPDATE fortune_data SET image_cached = 1, img_url = ? "
+                "WHERE user_id = ? AND date_str = ?",
+                (img_url, user_id, date_str),
+            )
+            await db.commit()
 
         return cache_path
 

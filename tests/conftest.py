@@ -14,8 +14,8 @@ for parent in Path(__file__).resolve().parents:
         os.environ.setdefault("ASTRBOT_ROOT", str(parent))
         break
 
-from astrbot.api.event import AstrMessageEvent  # noqa: E402
-from astrbot.core import AstrBotConfig  # noqa: E402
+from astrbot.api.event import AstrMessageEvent
+from astrbot.core import AstrBotConfig
 
 
 @pytest.fixture

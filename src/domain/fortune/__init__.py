@@ -15,8 +15,8 @@ __all__ = [
     "FortuneConfig",
     "FortuneGenerationRequest",
     "FortuneRecord",
-    "FortuneTheme",
-    "FortuneWeights",
     "FortuneResult",
     "FortuneSeed",
+    "FortuneTheme",
+    "FortuneWeights",
 ]

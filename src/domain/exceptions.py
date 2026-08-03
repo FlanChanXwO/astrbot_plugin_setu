@@ -6,19 +6,13 @@ from __future__ import annotations
 class SetuException(Exception):
     """Base exception for Setu domain errors."""
 
-    pass
-
 
 class ProviderError(SetuException):
     """Raised when image provider fails."""
 
-    pass
-
 
 class SendError(SetuException):
     """Raised when image sending fails."""
-
-    pass
 
 
 class AccessDeniedError(SetuException):
@@ -32,16 +26,10 @@ class AccessDeniedError(SetuException):
 class ValidationError(SetuException):
     """Raised when input validation fails."""
 
-    pass
-
 
 class FortuneException(Exception):
     """Base exception for Fortune domain errors."""
 
-    pass
-
 
 class FortuneNotFoundError(FortuneException):
     """Raised when fortune record is not found."""
-
-    pass

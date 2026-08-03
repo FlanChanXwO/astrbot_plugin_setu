@@ -5,7 +5,6 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from astrbot_plugin_setu.main import SetuPlugin
 
 

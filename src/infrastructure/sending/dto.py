@@ -37,14 +37,14 @@ class SendAttemptResult:
     message_ids: tuple[str, ...] = ()
 
     @classmethod
-    def success(cls, message_ids: str | Iterable[object] = ()) -> "SendAttemptResult":
+    def success(cls, message_ids: str | Iterable[object] = ()) -> SendAttemptResult:
         """发送链路已确认成功。"""
         return cls(accepted=True, message_ids=_normalize_message_ids(message_ids))
 
     @classmethod
     def pending_delivery(
         cls, reason: str, message_ids: str | Iterable[object] = ()
-    ) -> "SendAttemptResult":
+    ) -> SendAttemptResult:
         """平台侧可能已接收，但本地未拿到最终确认。"""
         return cls(
             accepted=True,
@@ -54,7 +54,7 @@ class SendAttemptResult:
         )
 
     @classmethod
-    def failed(cls, reason: str = "") -> "SendAttemptResult":
+    def failed(cls, reason: str = "") -> SendAttemptResult:
         """发送链路已确认失败，可以进入后续 fallback。"""
         return cls(accepted=False, reason=reason)
 

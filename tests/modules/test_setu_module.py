@@ -5,7 +5,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
-
 from astrbot_plugin_setu.src.infrastructure.astrbot.commands import (
     SessionConfigCommandHandler,
     SetuCommandHandler,

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-
 from astrbot_plugin_setu.src.infrastructure.permission_service import PermissionService
 
 

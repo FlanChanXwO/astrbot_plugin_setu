@@ -35,14 +35,12 @@ class PermissionService:
         """
         try:
             # Check is_admin method
-            if hasattr(event, "is_admin") and callable(getattr(event, "is_admin")):
+            if hasattr(event, "is_admin") and callable(event.is_admin):
                 if event.is_admin():
                     return True
 
             # Check is_super_user method
-            if hasattr(event, "is_super_user") and callable(
-                getattr(event, "is_super_user")
-            ):
+            if hasattr(event, "is_super_user") and callable(event.is_super_user):
                 if event.is_super_user():
                     return True
 
@@ -56,7 +54,6 @@ class PermissionService:
 
         except AttributeError as e:
             logger.debug("Permission check attr error: %s", e)
-            pass
 
         return False
 
@@ -71,15 +68,12 @@ class PermissionService:
             True if user is super user
         """
         try:
-            if hasattr(event, "is_super_user") and callable(
-                getattr(event, "is_super_user")
-            ):
+            if hasattr(event, "is_super_user") and callable(event.is_super_user):
                 if event.is_super_user():
                     return True
 
         except AttributeError as e:
             logger.debug("Super user check attr error: %s", e)
-            pass
 
         return False
 

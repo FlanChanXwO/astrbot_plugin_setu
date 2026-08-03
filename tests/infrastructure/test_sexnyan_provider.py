@@ -4,7 +4,6 @@ from typing import Any
 
 import httpx
 import pytest
-
 from astrbot_plugin_setu.src.infrastructure.providers.sexnyan import SexNyanRunProvider
 
 

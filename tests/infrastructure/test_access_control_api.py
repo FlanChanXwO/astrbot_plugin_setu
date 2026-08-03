@@ -3,9 +3,8 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
-from quart import Quart
-
 from astrbot_plugin_setu.src.infrastructure.astrbot import access_control_api
+from quart import Quart
 
 
 class MessageConfig:

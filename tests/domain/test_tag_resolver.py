@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 from astrbot_plugin_setu.src.domain.setu import TagResolverService
 
 
