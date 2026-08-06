@@ -21,6 +21,7 @@ def test_parse_gallery_returns_title_and_all_page_urls() -> None:
             "japanese": "日本語タイトル",
             "pretty": "Pretty title",
         },
+        "url": "https://example.com/galleries/493454",
         "pages": [
             {"url": "https://example.com/1.jpg", "width": 1280, "height": 1785},
             {"url": "https://example.com/2.jpg", "width": 1280, "height": 1785},
@@ -31,6 +32,8 @@ def test_parse_gallery_returns_title_and_all_page_urls() -> None:
 
     assert gallery.id == 493454
     assert gallery.title == "Pretty title"
+    assert gallery.upstream_title == "Pretty title"
+    assert gallery.source_url == "https://example.com/galleries/493454"
     assert gallery.page_urls == (
         "https://example.com/1.jpg",
         "https://example.com/2.jpg",

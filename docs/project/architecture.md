@@ -56,7 +56,7 @@ tests/             # 单元与集成测试
 
 1. `/随机本子 [标签...]` 与“来份标签本子”通过 `SetuCommandHandler` 复用 Setu 访问控制和标签解析
 2. `DoujinshiService` 将每个解析后的标签作为重复 `tag` 参数调用随机本子 API，校验响应并按页图顺序写入 PDF
-3. `build_doujinshi_file_chain()` 根据平台构造消息：OneBot/NapCat 使用包含 `File` 的 `Nodes` 合并转发，其他平台使用普通 `File`
+3. `build_doujinshi_file_chain()` 根据平台构造消息：OneBot/NapCat 使用包含 `File` 的 `Nodes` 合并转发；上游实际提供 `title` / `url` 时，按顺序追加对应的文本节点，缺失字段不造占位节点；其他平台使用普通 `File`
 4. 自动撤回内容含 `doujinshi` 且 OneBot 群聊启用时，`DirectSendStrategy` 通过原始合并转发 action 取得 `message_id`，统一撤回调度器立即持久化消息任务
 5. 所有新的消息撤回任务共同写入 `StarTools.get_data_dir()` 返回的运行目录；插件重启后按原绝对到期时间调用 OneBot `delete_msg`。合并转发附件不依赖 `get_group_root_files`，因为 NapCat 可能不会将其作为可删除的群文件返回
 6. PDF 写入同一插件运行目录，供 AstrBot 文件发送链路读取

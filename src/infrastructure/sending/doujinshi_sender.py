@@ -18,7 +18,8 @@ def build_doujinshi_file_chain(
 ) -> list[Comp.BaseMessageComponent]:
     """按平台能力构造 PDF 文件消息链。
 
-    OneBot 平台使用一个包含文件段的合并转发节点；其他平台只返回普通文件段，
+    OneBot 平台使用一个包含文件段的合并转发节点；若上游实际提供标题或
+    原始地址，则按标题、URL 顺序追加纯文本节点。其他平台只返回普通文件段，
     这样不会向不支持 OneBot 节点协议的平台发送不兼容的消息结构。
     """
     file_name = get_doujinshi_file_name(generated)
@@ -26,12 +27,27 @@ def build_doujinshi_file_chain(
     if not supports_forward_messages(platform_name):
         return [file_component]
 
-    node = Comp.Node(
-        content=[file_component],
-        name=generated.gallery.title,
-        uin=str(self_id or ""),
-    )
-    return [Comp.Nodes([node])]
+    uin = str(self_id or "")
+    nodes = [
+        Comp.Node(
+            content=[file_component],
+            name=generated.gallery.title,
+            uin=uin,
+        )
+    ]
+    for label, value in (
+        ("标题", generated.gallery.upstream_title),
+        ("原始地址", generated.gallery.source_url),
+    ):
+        if value:
+            nodes.append(
+                Comp.Node(
+                    content=[Comp.Plain(text=value)],
+                    name=label,
+                    uin=uin,
+                )
+            )
+    return [Comp.Nodes(nodes)]
 
 
 def get_doujinshi_file_name(generated: GeneratedDoujinshiPdf) -> str:

@@ -19,11 +19,17 @@ from ...domain import HTTP_TIMEOUT_SECONDS
 
 @dataclass(frozen=True)
 class DoujinshiGallery:
-    """可下载并封装为 PDF 的本子元数据。"""
+    """可下载并封装为 PDF 的本子元数据。
+
+    ``title`` 可在上游缺失时回退为本地标题；其余两个字段只保留 API
+    实际提供的元数据，供合并转发决定是否追加对应节点。
+    """
 
     id: int
     title: str
     page_urls: tuple[str, ...]
+    upstream_title: str | None = None
+    source_url: str | None = None
 
 
 @dataclass(frozen=True)
@@ -104,12 +110,17 @@ class DoujinshiService:
         if not isinstance(gallery_id, int) or isinstance(gallery_id, bool):
             raise ValueError("随机本子 API 响应缺少有效 ID")
 
-        title = DoujinshiService._resolve_title(payload.get("title"), gallery_id)
+        raw_title = payload.get("title")
+        upstream_title = DoujinshiService._resolve_upstream_title(raw_title)
+        title = DoujinshiService._resolve_title(raw_title, gallery_id)
+        source_url = DoujinshiService._resolve_source_url(payload.get("url"))
         page_urls = DoujinshiService._resolve_page_urls(payload.get("pages"))
         return DoujinshiGallery(
             id=gallery_id,
             title=title,
             page_urls=tuple(page_urls),
+            upstream_title=upstream_title,
+            source_url=source_url,
         )
 
     @staticmethod
@@ -206,12 +217,32 @@ class DoujinshiService:
 
     @staticmethod
     def _resolve_title(raw_title: object, gallery_id: int) -> str:
+        return (
+            DoujinshiService._resolve_upstream_title(raw_title)
+            or f"随机本子 {gallery_id}"
+        )
+
+    @staticmethod
+    def _resolve_upstream_title(raw_title: object) -> str | None:
+        """提取可展示的上游标题，不把本地回退值伪装成上游元数据。"""
         if isinstance(raw_title, Mapping):
             for key in ("pretty", "english", "japanese"):
                 value = raw_title.get(key)
                 if isinstance(value, str) and value.strip():
                     return value.strip()
-        return f"随机本子 {gallery_id}"
+        if isinstance(raw_title, str) and raw_title.strip():
+            return raw_title.strip()
+        return None
+
+    @staticmethod
+    def _resolve_source_url(raw_url: object) -> str | None:
+        """仅保留上游提供的有效原始地址，缺失时交由发送器省略节点。"""
+        if not isinstance(raw_url, str):
+            return None
+        source_url = raw_url.strip()
+        if not source_url or not DoujinshiService._is_http_url(source_url):
+            return None
+        return source_url
 
     @staticmethod
     def _resolve_page_urls(raw_pages: object) -> list[str]:
