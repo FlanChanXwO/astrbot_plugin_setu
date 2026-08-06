@@ -125,4 +125,7 @@ async def test_random_doujinshi_schedules_forward_message_revoke(
         mock_event, "forward-message", 1800
     )
     mock_event.bot.send_group_forward_msg.assert_awaited_once()
+    payload = mock_event.bot.send_group_forward_msg.await_args.kwargs
+    file_value = payload["messages"][0]["data"]["content"][0]["data"]["file"]
+    assert file_value == generated_path.as_uri()
     context.send_message.assert_not_called()

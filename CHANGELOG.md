@@ -16,6 +16,10 @@
 - **正则入口收敛**：色图自然语言与纯文本今日运势改由 `main.py` 的单一 regex 路由函数分发。
 - **撤回调度重构**：移除仅在内存存活的撤回调度，所有已登记的 OneBot `delete_msg` 与 `delete_group_file` 任务均使用统一可恢复调度器。
 
+### Fixed
+
+- **OneBot 本子转发文件 URI**：修复为取得 `message_id` 而直调 `send_group_forward_msg` 时，绕过 aiocqhttp 对绝对本地文件路径的 `file://` 规范化，导致 NapCat 虽接受 action 但 QQ 客户端下载 PDF 失败的问题。
+
 ## [2.1.2] - 2026-07-09
 
 ### Fixed
