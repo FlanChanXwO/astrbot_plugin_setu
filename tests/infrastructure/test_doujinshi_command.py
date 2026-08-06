@@ -1,0 +1,128 @@
+from __future__ import annotations
+
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
+
+import astrbot.api.message_components as Comp
+import pytest
+
+from astrbot_plugin_setu.src.infrastructure.astrbot.commands.setu import (
+    SetuCommandHandler,
+)
+from astrbot_plugin_setu.src.infrastructure.doujinshi import (
+    DoujinshiGallery,
+    GeneratedDoujinshiPdf,
+)
+
+
+class _Config:
+    auto_revoke_delay = 1800
+    auto_revoke_doujinshi_enabled = True
+    tag_alias = "碧蓝档案=blue_archive"
+
+    def resolve_message(self, key: str, **kwargs: object) -> str:
+        return {
+            "doujinshi_fetching": "正在生成 PDF",
+            "doujinshi_failed": "生成失败",
+        }.get(key, "")
+
+
+class _DoujinshiService:
+    def __init__(self, generated: GeneratedDoujinshiPdf) -> None:
+        self.generated = generated
+        self.requested_tags: list[str] | None = None
+
+    async def fetch_random_pdf(
+        self, tags: list[str] | None = None
+    ) -> GeneratedDoujinshiPdf:
+        self.requested_tags = tags
+        return self.generated
+
+
+@pytest.mark.asyncio
+async def test_random_doujinshi_command_yields_onebot_forwarded_pdf(
+    tmp_path: Path, mock_event, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    generated = GeneratedDoujinshiPdf(
+        gallery=DoujinshiGallery(
+            id=123,
+            title="测试本子",
+            page_urls=("https://example.com/1.jpg",),
+        ),
+        path=tmp_path / "doujinshi-123.pdf",
+    )
+    handler = SetuCommandHandler(tmp_path)
+    service = _DoujinshiService(generated)
+    handler._doujinshi_service = service
+    mock_event.platform.name = "aiocqhttp"
+
+    async def allow_access(event, config) -> tuple[bool, str]:
+        return True, ""
+
+    monkeypatch.setattr(
+        "astrbot_plugin_setu.src.infrastructure.astrbot.commands.setu.get_config",
+        lambda: _Config(),
+    )
+    monkeypatch.setattr(handler, "_check_access", allow_access)
+
+    results = [
+        result
+        async for result in handler.random_doujinshi_command(
+            mock_event, tags="blue_archive"
+        )
+    ]
+
+    assert mock_event.plain_result.call_args.args == ("正在生成 PDF",)
+    assert service.requested_tags == ["碧蓝档案"]
+    assert isinstance(results[-1].result_chain[0], Comp.Nodes)
+    assert isinstance(results[-1].result_chain[0].nodes[0].content[0], Comp.File)
+
+
+@pytest.mark.asyncio
+async def test_random_doujinshi_schedules_forward_message_revoke(
+    tmp_path: Path, mock_event, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    generated_path = tmp_path / "doujinshi-123.pdf"
+    generated_path.write_bytes(b"test-pdf")
+    generated = GeneratedDoujinshiPdf(
+        gallery=DoujinshiGallery(
+            id=123,
+            title="测试本子",
+            page_urls=("https://example.com/1.jpg",),
+        ),
+        path=generated_path,
+    )
+    context = MagicMock()
+    scheduler = MagicMock()
+    scheduler.schedule_revoke = AsyncMock(return_value=True)
+    handler = SetuCommandHandler(
+        tmp_path,
+        plugin_context=context,
+        revoke_scheduler=scheduler,
+    )
+    handler._doujinshi_service = _DoujinshiService(generated)
+    mock_event.platform.name = "aiocqhttp"
+    mock_event.get_group_id.return_value = "10001"
+    mock_event.get_self_id.return_value = "10000"
+    mock_event.bot = MagicMock()
+    mock_event.bot.send_group_forward_msg = AsyncMock(
+        return_value={"data": {"message_id": "forward-message"}}
+    )
+
+    async def allow_access(event, config) -> tuple[bool, str]:
+        return True, ""
+
+    monkeypatch.setattr(
+        "astrbot_plugin_setu.src.infrastructure.astrbot.commands.setu.get_config",
+        lambda: _Config(),
+    )
+    monkeypatch.setattr(handler, "_check_access", allow_access)
+
+    results = [result async for result in handler.random_doujinshi_command(mock_event)]
+
+    assert len(results) == 1
+    scheduler.schedule_revoke.assert_awaited_once_with(
+        mock_event, "forward-message", 1800
+    )
+    mock_event.bot.send_group_forward_msg.assert_awaited_once()
+    context.send_message.assert_not_called()

@@ -1,10 +1,25 @@
 # Changelog
 
+## [2.2.0] - 2026-08-06
+
+### Added
+
+- **随机本子 PDF**：新增 `/随机本子`（`/本子`、`/doujinshi`）命令；调用 Atri 随机本子 API，下载全部页图并封装为 PDF。
+- **本子自然语言入口**：支持发送“来份本子”或“来一份本子”触发随机本子。
+- **平台文件发送策略**：OneBot v11/NapCat 类平台把 PDF 作为 `File` 放入合并转发节点发送，其他平台直接发送 PDF 文件，不调用群文件上传接口。
+- **PDF 文件名**：合并转发中的 PDF 使用 API 返回的本子标题作为文件名。
+- **统一可恢复撤回队列**：图片自动撤回与 OneBot/NapCat 本子群文件延迟清理统一保存到 `revoke_tasks.json`；插件重启后按原到期时间继续执行，旧 `doujinshi_file_cleanup_tasks.json` 会自动迁移。
+- **可配置提示**：新增 `doujinshi_fetching`、`doujinshi_failed` 消息键。
+
+### Changed
+
+- **正则入口收敛**：色图自然语言与纯文本今日运势改由 `main.py` 的单一 regex 路由函数分发。
+- **撤回调度重构**：移除仅在内存存活的撤回调度，所有已登记的 OneBot `delete_msg` 与 `delete_group_file` 任务均使用统一可恢复调度器。
+
 ## [2.1.2] - 2026-07-09
 
 ### Fixed
 - **Provider over-return 数量保护**：修复部分上游 API 在请求 `num=1` 时返回多个图片 URL，导致插件连续发送 2 张图片的问题。下载层现在会按本轮缺口裁剪候选 URL，只下载并交付用户请求数量的图片；正常补齐、下载重试、缓存落盘和 sender 发送策略不变。新增回归测试覆盖「请求 1 张但 provider 返回 2 个 URL」场景。
-- **NapCat 发送确认超时去重**：修复 OneBot/NapCat `send_group_msg` 返回 retcode `1200` 且 wording 为 NTQQ `sendMsg` 超时时被误判为可重试失败的问题。此类结果现在仅在 OneBot-like 平台且匹配已知 NTQQ `sendMsg` 超时标记时视为 pending delivery，不再继续触发普通发送、stream 或 HTML fallback，避免平台实际已送达但确认丢失时把同一张图片重复发送；非 OneBot 平台和不相关的 retcode `1200` 超时仍按普通失败处理。
 
 ## [2.1.1] - 2026-06-15
 

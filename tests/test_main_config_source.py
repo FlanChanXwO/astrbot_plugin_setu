@@ -22,6 +22,14 @@ def test_conf_schema_exposes_sexnyan_and_platform_transport_templates() -> None:
         "r18",
         "all",
     ]
+    assert "doujinshi_file_cleanup_delay" not in delivery_items
+    assert delivery_items["auto_revoke_targets"]["default"] == ["doujinshi"]
+    assert delivery_items["auto_revoke_targets"]["options"] == [
+        "setu",
+        "fortune",
+        "doujinshi",
+    ]
+    assert delivery_items["auto_revoke_delay"]["default"] == 30
 
     transport_templates = delivery_items["platform_transports"]["templates"]
     napcat_items = transport_templates["napcat"]["items"]
@@ -181,6 +189,7 @@ async def test_initialize_uses_plugin_config_not_context_config(
         "astrbot_plugin_setu.main.init_session_config_repo", AsyncMock()
     )
     monkeypatch.setattr("astrbot_plugin_setu.main.init_send_cache", AsyncMock())
+    monkeypatch.setattr("astrbot_plugin_setu.main.init_revoke_scheduler", AsyncMock())
     monkeypatch.setattr(
         "astrbot_plugin_setu.main.register_setu_llm_tools", lambda: None
     )

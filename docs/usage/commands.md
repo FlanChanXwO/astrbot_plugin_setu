@@ -18,6 +18,27 @@
 - 数量范围支持中文数字
 - 标签支持空格、逗号、顿号分隔
 
+## 随机本子命令
+
+```text
+来份本子
+来一份本子
+来份碧蓝档案本子
+/随机本子
+/随机本子 碧蓝档案
+/本子
+/doujinshi
+```
+
+- 调用 `https://api.atri.rodeo/v1/doujinshi/random`，下载响应中的全部页图并生成一个 PDF。
+- 本子标签与 Setu 使用同一套空格、逗号、顿号分隔和标签别名映射；解析出的每个标签都会以重复 `tag` 查询参数传给 API。
+- 与 Setu 共用同一套用户和群组访问控制；被禁止使用色图的会话也不能获取随机本子。
+- OneBot v11/NapCat 类平台将 PDF 放进一个合并转发节点发送；QQ 后端仍可能把附件显示为群文件。其他平台直接发送 PDF 文件。
+- PDF 文件名使用 API 返回的本子标题，并对平台不允许的路径字符做安全替换。
+- PDF 会写入插件运行数据目录，供 AstrBot 在发送期间读取；不使用插件目录下的 `data/`。
+- OneBot 群聊的本子合并转发是否自动撤回由全局 `delivery.auto_revoke_targets` 中的 `doujinshi` 控制，默认启用；它与色图、今日运势共用 `delivery.auto_revoke_delay`。填 `1800` 即为 30 分钟，`0` 可关闭全部自动清理。任务保存在插件数据目录的可恢复队列中，重启后仍会恢复。
+- 本子发送会使用 OneBot 原始 `send_group_forward_msg` 取得合并转发消息的 `message_id`，到期时调用 `delete_msg`。NapCat 对这类附件的 `get_group_root_files` 可能返回空列表，不能用 `delete_group_file` 删除；QQ 客户端中的“群文件”展示由该合并转发消息承载。
+
 ## 会话配置命令（管理员设置）
 
 会话覆盖配置会写入插件数据目录下的 `session_overrides.json`，不会修改全局 WebUI 配置。
@@ -38,7 +59,7 @@
 
 可用配置项：`setu.content_mode`、`setu.r18_docx`、`setu.auto_revoke_scope`、`setu.send_mode`、`fortune.tags`、`fortune.content_mode`。
 
-`setu.auto_revoke_scope` 可选 `none`、`sfw`、`r18`、`all`，只作用于 Setu 图片发送；今日运势不自动撤回。
+`setu.auto_revoke_scope` 可选 `none`、`sfw`、`r18`、`all`，只作用于 Setu 图片发送。今日运势是否自动撤回由全局 `delivery.auto_revoke_targets` 的 `fortune` 值控制，默认禁用。
 
 ## 黑白名单管理命令（管理员）
 
@@ -89,5 +110,6 @@
 ## 命令行为说明
 
 - Setu 获取无结果时走 `MessagesConfig` 配置提示，不再硬编码文案。
+- 随机本子的获取中和失败提示分别使用 `doujinshi_fetching`、`doujinshi_failed` 消息键，可在提示消息覆盖中调整。
 - 运势卡片渲染失败时降级为纯文本提示。
 - 会话配置支持并发安全读写。

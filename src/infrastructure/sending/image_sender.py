@@ -103,12 +103,17 @@ class ImageSender:
             )
 
         html_card_strategy = config.html_card_strategy
+        revoke_delay = config.auto_revoke_delay
         return SendOptions(
             send_mode=send_mode,
             use_html_card=html_card_strategy != "never",
-            auto_revoke=should_auto_revoke(auto_revoke_scope, is_r18),
+            auto_revoke=(
+                config.auto_revoke_setu_enabled
+                and revoke_delay > 0
+                and should_auto_revoke(auto_revoke_scope, is_r18)
+            ),
             auto_revoke_scope=auto_revoke_scope,
-            revoke_delay=config.auto_revoke_delay,
+            revoke_delay=revoke_delay,
             r18_docx_mode=r18_docx_mode,
             html_padding=config.html_card_padding,
             html_gap=config.html_card_gap,

@@ -36,6 +36,22 @@ def apply_legacy_config_aliases(
                 "removed legacy key because auto_revoke_scope exists",
             )
 
+    if isinstance(delivery, dict) and "doujinshi_file_cleanup_delay" in delivery:
+        legacy_value = delivery.pop("doujinshi_file_cleanup_delay")
+        if "auto_revoke_delay" not in delivery:
+            delivery["auto_revoke_delay"] = legacy_value
+            record_config_heal(
+                changes,
+                "delivery.doujinshi_file_cleanup_delay",
+                "migrated to delivery.auto_revoke_delay",
+            )
+        else:
+            record_config_heal(
+                changes,
+                "delivery.doujinshi_file_cleanup_delay",
+                "removed legacy key because auto_revoke_delay exists",
+            )
+
     session_configs = normalized.get("session_configs")
     if isinstance(session_configs, list):
         for index, item in enumerate(session_configs):

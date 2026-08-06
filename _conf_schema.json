@@ -252,14 +252,21 @@
             "auto_revoke_scope": {
                 "type": "string",
                 "description": "自动撤回范围",
-                "hint": "none=不撤回；sfw=仅撤回全年龄图片；r18=仅撤回 R18 图片/文件；all=全部 Setu 图片都会撤回。",
+                "hint": "none=不撤回；sfw=仅撤回全年龄图片；r18=仅撤回 R18 图片/文件；all=全部 Setu 图片都会撤回。仅在自动撤回内容含 setu 时生效。",
                 "default": "none",
                 "options": ["none", "sfw", "r18", "all"]
             },
+            "auto_revoke_targets": {
+                "type": "list",
+                "description": "自动撤回内容",
+                "hint": "每行填写一个：setu（色图）、fortune（今日运势）、doujinshi（随机本子）。默认仅 doujinshi；色图还须命中自动撤回范围。",
+                "default": ["doujinshi"],
+                "options": ["setu", "fortune", "doujinshi"]
+            },
             "auto_revoke_delay": {
                 "type": "int",
-                "description": "撤回延迟时间(秒)",
-                "hint": "命中自动撤回范围后多久撤回，默认 30 秒。",
+                "description": "自动清理延迟时间(秒)",
+                "hint": "同时用于自动撤回内容列表中启用的 Setu 图片、今日运势消息和 OneBot/NapCat 随机本子群文件。默认 30 秒；设为 0 可关闭全部自动清理，填 1800 即为 30 分钟。",
                 "default": 30
             },
             "platform_transports": {
@@ -455,6 +462,8 @@
                                     "count_out_of_range",
                                     "fetch_timeout",
                                     "fetch_failed",
+                                    "doujinshi_fetching",
+                                    "doujinshi_failed",
                                     "no_result",
                                     "empty_payload",
                                     "r18_docx_failed",
