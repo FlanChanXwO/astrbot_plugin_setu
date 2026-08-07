@@ -32,7 +32,7 @@ from ...sending import (
     build_doujinshi_file_chain,
     get_revoke_scheduler,
 )
-from ...sending.platform_capabilities import supports_forward_messages
+from ...sending.platform_capabilities import is_onebot_like_platform
 from ...sending.revoke_scheduler import RecoverableRevokeScheduler
 from ..config import get_config, get_plugin_context
 from ..session_identity import get_event_session_identity
@@ -220,7 +220,7 @@ class SetuCommandHandler:
     async def random_doujinshi_command(
         self, event: AstrMessageEvent, *, tags: str = ""
     ) -> AsyncGenerator[Any, None]:
-        """按可选标签获取随机本子并发送由全部页图组成的 PDF。"""
+        """按可选标签获取随机本子并发送配置指定的文件格式。"""
         if not await _rate_limiter.acquire(event):
             if result := self._plain(event, self._message("rate_limited")):
                 yield result
@@ -260,13 +260,12 @@ class SetuCommandHandler:
 
         try:
             tags = resolve_user_tags(raw_tags, getattr(config, "tag_alias", ""))
-            generated = await self._doujinshi_service.fetch_random_pdf(tags=tags)
-            platform_name = _platform_name(event)
-            chain = build_doujinshi_file_chain(
-                generated,
-                platform_name=platform_name,
-                self_id=event.get_self_id(),
+            generated = await self._doujinshi_service.fetch_random_file(
+                tags=tags,
+                mode=getattr(config, "doujinshi_send_mode", "pdf"),
             )
+            platform_name = _platform_name(event)
+            chain = build_doujinshi_file_chain(generated)
             scheduler = self._revoke_scheduler
             if scheduler is None:
                 scheduler = get_revoke_scheduler()
@@ -276,20 +275,19 @@ class SetuCommandHandler:
             revoke_delay = config.auto_revoke_delay
             auto_revoke_requested = (
                 config.auto_revoke_doujinshi_enabled
-                and supports_forward_messages(platform_name)
+                and is_onebot_like_platform(platform_name)
                 and bool(event.get_group_id())
                 and revoke_delay > 0
             )
             if auto_revoke_requested:
                 if scheduler is None:
                     logger.warning(
-                        "[doujinshi] 自动撤回已启用但调度器未初始化，"
-                        "将按普通合并转发发送"
+                        "[doujinshi] 自动撤回已启用但调度器未初始化，将按普通文件发送"
                     )
                 elif plugin_context is None:
                     logger.warning(
                         "[doujinshi] 自动撤回已启用但插件上下文未初始化，"
-                        "将按普通合并转发发送"
+                        "将按普通文件发送"
                     )
                 else:
                     send_result = await DirectSendStrategy(
@@ -304,19 +302,19 @@ class SetuCommandHandler:
                                 scheduled_count += 1
                         if not send_result.message_ids:
                             logger.warning(
-                                "[doujinshi] 合并转发已发送但未返回 message_id，"
+                                "[doujinshi] 本子文件已发送但未返回 message_id，"
                                 "无法登记自动撤回"
                             )
                         elif scheduled_count != len(send_result.message_ids):
                             logger.warning(
-                                "[doujinshi] 部分合并转发消息未能登记自动撤回: "
+                                "[doujinshi] 部分本子文件消息未能登记自动撤回: "
                                 "scheduled=%s, total=%s",
                                 scheduled_count,
                                 len(send_result.message_ids),
                             )
                         else:
                             logger.info(
-                                "[doujinshi] 已登记合并转发自动撤回: "
+                                "[doujinshi] 已登记本子文件自动撤回: "
                                 "messages=%s, delay=%ss",
                                 scheduled_count,
                                 revoke_delay,

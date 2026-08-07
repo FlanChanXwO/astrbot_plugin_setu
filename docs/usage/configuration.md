@@ -7,7 +7,7 @@
 | 配置项 | 类型 | 说明 | 可选值 | 默认值 |
 |--------|------|------|--------|--------|
 | `api_type` | 字符串 | API 类型 | `lolicon` / `atri` / `sexnyan` / `custom` / `all` | `lolicon` |
-| `send_mode` | 字符串 | 发送模式 | `auto` / `image` / `forward` | `auto` |
+| `send_mode` | 字符串 | 色图发送模式 | `auto` / `image` / `forward` | `auto` |
 | `content_mode` | 字符串 | 内容模式 | `sfw` / `r18` / `mix` | `sfw` |
 | `max_count` | 整数 | 单次最大图片数 | 1-10 | `10` |
 | `max_replenish_rounds` | 整数 | 下载暂时失败时的同 URL 确认尝试次数，也是短缺时的补图轮次 | 1-3 | `3` |
@@ -20,6 +20,7 @@
 
 | 配置项 | 类型 | 说明 | 可选值 | 默认值 |
 |--------|------|------|--------|--------|
+| `doujinshi_send_mode` | 字符串 | 随机本子文件格式；两种模式都直接发送普通文件 | `pdf` / `archive` | `pdf` |
 | `html_card_strategy` | 字符串 | HTML 卡片策略 | `never` / `fallback` / `always` | `fallback` |
 | `platform_transports` | template_list | 平台传输能力模板；当前内置 NapCat 模板 | 见下文 | `[]` |
 | `auto_revoke_targets` | 列表 | 自动撤回内容 | `setu` / `fortune` / `doujinshi` | `["doujinshi"]` |
@@ -52,13 +53,24 @@
 
 色图和今日运势的消息撤回依赖 OneBot-like 平台返回的 `message_id`。如果平台不支持 `delete_msg`、发送返回里没有 `message_id`，或删除失败，插件只记录 warning，不阻止消息发送。已登记的撤回任务会写入插件数据目录中的 `revoke_tasks.json`，插件退出时仅停止内存计时，重启后仍按原到期时间恢复。旧版 `delivery.auto_revoke_r18` 启动时会迁移为 `auto_revoke_scope`：`true` → `r18`，`false` → `none`，迁移后旧字段会被移除。
 
-### 自动撤回与本子合并转发
+### 随机本子文件格式
 
-`auto_revoke_delay` 同时控制 `auto_revoke_targets` 中启用的 Setu 图片、今日运势消息和 OneBot/NapCat 群聊中合并转发的随机本子 PDF。默认 `30` 秒；设为 `0` 会关闭全部自动清理；如需 30 分钟，设为 `1800`。旧 `doujinshi_file_cleanup_delay` 会在插件启动时迁移到新字段；两者同时存在时以 `auto_revoke_delay` 为准。
+`delivery.doujinshi_send_mode` 控制本子生成的文件类型：
 
-待撤回记录统一保存于插件运行数据目录的 `revoke_tasks.json`。本子发送时会直接调用 OneBot 合并转发 action 取得 `message_id`，并立即将该消息撤回任务持久化；到期后统一调用 `delete_msg`。NapCat 会把这类附件显示在 QQ 的群文件界面，但 `get_group_root_files` 可能返回空列表，说明它不是可由 `delete_group_file` 管理的真实群文件，因此插件不再依赖文件名、体积或根目录快照反查。插件退出或重启只停止内存计时，下一次初始化会按原绝对到期时间恢复；已有 `doujinshi_file_cleanup_tasks.json` 会迁移到统一队列。OneBot action 不可用、发送结果没有 `message_id` 或删除 action 返回错误时，任务会保留并记录 warning，不会重复发送。实际到期删除失败时，任务会将连续失败次数持久化；前两次失败保留以便下次插件启动恢复，第三次连续失败会自动从 `revoke_tasks.json` 移除，避免无效任务无限累积。启用本子自动撤回后，发送成功会立即写入该文件并记录“已登记合并转发自动撤回”日志；若没有任务记录，可从 warning 区分调度器、插件上下文或 `message_id` 缺失的原因。
+| 值 | 行为 |
+|----|------|
+| `pdf`（默认） | 下载全部页图并生成一个多页 PDF，文件名为本子标题加 `.pdf` |
+| `archive` | 下载全部页图并生成一个 ZIP 压缩包，成员按页码顺序命名，文件名为本子标题加 `.zip` |
 
-旧版本已经写入的 `group_file` 任务没有对应的合并转发 `message_id`，而空的群文件接口也无法反向取得它；插件会保留这些旧任务，避免静默丢失状态。需要先在 QQ 客户端手动处理旧附件，再按需清理对应的旧任务记录。
+两种模式都会在所有平台通过普通 `File` 消息发送，不再使用 OneBot `Nodes` 合并转发，也不再追加标题/原始地址节点。
+
+### 自动撤回与本子文件
+
+`auto_revoke_delay` 同时控制 `auto_revoke_targets` 中启用的 Setu 图片、今日运势消息和 OneBot/NapCat 群聊中的随机本子普通文件消息。默认 `30` 秒；设为 `0` 会关闭全部自动清理；如需 30 分钟，设为 `1800`。旧 `doujinshi_file_cleanup_delay` 会在插件启动时迁移到新字段；两者同时存在时以 `auto_revoke_delay` 为准。
+
+待撤回记录统一保存于插件运行数据目录的 `revoke_tasks.json`。本子发送时会直接调用 OneBot `send_group_msg` 取得普通文件消息的 `message_id`，并立即将撤回任务持久化；到期后统一调用 `delete_msg`。插件不依赖 `get_group_root_files`、文件名或体积反查群文件，因此不会把合并转发附件误当作群文件处理。插件退出或重启只停止内存计时，下一次初始化会按原绝对到期时间恢复；已有 `doujinshi_file_cleanup_tasks.json` 会迁移到统一队列。OneBot action 不可用、发送结果没有 `message_id` 或删除 action 返回错误时，任务会保留并记录 warning，不会重复发送。实际到期删除失败时，任务会将连续失败次数持久化；前两次失败保留以便下次插件启动恢复，第三次连续失败会自动从 `revoke_tasks.json` 移除，避免无效任务无限累积。启用本子自动撤回后，发送成功会立即写入该文件并记录“已登记本子文件自动撤回”日志；若没有任务记录，可从 warning 区分调度器、插件上下文或 `message_id` 缺失的原因。
+
+旧版本已经写入的 `group_file` 任务没有对应的普通消息 `message_id`，也无法从空的群文件接口反向取得它；插件会保留这些旧任务，避免静默丢失状态。需要先在 QQ 客户端手动处理旧附件，再按需清理对应的旧任务记录。
 
 ### NapCat 本地文件直通
 
@@ -139,6 +151,7 @@ NapCat `upload_file_stream` 的 `chunk_data` 仍是 base64 字符串，这是 Na
   },
   "delivery": {
     "send_mode": "auto",
+    "doujinshi_send_mode": "pdf",
     "auto_revoke_targets": ["setu", "doujinshi"],
     "auto_revoke_scope": "r18",
     "auto_revoke_delay": 1800,

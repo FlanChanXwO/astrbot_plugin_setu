@@ -152,6 +152,7 @@ def sample_config_dict() -> dict[str, Any]:
         },
         "delivery": {
             "send_mode": "auto",
+            "doujinshi_send_mode": "pdf",
             "r18_docx_mode": True,
             "auto_revoke_scope": "none",
             "auto_revoke_delay": 30,

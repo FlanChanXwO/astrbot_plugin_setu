@@ -238,10 +238,17 @@
         "items": {
             "send_mode": {
                 "type": "string",
-                "description": "发送模式",
-                "hint": "auto 在图片数量>1且平台支持时使用合并转发（仅 aiocqhttp/OneBot 类平台支持，其它平台自动回退直发）；image 始终直发；forward 始终尝试合并转发。",
+                "description": "色图发送模式",
+                "hint": "仅作用于色图：auto 在图片数量>1且平台支持时使用合并转发（仅 aiocqhttp/OneBot 类平台支持，其它平台自动回退直发）；image 始终直发；forward 始终尝试合并转发。",
                 "default": "auto",
                 "options": ["image", "forward", "auto"]
+            },
+            "doujinshi_send_mode": {
+                "type": "string",
+                "description": "随机本子文件格式",
+                "hint": "pdf=将全部页图封装为 PDF；archive=将原始页图按顺序打包为 ZIP。两种模式都以普通文件发送，不使用合并转发。",
+                "default": "pdf",
+                "options": ["pdf", "archive"]
             },
             "r18_docx_mode": {
                 "type": "bool",
@@ -266,7 +273,7 @@
             "auto_revoke_delay": {
                 "type": "int",
                 "description": "自动清理延迟时间(秒)",
-                "hint": "同时用于自动撤回内容列表中启用的 Setu 图片、今日运势消息和 OneBot/NapCat 随机本子群文件。默认 30 秒；设为 0 可关闭全部自动清理，填 1800 即为 30 分钟。",
+                "hint": "同时用于自动撤回内容列表中启用的 Setu 图片、今日运势消息和 OneBot/NapCat 随机本子文件消息。默认 30 秒；设为 0 可关闭全部自动清理，填 1800 即为 30 分钟。",
                 "default": 30
             },
             "platform_transports": {

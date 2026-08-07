@@ -64,6 +64,13 @@ class SendModeStr(str, Enum):
     AUTO = "auto"
 
 
+class DoujinshiSendModeStr(str, Enum):
+    """随机本子文件生成模式。"""
+
+    PDF = "pdf"
+    ARCHIVE = "archive"
+
+
 class AutoRevokeScopeStr(str, Enum):
     """Content scopes that should be auto-revoked after Setu sends."""
 
@@ -200,6 +207,7 @@ class DeliveryConfig(BaseModel):
     """消息发送与自动清理配置。"""
 
     send_mode: SendModeStr = SendModeStr.AUTO
+    doujinshi_send_mode: DoujinshiSendModeStr = DoujinshiSendModeStr.PDF
     r18_docx_mode: bool = True
     auto_revoke_scope: AutoRevokeScopeStr = AutoRevokeScopeStr.NONE
     auto_revoke_targets: list[AutoRevokeTargetStr] = Field(
@@ -301,8 +309,8 @@ class MessagesConfig(BaseModel):
         "count_out_of_range": "图片数量必须在{min_count}-{max_count}之间哦~",
         "fetch_timeout": "获取图片超时，网络可能不稳定，请稍后再试。",
         "fetch_failed": "获取图片失败，请稍后再试",
-        "doujinshi_fetching": "正在获取随机本子并生成 PDF，请稍候...",
-        "doujinshi_failed": "随机本子获取或 PDF 生成失败，请稍后再试。",
+        "doujinshi_fetching": "正在获取随机本子并生成文件，请稍候...",
+        "doujinshi_failed": "随机本子获取或文件生成失败，请稍后再试。",
         "no_result": "未找到{tags_info}符合要求的图片~",
         "empty_payload": "运气不好，一张图都没拿到...",
         "r18_docx_failed": "R18 Docx 封装失败，请稍后再试或联系管理员。",
@@ -385,12 +393,12 @@ class MessagesConfig(BaseModel):
     )
     doujinshi_fetching: MessageTextConfig = Field(
         default_factory=lambda: MessageTextConfig(
-            text="正在获取随机本子并生成 PDF，请稍候..."
+            text="正在获取随机本子并生成文件，请稍候..."
         )
     )
     doujinshi_failed: MessageTextConfig = Field(
         default_factory=lambda: MessageTextConfig(
-            text="随机本子获取或 PDF 生成失败，请稍后再试。"
+            text="随机本子获取或文件生成失败，请稍后再试。"
         )
     )
     no_result: MessageTextConfig = Field(
@@ -594,6 +602,11 @@ class SetuPluginConfig(BaseModel):
     def send_mode(self) -> str:
         """Get send mode."""
         return self.delivery.send_mode.value
+
+    @property
+    def doujinshi_send_mode(self) -> str:
+        """Get random doujinshi file generation mode."""
+        return self.delivery.doujinshi_send_mode.value
 
     @property
     def r18_docx_mode(self) -> bool:

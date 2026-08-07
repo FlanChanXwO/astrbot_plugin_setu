@@ -30,15 +30,14 @@
 /doujinshi
 ```
 
-- 调用 `https://api.atri.rodeo/v1/doujinshi/random`，下载响应中的全部页图并生成一个 PDF。
+- 调用 `https://api.atri.rodeo/v1/doujinshi/random`，下载响应中的全部页图，并按 `delivery.doujinshi_send_mode` 生成 PDF 或 ZIP 压缩包（默认 PDF）。
 - 本子标签与 Setu 使用同一套空格、逗号、顿号分隔和标签别名映射；解析出的每个标签都会以重复 `tag` 查询参数传给 API。
 - 与 Setu 共用同一套用户和群组访问控制；被禁止使用色图的会话也不能获取随机本子。
-- OneBot v11/NapCat 类平台将 PDF 放进一个合并转发节点发送；QQ 后端仍可能把附件显示为群文件。其他平台直接发送 PDF 文件。
-- 当上游响应实际包含非空 `title` 或有效 `url` 时，OneBot 合并转发会在 PDF 节点后按顺序追加“标题”和“原始地址”文本节点；缺失字段不会创建占位节点。
-- PDF 文件名使用 API 返回的本子标题，并对平台不允许的路径字符做安全替换。
-- PDF 会写入插件运行数据目录，供 AstrBot 在发送期间读取；不使用插件目录下的 `data/`。
-- OneBot 群聊的本子合并转发是否自动撤回由全局 `delivery.auto_revoke_targets` 中的 `doujinshi` 控制，默认启用；它与色图、今日运势共用 `delivery.auto_revoke_delay`。填 `1800` 即为 30 分钟，`0` 可关闭全部自动清理。任务保存在插件数据目录的可恢复队列中，重启后仍会恢复。
-- 本子发送会使用 OneBot 原始 `send_group_forward_msg` 取得合并转发消息的 `message_id`，到期时调用 `delete_msg`。NapCat 对这类附件的 `get_group_root_files` 可能返回空列表，不能用 `delete_group_file` 删除；QQ 客户端中的“群文件”展示由该合并转发消息承载。
+- 两种模式都在所有平台直接发送一个普通文件，不再创建 `Nodes` 合并转发，也不会追加标题或原始地址节点；`archive` 模式的 ZIP 成员按页码顺序命名并保留图片扩展名，若上游没有扩展名则使用 `.bin` 保留原始字节。
+- 文件名使用 API 返回的本子标题，并对平台不允许的路径字符做安全替换；PDF 使用 `.pdf`，压缩包使用 `.zip`。
+- 生成文件会写入插件运行数据目录，供 AstrBot 在发送期间读取；不使用插件目录下的 `data/`。
+- OneBot/NapCat 群聊的本子普通文件消息是否自动撤回由全局 `delivery.auto_revoke_targets` 中的 `doujinshi` 控制，默认启用；它与色图、今日运势共用 `delivery.auto_revoke_delay`。填 `1800` 即为 30 分钟，`0` 可关闭全部自动清理。任务保存在插件数据目录的可恢复队列中，重启后仍会恢复。
+- 启用自动撤回时，本子发送会使用 OneBot 原始 `send_group_msg` 取得普通文件消息的 `message_id`，到期调用 `delete_msg`；不依赖 `get_group_root_files` 或 `delete_group_file`。
 
 ## 会话配置命令（管理员设置）
 

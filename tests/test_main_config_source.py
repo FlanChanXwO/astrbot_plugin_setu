@@ -23,6 +23,11 @@ def test_conf_schema_exposes_sexnyan_and_platform_transport_templates() -> None:
         "all",
     ]
     assert "doujinshi_file_cleanup_delay" not in delivery_items
+    assert delivery_items["doujinshi_send_mode"]["default"] == "pdf"
+    assert delivery_items["doujinshi_send_mode"]["options"] == [
+        "pdf",
+        "archive",
+    ]
     assert delivery_items["auto_revoke_targets"]["default"] == ["doujinshi"]
     assert delivery_items["auto_revoke_targets"]["options"] == [
         "setu",

@@ -4,12 +4,11 @@
 
 ### Added
 
-- **随机本子 PDF**：新增 `/随机本子`（`/本子`、`/doujinshi`）命令；调用 Atri 随机本子 API，下载全部页图并封装为 PDF。
+- **随机本子文件**：新增 `/随机本子`（`/本子`、`/doujinshi`）命令；调用 Atri 随机本子 API，下载全部页图并支持 PDF/ZIP 两种生成模式。
 - **本子自然语言入口**：支持发送“来份本子”或“来一份本子”触发随机本子。
-- **平台文件发送策略**：OneBot v11/NapCat 类平台把 PDF 作为 `File` 放入合并转发节点发送，其他平台直接发送 PDF 文件，不调用群文件上传接口。
-- **PDF 文件名**：合并转发中的 PDF 使用 API 返回的本子标题作为文件名。
-- **本子元数据节点**：OneBot 合并转发在 PDF 后按上游实际提供情况追加标题与原始地址节点，不为缺失字段生成占位内容。
-- **统一可恢复撤回队列**：图片自动撤回与 OneBot/NapCat 本子群文件延迟清理统一保存到 `revoke_tasks.json`；插件重启后按原到期时间继续执行，旧 `doujinshi_file_cleanup_tasks.json` 会自动迁移。
+- **本子文件发送策略**：新增 `delivery.doujinshi_send_mode`（`pdf`/`archive`）；两种模式在所有平台均直接发送普通 `File`，取消本子合并转发及标题/原始地址节点。
+- **本子文件名与撤回**：PDF/ZIP 使用 API 返回的本子标题作为文件名；OneBot/NapCat 普通文件消息可按统一可恢复队列延迟撤回，不再反查群文件。
+- **统一可恢复撤回队列**：图片自动撤回与 OneBot/NapCat 本子文件消息延迟撤回统一保存到 `revoke_tasks.json`；插件重启后按原到期时间继续执行，旧 `doujinshi_file_cleanup_tasks.json` 会自动迁移。
 - **可配置提示**：新增 `doujinshi_fetching`、`doujinshi_failed` 消息键。
 
 ### Changed
@@ -19,7 +18,7 @@
 
 ### Fixed
 
-- **OneBot 本子转发文件 URI**：修复为取得 `message_id` 而直调 `send_group_forward_msg` 时，绕过 aiocqhttp 对绝对本地文件路径的 `file://` 规范化，导致 NapCat 虽接受 action 但 QQ 客户端下载 PDF 失败的问题。
+- **OneBot 本子文件 URI**：普通文件直发取得 `message_id` 时，统一将绝对本地路径规范化为 `file://`，避免 NapCat 虽接受 action 但 QQ 客户端打开附件显示下载失败。
 
 ## [2.1.2] - 2026-07-09
 

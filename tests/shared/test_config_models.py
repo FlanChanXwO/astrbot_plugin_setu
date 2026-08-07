@@ -30,6 +30,16 @@ def test_auto_revoke_scope_defaults_to_none() -> None:
     assert should_auto_revoke(config.auto_revoke_scope, is_r18=True) is False
 
 
+def test_doujinshi_send_mode_defaults_to_pdf_and_accepts_archive() -> None:
+    assert SetuPluginConfig().doujinshi_send_mode == "pdf"
+    assert (
+        SetuPluginConfig(
+            delivery={"doujinshi_send_mode": "archive"}
+        ).doujinshi_send_mode
+        == "archive"
+    )
+
+
 def test_auto_revoke_delay_and_targets_are_configured_independently() -> None:
     config = SetuPluginConfig(
         delivery={
@@ -117,11 +127,11 @@ def test_doujinshi_message_defaults_support_overrides() -> None:
 
     assert (
         config.resolve_message("doujinshi_fetching")
-        == "正在获取随机本子并生成 PDF，请稍候..."
+        == "正在获取随机本子并生成文件，请稍候..."
     )
     assert (
         config.resolve_message("doujinshi_failed")
-        == "随机本子获取或 PDF 生成失败，请稍后再试。"
+        == "随机本子获取或文件生成失败，请稍后再试。"
     )
 
 

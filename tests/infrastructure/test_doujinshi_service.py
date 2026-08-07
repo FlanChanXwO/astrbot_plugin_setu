@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import re
 from io import BytesIO
 from pathlib import Path
+from zipfile import ZipFile
 
 import httpx
 import pytest
 from PIL import Image
+from pypdf import PdfReader
 
 from astrbot_plugin_setu.src.infrastructure.doujinshi.service import (
     DoujinshiService,
@@ -60,7 +61,7 @@ def test_create_pdf_preserves_every_downloaded_page(tmp_path: Path) -> None:
 
     pdf_bytes = output_path.read_bytes()
     assert pdf_bytes.startswith(b"%PDF-")
-    assert len(re.findall(rb"/Type\s*/Page\b", pdf_bytes)) == 2
+    assert len(PdfReader(BytesIO(pdf_bytes)).pages) == 2
 
 
 @pytest.mark.asyncio
@@ -96,9 +97,10 @@ async def test_fetch_random_pdf_downloads_all_api_pages_in_order(
 
     assert generated.gallery.id == 493454
     assert generated.gallery.title == "测试本子"
+    assert generated.mode == "pdf"
     assert generated.path.parent == tmp_path / "doujinshi"
     pdf_bytes = generated.path.read_bytes()
-    assert len(re.findall(rb"/Type\s*/Page\b", pdf_bytes)) == 2
+    assert len(PdfReader(BytesIO(pdf_bytes)).pages) == 2
 
 
 @pytest.mark.asyncio
@@ -128,6 +130,45 @@ async def test_fetch_random_pdf_repeats_resolved_tags_in_api_request(
         )
 
     assert generated.gallery.id == 493454
+
+
+@pytest.mark.asyncio
+async def test_fetch_random_file_archive_contains_pages_in_order(
+    tmp_path: Path,
+) -> None:
+    first_page = b"first-page"
+    second_page = b"second-page"
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        if request.url == httpx.URL(DoujinshiService.API_URL):
+            return httpx.Response(
+                200,
+                json={
+                    "id": 493454,
+                    "title": {"pretty": "测试本子"},
+                    "pages": [
+                        {"url": "https://example.com/1.jpg"},
+                        {"url": "https://example.com/2.png"},
+                    ],
+                },
+            )
+        if request.url == httpx.URL("https://example.com/1.jpg"):
+            return httpx.Response(200, content=first_page)
+        if request.url == httpx.URL("https://example.com/2.png"):
+            return httpx.Response(200, content=second_page)
+        raise AssertionError(f"未预期的请求：{request.url}")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(responder)) as client:
+        generated = await DoujinshiService(tmp_path).fetch_random_file(
+            mode="archive", client=client
+        )
+
+    assert generated.mode == "archive"
+    assert generated.path.suffix == ".zip"
+    with ZipFile(generated.path) as archive:
+        assert archive.namelist() == ["page-0001.jpg", "page-0002.png"]
+        assert archive.read("page-0001.jpg") == first_page
+        assert archive.read("page-0002.png") == second_page
 
 
 def _image_bytes(color: str) -> bytes:

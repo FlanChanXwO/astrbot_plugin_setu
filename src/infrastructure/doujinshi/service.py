@@ -6,9 +6,11 @@ import asyncio
 from collections.abc import Mapping
 from dataclasses import dataclass
 from io import BytesIO
+import mimetypes
 from pathlib import Path
 from urllib.parse import urlparse
 from uuid import uuid4
+import zipfile
 
 import httpx
 from PIL import Image
@@ -19,10 +21,10 @@ from ...domain import HTTP_TIMEOUT_SECONDS
 
 @dataclass(frozen=True)
 class DoujinshiGallery:
-    """可下载并封装为 PDF 的本子元数据。
+    """可下载并封装为文件的本子元数据。
 
-    ``title`` 可在上游缺失时回退为本地标题；其余两个字段只保留 API
-    实际提供的元数据，供合并转发决定是否追加对应节点。
+    ``title`` 可在上游缺失时回退为本地标题；其余两个字段保留上游实际
+    返回的元数据，便于诊断和未来扩展，但不会再被拼装成合并转发节点。
     """
 
     id: int
@@ -33,11 +35,16 @@ class DoujinshiGallery:
 
 
 @dataclass(frozen=True)
-class GeneratedDoujinshiPdf:
-    """已经落盘、可作为 AstrBot 文件消息发送的随机本子 PDF。"""
+class GeneratedDoujinshiFile:
+    """已经落盘、可作为 AstrBot 文件消息发送的随机本子文件。"""
 
     gallery: DoujinshiGallery
     path: Path
+    mode: str = "pdf"
+
+
+# 保留旧名称，避免外部调用方在升级后导入失败；新代码使用通用文件类型。
+GeneratedDoujinshiPdf = GeneratedDoujinshiFile
 
 
 class DoujinshiService:
@@ -56,28 +63,50 @@ class DoujinshiService:
     def __init__(self, data_dir: Path | str) -> None:
         self._output_dir = Path(data_dir) / "doujinshi"
 
-    async def fetch_random_pdf(
+    async def fetch_random_file(
         self,
         tags: list[str] | None = None,
         *,
+        mode: str = "pdf",
         client: httpx.AsyncClient | None = None,
-    ) -> GeneratedDoujinshiPdf:
-        """获取随机本子并将 API 返回的全部页图封装为 PDF。"""
+    ) -> GeneratedDoujinshiFile:
+        """获取随机本子，并按 ``mode`` 生成 PDF 或 ZIP 文件。"""
+        normalized_mode = self._normalize_mode(mode)
         normalized_tags = [tag for tag in tags or [] if tag]
         if client is not None:
-            return await self._fetch_random_pdf_with_client(client, normalized_tags)
+            return await self._fetch_random_file_with_client(
+                client, normalized_tags, normalized_mode
+            )
 
         async with httpx.AsyncClient(
             timeout=HTTP_TIMEOUT_SECONDS,
             follow_redirects=True,
         ) as managed_client:
-            return await self._fetch_random_pdf_with_client(
-                managed_client, normalized_tags
+            return await self._fetch_random_file_with_client(
+                managed_client, normalized_tags, normalized_mode
             )
 
-    async def _fetch_random_pdf_with_client(
-        self, client: httpx.AsyncClient, tags: list[str]
-    ) -> GeneratedDoujinshiPdf:
+    async def fetch_random_pdf(
+        self,
+        tags: list[str] | None = None,
+        *,
+        client: httpx.AsyncClient | None = None,
+    ) -> GeneratedDoujinshiFile:
+        """兼容旧调用方：强制生成 PDF 文件。"""
+        return await self.fetch_random_file(tags, mode="pdf", client=client)
+
+    async def fetch_random_archive(
+        self,
+        tags: list[str] | None = None,
+        *,
+        client: httpx.AsyncClient | None = None,
+    ) -> GeneratedDoujinshiFile:
+        """获取随机本子并生成 ZIP 压缩包。"""
+        return await self.fetch_random_file(tags, mode="archive", client=client)
+
+    async def _fetch_random_file_with_client(
+        self, client: httpx.AsyncClient, tags: list[str], mode: str
+    ) -> GeneratedDoujinshiFile:
         # 与 Atri 图片接口一致，重复 tag 参数以保留所有解析后的标签。
         response = await client.get(
             self.API_URL,
@@ -93,15 +122,24 @@ class DoujinshiService:
             raise ValueError("随机本子 API 响应格式无效")
 
         gallery = self.parse_gallery(raw_payload)
-        output_path = self._build_output_path(gallery)
+        output_path = self._build_output_path(gallery, mode)
         try:
-            await self._create_pdf_from_urls(
-                client, gallery.page_urls, output_path, gallery.title
-            )
+            if mode == "pdf":
+                await self._create_pdf_from_urls(
+                    client, gallery.page_urls, output_path, gallery.title
+                )
+            else:
+                await self._create_archive_from_urls(
+                    client, gallery.page_urls, output_path
+                )
         except BaseException:
             output_path.unlink(missing_ok=True)
             raise
-        return GeneratedDoujinshiPdf(gallery=gallery, path=output_path)
+        return GeneratedDoujinshiFile(
+            gallery=gallery,
+            path=output_path,
+            mode=mode,
+        )
 
     @staticmethod
     def parse_gallery(payload: Mapping[str, object]) -> DoujinshiGallery:
@@ -168,9 +206,60 @@ class DoujinshiService:
                     f"随机本子第 {page_number} 页下载或转换失败"
                 ) from exc
 
-    def _build_output_path(self, gallery: DoujinshiGallery) -> Path:
+    async def _create_archive_from_urls(
+        self,
+        client: httpx.AsyncClient,
+        page_urls: tuple[str, ...],
+        output_path: Path,
+    ) -> None:
+        """按页下载图片并写入 ZIP，成员名按页码保证客户端排序稳定。"""
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(
+            output_path, mode="w", compression=zipfile.ZIP_DEFLATED
+        ) as archive:
+            for page_number, page_url in enumerate(page_urls, start=1):
+                try:
+                    response = await client.get(page_url)
+                    response.raise_for_status()
+                    member_name = self._archive_member_name(
+                        page_number,
+                        page_url,
+                        response.headers.get("content-type", ""),
+                    )
+                    # 压缩写入可能有一定 CPU 开销，放到线程中避免阻塞事件循环。
+                    await asyncio.to_thread(
+                        archive.writestr, member_name, response.content
+                    )
+                except (httpx.HTTPError, OSError, ValueError) as exc:
+                    raise RuntimeError(
+                        f"随机本子第 {page_number} 页下载或压缩失败"
+                    ) from exc
+
+    def _build_output_path(self, gallery: DoujinshiGallery, mode: str) -> Path:
         self._output_dir.mkdir(parents=True, exist_ok=True)
-        return self._output_dir / f"doujinshi-{gallery.id}-{uuid4().hex}.pdf"
+        if mode == "pdf":
+            suffix = ".pdf"
+        elif mode == "archive":
+            suffix = ".zip"
+        else:
+            raise ValueError(f"不支持的随机本子文件模式: {mode!r}")
+        return self._output_dir / f"doujinshi-{gallery.id}-{uuid4().hex}{suffix}"
+
+    @staticmethod
+    def _normalize_mode(mode: object) -> str:
+        value = getattr(mode, "value", mode)
+        if not isinstance(value, str) or value not in {"pdf", "archive"}:
+            raise ValueError("随机本子发送模式必须是 pdf 或 archive")
+        return value
+
+    @staticmethod
+    def _archive_member_name(page_number: int, page_url: str, content_type: str) -> str:
+        """从 URL 或响应类型推断扩展名，未知类型保留为 bin。"""
+        suffix = Path(urlparse(page_url).path).suffix.lower()
+        if not suffix or not suffix[1:].replace("_", "").replace("-", "").isalnum():
+            media_type = content_type.split(";", 1)[0].strip().lower()
+            suffix = mimetypes.guess_extension(media_type) or ".bin"
+        return f"page-{page_number:04d}{suffix}"
 
     @staticmethod
     def _append_pdf_page(

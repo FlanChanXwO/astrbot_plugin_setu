@@ -140,7 +140,7 @@ async def _component_to_onebot_message(comp: Any) -> dict[str, Any]:
 
 
 def _normalize_onebot_file_uris(value: Any) -> Any:
-    """将 raw forward 中的本地文件路径转换为 OneBot 可识别的 file URI。"""
+    """将 OneBot 文件消息中的本地路径转换为可识别的 file URI。"""
     if isinstance(value, list):
         return [_normalize_onebot_file_uris(item) for item in value]
     if isinstance(value, tuple):
@@ -343,10 +343,10 @@ class DirectSendStrategy(SendStrategy):
             return False, None
 
         target_type, target_id = target
-        # 合并转发附件不一定会出现在 NapCat 的可删除群文件接口中，
-        # 因而在发送时直接取得可恢复撤回所需的 message_id。
+        # 需要自动撤回时在发送阶段直接取得可恢复撤回所需的 message_id；
+        # 普通文件消息与图片消息都走同一条 OneBot action 链路。
         if len(chain) == 1 and isinstance(chain[0], Comp.Nodes):
-            # raw action 绕过 aiocqhttp 的文件段适配，需补上 file URI 规范化。
+            # 兼容其他调用方仍传入 Nodes；本子发送器本身不再生成 Nodes。
             payload = _normalize_onebot_file_uris(await chain[0].to_dict())
             messages = payload.get("messages", [])
             if target_type == "group":
@@ -364,6 +364,9 @@ class DirectSendStrategy(SendStrategy):
         message: list[dict[str, Any]] = []
         for comp in chain:
             message.append(await _component_to_onebot_message(comp))
+        # 本子现在以普通 File 直发；本地路径需要转换为 file://，否则
+        # NapCat 可能返回消息 ID，但客户端打开附件时会显示下载失败。
+        message = _normalize_onebot_file_uris(message)
 
         if target_type == "group":
             return await _call_onebot_action(

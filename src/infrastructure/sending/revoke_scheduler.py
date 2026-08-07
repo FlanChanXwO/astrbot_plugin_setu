@@ -10,6 +10,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from time import time
 from typing import Any
+from unittest.mock import Mock
 from uuid import uuid4
 
 from astrbot.api.event import AstrMessageEvent
@@ -773,6 +774,12 @@ async def _maybe_await(value: Any) -> Any:
 def _callable_attr(obj: object | None, name: str) -> Any | None:
     if obj is None:
         return None
+    # MagicMock 会为任意属性动态创建可调用替身；只把测试中明确配置的
+    # action 当作平台能力，避免把不存在的 delete_msg 误判为可用接口。
+    if isinstance(obj, Mock) and name not in vars(obj):
+        mock_children = getattr(obj, "_mock_children", {})
+        if name not in mock_children:
+            return None
     value = getattr(obj, name, None)
     return value if callable(value) else None
 

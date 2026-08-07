@@ -4,7 +4,7 @@
 
 <img src="https://count.getloli.com/@astrbot_plugin_setu?name=astrbot_plugin_setu&theme=rule34&padding=7&offset=0&align=top&scale=1&pixelated=1&darkmode=auto" alt="Moe Counter">
 
-**一个支持多平台、可自定义、带防审核机制的随机色图插件，支持多 API、随机本子 PDF、会话级配置、LLM 工具调用。**
+**一个支持多平台、可自定义、带防审核机制的随机色图插件，支持多 API、随机本子 PDF/ZIP、会话级配置、LLM 工具调用。**
 
 [![License: AGPL](https://img.shields.io/badge/License-AGPL-blue.svg)](https://opensource.org/licenses/agpl-3.0)
 ![Python Version](https://img.shields.io/badge/Python-3.10%2B-blue)
@@ -55,8 +55,8 @@
 - 🖼️ **HTML 卡片包装** - 防止平台审核，支持自定义样式
 - 🤖 **LLM 工具调用** - 可通过大模型自动获取色图
 - 🏷️ **标签搜索** - 支持多标签、中文标签、模糊匹配
-- 🔄 **多种发送模式** - 直接发送、合并转发、文件封装
-- 📚 **随机本子 PDF** - 获取 API 返回的全部页图并封装为 PDF；OneBot 合并转发消息可按统一可恢复队列延迟撤回
+- 🔄 **多种色图发送模式** - 直接发送、合并转发、文件封装
+- 📚 **随机本子文件** - 获取 API 返回的全部页图，可配置封装为 PDF 或 ZIP；OneBot/NapCat 普通文件消息可按统一可恢复队列延迟撤回
 - 🛡️ **防审核机制** - HTML 卡片 fallback、NapCat 流式上传、延迟撤回、Docx 封装
 - ⚡ **性能优化** - 磁盘缓存、自动补图、httpx、可观测下载重试
 - 🌐 **多平台适配** - 兼容 AstrBot 支持的所有平台
@@ -100,7 +100,7 @@
 - 数量范围支持中文数字
 - 标签支持空格、逗号、顿号分隔
 - `/session_config` 统一管理当前会话的覆盖配置
-- `/随机本子`（别名 `/本子`、`/doujinshi`）生成并发送随机本子 PDF；OneBot 使用合并转发，其他平台直接发送文件；OneBot 群聊可按配置延迟撤回对应的合并转发消息
+- `/随机本子`（别名 `/本子`、`/doujinshi`）按 `delivery.doujinshi_send_mode` 生成并发送随机本子 PDF 或 ZIP；所有平台均直接发送文件，不再使用合并转发；OneBot 群聊可按配置延迟撤回对应的普通文件消息
 
 完整的命令说明见 [`docs/usage/commands.md`](./docs/usage/commands.md)。
 
@@ -149,7 +149,8 @@
 | 配置项 | 说明 | 默认值 |
 |--------|------|--------|
 | `api_type` | API 类型（lolicon / atri / sexnyan / custom / all） | `lolicon` |
-| `send_mode` | 发送模式（auto / image / forward） | `auto` |
+| `send_mode` | 色图发送模式（auto / image / forward） | `auto` |
+| `doujinshi_send_mode` | 本子文件格式（pdf / archive） | `pdf` |
 | `content_mode` | 内容模式（sfw / r18 / mix） | `sfw` |
 | `max_count` | 单次最大图片数（1-10） | `10` |
 | `max_replenish_rounds` | 下载暂时失败时的同 URL 确认尝试次数/补图轮次 | `3` |
@@ -171,7 +172,7 @@
 
 NapCat stream 上传的分块内容按 NapCat 协议仍为 base64 字符串；若 AstrBot 与 NapCat 共享同一图片目录，可在 `platform_transports` 添加 NapCat 模板，将共享目录加入 `local_file_allowed_roots` 并把 `local_file_mode` 设为 `always` 或 `fallback`，让直发模式通过 raw OneBot `file://` 路径绕过 AstrBot 标准链路的 base64 转换。
 
-`auto_revoke_targets` 是单一内容列表，默认只含 `doujinshi`，因此色图和今日运势默认不撤回；按需加入 `setu` 或 `fortune`。色图加入后还须命中 `auto_revoke_scope`。三类内容共享 `auto_revoke_delay` 和 OneBot 可恢复队列；设置 `1800` 即为 30 分钟，设为 `0` 会关闭全部自动清理。随机本子只适用于群聊合并转发：发送后若 NapCat 尚未把文件写入群根目录，插件会先持久化待识别任务，到期时再按发送前快照、文件名和体积精确识别 `file_id` 后删除。所有任务保存于插件运行数据目录的 `revoke_tasks.json`，插件重启后仍按原到期时间继续执行。
+`auto_revoke_targets` 是单一内容列表，默认只含 `doujinshi`，因此色图和今日运势默认不撤回；按需加入 `setu` 或 `fortune`。色图加入后还须命中 `auto_revoke_scope`。三类内容共享 `auto_revoke_delay` 和 OneBot 可恢复队列；设置 `1800` 即为 30 分钟，设为 `0` 会关闭全部自动清理。随机本子无论选择 PDF 还是 ZIP 都以普通文件消息发送；OneBot/NapCat 群聊发送成功后会直接登记消息 ID，到期调用 `delete_msg`，不再反查群文件。所有任务保存于插件运行数据目录的 `revoke_tasks.json`，插件重启后仍按原到期时间继续执行。
 
 ### 模板覆盖
 

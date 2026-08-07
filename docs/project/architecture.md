@@ -25,7 +25,7 @@ tests/             # 单元与集成测试
 
 - `src/infrastructure/astrbot/`
   - 命令处理器（`commands/setu.py`、`commands/fortune.py`、`commands/session_config.py`）
-  - 随机本子服务（`doujinshi/service.py`）、统一可恢复撤回调度器（`sending/revoke_scheduler.py`）与 PDF 文件发送器（`sending/doujinshi_sender.py`）
+  - 随机本子服务（`doujinshi/service.py`）、统一可恢复撤回调度器（`sending/revoke_scheduler.py`）与文件发送器（`sending/doujinshi_sender.py`）
   - 配置加载与自愈
   - Web API 注册
   - 运势渲染器
@@ -52,14 +52,14 @@ tests/             # 单元与集成测试
 4. 渲染失败降级为纯文本
 5. 自动撤回内容含 `fortune` 时，OneBot 发送结果会登记到统一可恢复撤回队列
 
-### 3. 随机本子 PDF
+### 3. 随机本子文件
 
 1. `/随机本子 [标签...]` 与“来份标签本子”通过 `SetuCommandHandler` 复用 Setu 访问控制和标签解析
-2. `DoujinshiService` 将每个解析后的标签作为重复 `tag` 参数调用随机本子 API，校验响应并按页图顺序写入 PDF
-3. `build_doujinshi_file_chain()` 根据平台构造消息：OneBot/NapCat 使用包含 `File` 的 `Nodes` 合并转发；上游实际提供 `title` / `url` 时，按顺序追加对应的文本节点，缺失字段不造占位节点；其他平台使用普通 `File`
-4. 自动撤回内容含 `doujinshi` 且 OneBot 群聊启用时，`DirectSendStrategy` 通过原始合并转发 action 取得 `message_id`，统一撤回调度器立即持久化消息任务
-5. 所有新的消息撤回任务共同写入 `StarTools.get_data_dir()` 返回的运行目录；插件重启后按原绝对到期时间调用 OneBot `delete_msg`。合并转发附件不依赖 `get_group_root_files`，因为 NapCat 可能不会将其作为可删除的群文件返回
-6. PDF 写入同一插件运行目录，供 AstrBot 文件发送链路读取
+2. `DoujinshiService` 将每个解析后的标签作为重复 `tag` 参数调用随机本子 API，校验响应后按配置写入 PDF 或 ZIP；ZIP 成员按页码顺序命名
+3. `build_doujinshi_file_chain()` 不区分平台，始终构造一个带标题文件名的普通 `File`，不创建 `Nodes` 或元数据文本节点
+4. 自动撤回内容含 `doujinshi` 且 OneBot 群聊启用时，`DirectSendStrategy` 通过原始 `send_group_msg` 取得普通文件消息的 `message_id`，统一撤回调度器立即持久化消息任务
+5. 所有新的消息撤回任务共同写入 `StarTools.get_data_dir()` 返回的运行目录；插件重启后按原绝对到期时间调用 OneBot `delete_msg`，不反查群文件
+6. 生成文件写入同一插件运行目录，供 AstrBot 文件发送链路读取
 
 ### 4. 访问控制
 
@@ -89,7 +89,7 @@ flowchart TD
   F --> G["LoliconProvider / AtriProvider / SexNyanProvider / CustomProvider / MultiProvider"]
   B --> H["ImageSender"]
   H --> I["SendStrategy / NapCatStream / SendFilters"]
-  O --> P["PDF File / OneBot Nodes"]
+  O --> P["PDF / ZIP File"]
 
   C --> J["FortuneService"]
   J --> K["FortuneRepository"]
@@ -108,6 +108,7 @@ flowchart TD
 
 - API 类型和 provider 参数
 - 发送模式和防审核策略
+- 随机本子文件格式（PDF/ZIP）
 - 内容模式（sfw/r18/mix）
 - HTML 卡片策略
 - NapCat 流式策略
@@ -144,8 +145,8 @@ flowchart TD
 - 访问控制：JSON 文件（`AccessControlRepository`）
 - 会话配置：JSON 文件（`SessionConfigJsonRepository`）
 - 发送缓存：磁盘文件（`send_cache.py`）
-- 随机本子 PDF：插件数据目录下的 `doujinshi/`
-- 可恢复撤回任务（消息撤回，含本子合并转发）：插件数据目录下的 `revoke_tasks.json`
+- 随机本子 PDF/ZIP：插件数据目录下的 `doujinshi/`
+- 可恢复撤回任务（消息撤回，含本子普通文件消息）：插件数据目录下的 `revoke_tasks.json`
 - 标签别名：配置模板（`tag_alias_templates`）
 
 ## 深入章节
