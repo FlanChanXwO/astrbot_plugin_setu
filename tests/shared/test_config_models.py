@@ -40,6 +40,13 @@ def test_doujinshi_send_mode_defaults_to_pdf_and_accepts_archive() -> None:
     )
 
 
+def test_doujinshi_max_page_defaults_to_zero_and_accepts_value() -> None:
+    assert SetuPluginConfig().doujinshi_max_page == 0
+    assert (
+        SetuPluginConfig(delivery={"doujinshi_max_page": 11}).doujinshi_max_page == 11
+    )
+
+
 def test_auto_revoke_delay_and_targets_are_configured_independently() -> None:
     config = SetuPluginConfig(
         delivery={

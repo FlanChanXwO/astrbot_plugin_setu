@@ -133,6 +133,62 @@ async def test_fetch_random_pdf_repeats_resolved_tags_in_api_request(
 
 
 @pytest.mark.asyncio
+async def test_fetch_random_pdf_passes_max_page_param_to_api(
+    tmp_path: Path,
+) -> None:
+    page = _image_bytes("red")
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/doujinshi/random":
+            assert request.url.params.get("max_page") == "11"
+            return httpx.Response(
+                200,
+                json={
+                    "id": 493454,
+                    "title": {"pretty": "测试本子"},
+                    "pages": [{"url": "https://example.com/1.jpg"}],
+                },
+            )
+        if request.url == httpx.URL("https://example.com/1.jpg"):
+            return httpx.Response(200, content=page)
+        raise AssertionError(f"未预期的请求：{request.url}")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(responder)) as client:
+        generated = await DoujinshiService(tmp_path).fetch_random_pdf(
+            max_page=11, client=client
+        )
+
+    assert generated.gallery.id == 493454
+
+
+@pytest.mark.asyncio
+async def test_fetch_random_pdf_omits_max_page_when_zero(tmp_path: Path) -> None:
+    page = _image_bytes("red")
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        if request.url == httpx.URL(DoujinshiService.API_URL):
+            assert "max_page" not in request.url.params
+            return httpx.Response(
+                200,
+                json={
+                    "id": 493454,
+                    "title": {"pretty": "测试本子"},
+                    "pages": [{"url": "https://example.com/1.jpg"}],
+                },
+            )
+        if request.url == httpx.URL("https://example.com/1.jpg"):
+            return httpx.Response(200, content=page)
+        raise AssertionError(f"未预期的请求：{request.url}")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(responder)) as client:
+        generated = await DoujinshiService(tmp_path).fetch_random_pdf(
+            max_page=0, client=client
+        )
+
+    assert generated.gallery.id == 493454
+
+
+@pytest.mark.asyncio
 async def test_fetch_random_file_archive_contains_pages_in_order(
     tmp_path: Path,
 ) -> None:

@@ -21,6 +21,7 @@
 | 配置项 | 类型 | 说明 | 可选值 | 默认值 |
 |--------|------|------|--------|--------|
 | `doujinshi_send_mode` | 字符串 | 随机本子文件格式；两种模式都直接发送普通文件 | `pdf` / `archive` | `pdf` |
+| `doujinshi_max_page` | 整数 | 随机本子最大页数，超过该页数的本子会被 API 过滤 | ≥0，`0` 表示不限 | `0` |
 | `html_card_strategy` | 字符串 | HTML 卡片策略 | `never` / `fallback` / `always` | `fallback` |
 | `platform_transports` | template_list | 平台传输能力模板；当前内置 NapCat 模板 | 见下文 | `[]` |
 | `auto_revoke_targets` | 列表 | 自动撤回内容 | `setu` / `fortune` / `doujinshi` | `["doujinshi"]` |
@@ -63,6 +64,8 @@
 | `archive` | 下载全部页图并生成一个 ZIP 压缩包，成员按页码顺序命名，文件名为本子标题加 `.zip` |
 
 两种模式都会在所有平台通过普通 `File` 消息发送，不再使用 OneBot `Nodes` 合并转发，也不再追加标题/原始地址节点。
+
+`delivery.doujinshi_max_page` 限制本子最多包含的页数：大于 `0` 时作为 `max_page` 查询参数传给 Atri 随机本子 API，超过该页数的本子会被 API 过滤；`0` 表示不限制（不传 `max_page` 参数）。
 
 ### 自动撤回与本子文件
 
@@ -152,6 +155,7 @@ NapCat `upload_file_stream` 的 `chunk_data` 仍是 base64 字符串，这是 Na
   "delivery": {
     "send_mode": "auto",
     "doujinshi_send_mode": "pdf",
+    "doujinshi_max_page": 0,
     "auto_revoke_targets": ["setu", "doujinshi"],
     "auto_revoke_scope": "r18",
     "auto_revoke_delay": 1800,

@@ -208,6 +208,7 @@ class DeliveryConfig(BaseModel):
 
     send_mode: SendModeStr = SendModeStr.AUTO
     doujinshi_send_mode: DoujinshiSendModeStr = DoujinshiSendModeStr.PDF
+    doujinshi_max_page: int = Field(default=0, ge=0)
     r18_docx_mode: bool = True
     auto_revoke_scope: AutoRevokeScopeStr = AutoRevokeScopeStr.NONE
     auto_revoke_targets: list[AutoRevokeTargetStr] = Field(
@@ -607,6 +608,11 @@ class SetuPluginConfig(BaseModel):
     def doujinshi_send_mode(self) -> str:
         """Get random doujinshi file generation mode."""
         return self.delivery.doujinshi_send_mode.value
+
+    @property
+    def doujinshi_max_page(self) -> int:
+        """Get random doujinshi max page filter; 0 表示不限页数。"""
+        return self.delivery.doujinshi_max_page
 
     @property
     def r18_docx_mode(self) -> bool:

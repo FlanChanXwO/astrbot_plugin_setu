@@ -151,6 +151,7 @@
 | `api_type` | API 类型（lolicon / atri / sexnyan / custom / all） | `lolicon` |
 | `send_mode` | 色图发送模式（auto / image / forward） | `auto` |
 | `doujinshi_send_mode` | 本子文件格式（pdf / archive） | `pdf` |
+| `doujinshi_max_page` | 随机本子最大页数（`0` 表示不限） | `0` |
 | `content_mode` | 内容模式（sfw / r18 / mix） | `sfw` |
 | `max_count` | 单次最大图片数（1-10） | `10` |
 | `max_replenish_rounds` | 下载暂时失败时的同 URL 确认尝试次数/补图轮次 | `3` |

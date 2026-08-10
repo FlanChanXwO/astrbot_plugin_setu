@@ -19,6 +19,7 @@ class _Config:
     auto_revoke_delay = 1800
     auto_revoke_doujinshi_enabled = True
     doujinshi_send_mode = "pdf"
+    doujinshi_max_page = 0
     tag_alias = "碧蓝档案=blue_archive"
 
     def resolve_message(self, key: str, **kwargs: object) -> str:
@@ -33,12 +34,18 @@ class _DoujinshiService:
         self.generated = generated
         self.requested_tags: list[str] | None = None
         self.requested_mode: str | None = None
+        self.requested_max_page: int | None = None
 
     async def fetch_random_file(
-        self, tags: list[str] | None = None, *, mode: str = "pdf"
+        self,
+        tags: list[str] | None = None,
+        *,
+        mode: str = "pdf",
+        max_page: int | None = None,
     ) -> GeneratedDoujinshiPdf:
         self.requested_tags = tags
         self.requested_mode = mode
+        self.requested_max_page = max_page
         return self.generated
 
 
@@ -114,6 +121,39 @@ async def test_random_doujinshi_passes_archive_mode_from_config(
     assert service.requested_mode == "archive"
     assert isinstance(results[-1].result_chain[0], Comp.File)
     assert results[-1].result_chain[0].name == "测试本子.zip"
+
+
+@pytest.mark.asyncio
+async def test_random_doujinshi_passes_max_page_from_config(
+    tmp_path: Path, mock_event, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    generated = GeneratedDoujinshiPdf(
+        gallery=DoujinshiGallery(
+            id=123,
+            title="测试本子",
+            page_urls=("https://example.com/1.jpg",),
+        ),
+        path=tmp_path / "doujinshi-123.pdf",
+    )
+    service = _DoujinshiService(generated)
+    handler = SetuCommandHandler(tmp_path)
+    handler._doujinshi_service = service
+    config = _Config()
+    config.doujinshi_max_page = 11
+
+    async def allow_access(event, current_config) -> tuple[bool, str]:
+        return True, ""
+
+    monkeypatch.setattr(
+        "astrbot_plugin_setu.src.infrastructure.astrbot.commands.setu.get_config",
+        lambda: config,
+    )
+    monkeypatch.setattr(handler, "_check_access", allow_access)
+
+    results = [result async for result in handler.random_doujinshi_command(mock_event)]
+
+    assert service.requested_max_page == 11
+    assert isinstance(results[-1].result_chain[0], Comp.File)
 
 
 @pytest.mark.asyncio

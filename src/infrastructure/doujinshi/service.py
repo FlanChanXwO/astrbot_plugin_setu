@@ -68,14 +68,19 @@ class DoujinshiService:
         tags: list[str] | None = None,
         *,
         mode: str = "pdf",
+        max_page: int | None = None,
         client: httpx.AsyncClient | None = None,
     ) -> GeneratedDoujinshiFile:
-        """获取随机本子，并按 ``mode`` 生成 PDF 或 ZIP 文件。"""
+        """获取随机本子，并按 ``mode`` 生成 PDF 或 ZIP 文件。
+
+        ``max_page`` 大于 0 时作为 ``max_page`` 查询参数传给 API，限制本子
+        最大页数；为 ``None`` 或 0 时不传该参数。
+        """
         normalized_mode = self._normalize_mode(mode)
         normalized_tags = [tag for tag in tags or [] if tag]
         if client is not None:
             return await self._fetch_random_file_with_client(
-                client, normalized_tags, normalized_mode
+                client, normalized_tags, normalized_mode, max_page
             )
 
         async with httpx.AsyncClient(
@@ -83,35 +88,48 @@ class DoujinshiService:
             follow_redirects=True,
         ) as managed_client:
             return await self._fetch_random_file_with_client(
-                managed_client, normalized_tags, normalized_mode
+                managed_client, normalized_tags, normalized_mode, max_page
             )
 
     async def fetch_random_pdf(
         self,
         tags: list[str] | None = None,
         *,
+        max_page: int | None = None,
         client: httpx.AsyncClient | None = None,
     ) -> GeneratedDoujinshiFile:
         """兼容旧调用方：强制生成 PDF 文件。"""
-        return await self.fetch_random_file(tags, mode="pdf", client=client)
+        return await self.fetch_random_file(
+            tags, mode="pdf", max_page=max_page, client=client
+        )
 
     async def fetch_random_archive(
         self,
         tags: list[str] | None = None,
         *,
+        max_page: int | None = None,
         client: httpx.AsyncClient | None = None,
     ) -> GeneratedDoujinshiFile:
         """获取随机本子并生成 ZIP 压缩包。"""
-        return await self.fetch_random_file(tags, mode="archive", client=client)
+        return await self.fetch_random_file(
+            tags, mode="archive", max_page=max_page, client=client
+        )
 
     async def _fetch_random_file_with_client(
-        self, client: httpx.AsyncClient, tags: list[str], mode: str
+        self,
+        client: httpx.AsyncClient,
+        tags: list[str],
+        mode: str,
+        max_page: int | None,
     ) -> GeneratedDoujinshiFile:
         # 与 Atri 图片接口一致，重复 tag 参数以保留所有解析后的标签。
+        params: list[tuple[str, str]] = [("tag", tag) for tag in tags]
+        if max_page is not None and max_page > 0:
+            params.append(("max_page", str(max_page)))
         response = await client.get(
             self.API_URL,
             headers=self.REQUEST_HEADERS,
-            params=[("tag", tag) for tag in tags],
+            params=params,
         )
         response.raise_for_status()
         try:

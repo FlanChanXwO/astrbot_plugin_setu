@@ -263,6 +263,7 @@ class SetuCommandHandler:
             generated = await self._doujinshi_service.fetch_random_file(
                 tags=tags,
                 mode=getattr(config, "doujinshi_send_mode", "pdf"),
+                max_page=getattr(config, "doujinshi_max_page", 0),
             )
             platform_name = _platform_name(event)
             chain = build_doujinshi_file_chain(generated)

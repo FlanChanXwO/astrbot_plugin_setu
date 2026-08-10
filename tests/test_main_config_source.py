@@ -28,6 +28,7 @@ def test_conf_schema_exposes_sexnyan_and_platform_transport_templates() -> None:
         "pdf",
         "archive",
     ]
+    assert delivery_items["doujinshi_max_page"]["default"] == 0
     assert delivery_items["auto_revoke_targets"]["default"] == ["doujinshi"]
     assert delivery_items["auto_revoke_targets"]["options"] == [
         "setu",
