@@ -24,14 +24,6 @@ from .platform_capabilities import is_onebot_like_platform
 
 logger = get_logger()
 
-_UNKNOWN_PLATFORM_NAME = "unknown"
-_ONEBOT_UNCERTAIN_DELIVERY_RETCODE = "1200"
-_ONEBOT_SENDMSG_TIMEOUT_MARKERS = (
-    "Timeout",
-    "NodeIKernelMsgService/sendMsg",
-    "NodeIKernelMsgListener/onMsgInfoListUpdate",
-)
-
 
 def extract_message_ids(response: Any) -> tuple[str, ...]:
     """Extract OneBot message ids from common adapter response shapes."""
@@ -71,14 +63,6 @@ def extract_message_ids(response: Any) -> tuple[str, ...]:
 
 def _get_bot_client(event: AstrMessageEvent) -> Any | None:
     return getattr(event, "bot", None) or getattr(event, "_bot", None)
-
-
-def _platform_name(event: AstrMessageEvent) -> str:
-    """统一提取平台名，避免不同发送策略对缺省值处理不一致。"""
-    return (
-        str(getattr(getattr(event, "platform", None), "name", "") or "")
-        or _UNKNOWN_PLATFORM_NAME
-    )
 
 
 def _onebot_target(event: AstrMessageEvent) -> tuple[str, int] | None:
@@ -155,21 +139,30 @@ async def _component_to_onebot_message(comp: Any) -> dict[str, Any]:
     return comp.toDict()
 
 
-def _is_onebot_uncertain_delivery_error(exc: Exception) -> bool:
-    """识别 OneBot/NapCat 已提交但确认超时的发送错误。"""
-    retcode = getattr(exc, "retcode", None)
-    text = " ".join(
-        str(value)
-        for value in (
-            getattr(exc, "message", ""),
-            getattr(exc, "wording", ""),
-            str(exc),
-        )
-        if value
-    )
-    return str(retcode) == _ONEBOT_UNCERTAIN_DELIVERY_RETCODE and all(
-        marker in text for marker in _ONEBOT_SENDMSG_TIMEOUT_MARKERS
-    )
+def _normalize_onebot_file_uris(value: Any) -> Any:
+    """将 OneBot 文件消息中的本地路径转换为可识别的 file URI。"""
+    if isinstance(value, list):
+        return [_normalize_onebot_file_uris(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_normalize_onebot_file_uris(item) for item in value)
+    if not isinstance(value, dict):
+        return value
+
+    normalized = {key: _normalize_onebot_file_uris(item) for key, item in value.items()}
+    if normalized.get("type") != "file":
+        return normalized
+
+    data = normalized.get("data")
+    if not isinstance(data, dict):
+        return normalized
+    file_value = data.get("file")
+    if not isinstance(file_value, str) or not file_value or "://" in file_value:
+        return normalized
+
+    file_path = Path(file_value)
+    if file_path.is_absolute():
+        data["file"] = file_path.as_uri()
+    return normalized
 
 
 class SendStrategy(ABC):
@@ -250,7 +243,7 @@ class DirectSendStrategy(SendStrategy):
         try:
             send_result = await self._send_message(event, chain, auto_revoke)
 
-            platform_name = _platform_name(event)
+            platform_name = getattr(event.platform, "name", "unknown")
 
             # AstrBot/OneBot 适配器偶尔会在平台侧已接收消息时返回 None。
             # 这里不把不确定返回当作失败，避免图片仍在延迟送达时误触发回退策略。
@@ -279,34 +272,18 @@ class DirectSendStrategy(SendStrategy):
             )
             return SendAttemptResult.success(message_ids)
         except TimeoutError as exc:
-            platform_name = _platform_name(event)
             # 发送接口超时后无法判断平台侧是否已经接收消息，重发 fallback 可能造成重复图片。
             logger.warning(
                 "[send] direct send confirmation timed out, treating as pending delivery: platform=%s, chain=%d, error=%s",
-                platform_name,
+                getattr(event.platform, "name", "unknown"),
                 len(chain),
                 exc,
             )
             return SendAttemptResult.pending_delivery("send confirmation timed out")
         except Exception as exc:
-            platform_name = _platform_name(event)
-            if is_onebot_like_platform(
-                platform_name
-            ) and _is_onebot_uncertain_delivery_error(exc):
-                # NapCat/NTQQ 可能已经发送成功但没有等到本地确认；
-                # 此时进入 stream/HTML fallback 会把同一张图再发一遍。
-                logger.warning(
-                    "[send] direct send returned uncertain OneBot timeout, treating as pending delivery: platform=%s, chain=%d, error=%s",
-                    platform_name,
-                    len(chain),
-                    exc,
-                )
-                return SendAttemptResult.pending_delivery(
-                    "onebot send confirmation timed out"
-                )
             logger.exception(
                 "[send] direct send failed: platform=%s, chain=%d, error=%s",
-                platform_name,
+                getattr(event.platform, "name", "unknown"),
                 len(chain),
                 exc,
             )
@@ -319,7 +296,7 @@ class DirectSendStrategy(SendStrategy):
         auto_revoke: bool,
     ) -> Any:
         if self._requires_onebot_passthrough(event, chain, auto_revoke):
-            attempted, send_result = await self._send_onebot_image_chain(event, chain)
+            attempted, send_result = await self._send_onebot_message_chain(event, chain)
             if attempted:
                 return send_result
         result = event.chain_result(chain)
@@ -328,9 +305,11 @@ class DirectSendStrategy(SendStrategy):
     def _requires_onebot_passthrough(
         self, event: AstrMessageEvent, chain: list[Any], auto_revoke: bool
     ) -> bool:
-        platform_name = _platform_name(event)
+        platform_name = getattr(getattr(event, "platform", None), "name", "") or ""
         if not is_onebot_like_platform(platform_name):
             return False
+        if auto_revoke and len(chain) == 1 and isinstance(chain[0], Comp.Nodes):
+            return True
         if auto_revoke and any(
             self._is_revoke_capable_component(comp) for comp in chain
         ):
@@ -342,7 +321,7 @@ class DirectSendStrategy(SendStrategy):
         )
 
     def _is_revoke_capable_component(self, comp: Any) -> bool:
-        return isinstance(comp, Comp.Image | Comp.File)
+        return isinstance(comp, Comp.Image | Comp.File | Comp.Plain)
 
     def _is_onebot_image_ref(self, comp: Comp.Image) -> bool:
         file_value = getattr(comp, "file", None)
@@ -356,18 +335,39 @@ class DirectSendStrategy(SendStrategy):
             or file_value.startswith("base64://")
         )
 
-    async def _send_onebot_image_chain(
+    async def _send_onebot_message_chain(
         self, event: AstrMessageEvent, chain: list[Any]
     ) -> tuple[bool, Any]:
-        message: list[dict[str, Any]] = []
-        for comp in chain:
-            message.append(await _component_to_onebot_message(comp))
-
         target = _onebot_target(event)
         if target is None:
             return False, None
 
         target_type, target_id = target
+        # 需要自动撤回时在发送阶段直接取得可恢复撤回所需的 message_id；
+        # 普通文件消息与图片消息都走同一条 OneBot action 链路。
+        if len(chain) == 1 and isinstance(chain[0], Comp.Nodes):
+            # 兼容其他调用方仍传入 Nodes；本子发送器本身不再生成 Nodes。
+            payload = _normalize_onebot_file_uris(await chain[0].to_dict())
+            messages = payload.get("messages", [])
+            if target_type == "group":
+                return await _call_onebot_action(
+                    event,
+                    "send_group_forward_msg",
+                    {"group_id": target_id, "messages": messages},
+                )
+            return await _call_onebot_action(
+                event,
+                "send_private_forward_msg",
+                {"user_id": target_id, "messages": messages},
+            )
+
+        message: list[dict[str, Any]] = []
+        for comp in chain:
+            message.append(await _component_to_onebot_message(comp))
+        # 本子现在以普通 File 直发；本地路径需要转换为 file://，否则
+        # NapCat 可能返回消息 ID，但客户端打开附件时会显示下载失败。
+        message = _normalize_onebot_file_uris(message)
+
         if target_type == "group":
             return await _call_onebot_action(
                 event,
@@ -469,7 +469,7 @@ class ForwardSendStrategy(SendStrategy):
     ) -> SendAttemptResult:
         """Send forward nodes and expose whether fallback is safe."""
         try:
-            platform_name = _platform_name(event)
+            platform_name = getattr(getattr(event, "platform", None), "name", "")
             if auto_revoke and is_onebot_like_platform(platform_name):
                 attempted, raw_result = await self._send_nodes_raw(event, nodes)
                 if attempted:
@@ -504,28 +504,14 @@ class ForwardSendStrategy(SendStrategy):
             logger.info("[forward] send completed: nodes=%d", len(nodes))
             return SendAttemptResult.success(extract_message_ids(send_result))
         except TimeoutError as exc:
-            platform_name = _platform_name(event)
             # 合并转发也可能在平台侧已接收后只丢失本地确认，立刻 fallback 会造成重复消息。
             logger.warning(
-                "[forward] send confirmation timed out, treating as pending delivery: platform=%s, nodes=%d, error=%s",
-                platform_name,
+                "[forward] send confirmation timed out, treating as pending delivery: nodes=%d, error=%s",
                 len(nodes),
                 exc,
             )
             return SendAttemptResult.pending_delivery("forward confirmation timed out")
         except Exception as exc:
-            platform_name = _platform_name(event)
-            if is_onebot_like_platform(
-                platform_name
-            ) and _is_onebot_uncertain_delivery_error(exc):
-                logger.warning(
-                    "[forward] send returned uncertain OneBot timeout, treating as pending delivery: nodes=%d, error=%s",
-                    len(nodes),
-                    exc,
-                )
-                return SendAttemptResult.pending_delivery(
-                    "forward onebot confirmation timed out"
-                )
             logger.exception(
                 "[forward] send failed: nodes=%d, error=%s",
                 len(nodes),

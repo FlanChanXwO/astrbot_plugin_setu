@@ -3,8 +3,14 @@
 from __future__ import annotations
 
 from .dto import SendOptions
+from .doujinshi_sender import build_doujinshi_file_chain, get_doujinshi_file_name
 from .image_sender import ImageSender
-from .revoke_scheduler import clear_revoke_scheduler, schedule_revoke
+from .revoke_scheduler import (
+    get_revoke_scheduler,
+    init_revoke_scheduler,
+    schedule_revoke,
+    stop_revoke_scheduler,
+)
 from .send_filters import (
     SendFilter,
     SendResult,
@@ -27,8 +33,12 @@ __all__ = [
     "HtmlCardFallbackStrategy",
     "SendOptions",
     "schedule_revoke",
-    "clear_revoke_scheduler",
+    "get_revoke_scheduler",
+    "init_revoke_scheduler",
+    "stop_revoke_scheduler",
     "resolve_send_mode",
+    "build_doujinshi_file_chain",
+    "get_doujinshi_file_name",
     # Filter chain (new)
     "send_with_filter_chain",
     "SendResult",

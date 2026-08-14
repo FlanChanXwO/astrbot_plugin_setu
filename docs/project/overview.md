@@ -6,7 +6,7 @@
 
 - 管理多 API 图片供应商（Lolicon、Atri、SexNyan、自定义）
 - 按标签、数量、内容模式获取图片
-- 适配不同平台发送策略（直接发送、合并转发、HTML 卡片、NapCat 流式、Docx 封装）
+- 适配不同平台发送策略（图片直接发送/合并转发、随机本子 PDF/ZIP 文件、HTML 卡片、NapCat 流式、Docx 封装）
 - 管理会话级配置覆盖和 Setu/Fortune 访问控制
 - 提供运势卡片生成和预缓存
 - 为 AstrBot 的 AI agent 提供图片获取和配置管理工具

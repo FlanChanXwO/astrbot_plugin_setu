@@ -24,7 +24,9 @@ from ... import get_access_control_repo, get_provider
 from ...permission_service import PermissionService
 from ...persistence import get_fortune_repo
 from ...providers import init_provider_from_config
-from ..config import get_config
+from ...sending import DirectSendStrategy, schedule_revoke
+from ...sending.platform_capabilities import is_onebot_like_platform
+from ..config import get_config, get_plugin_context
 from ..fortune_renderer import FortuneRenderer
 
 logger = get_logger()
@@ -69,13 +71,59 @@ class FortuneCommandHandler:
             result = await service.get_or_create_fortune(request)
             fortune_image = await self._render_fortune_image(result, service)
             if fortune_image:
-                yield event.chain_result([Comp.Image.fromBytes(fortune_image)])
+                chain = [Comp.Image.fromBytes(fortune_image)]
+                if await self._send_fortune_with_auto_revoke(event, chain, config):
+                    return
+                yield event.chain_result(chain)
             else:
-                yield event.plain_result(self._format_fortune(result))
+                text = self._format_fortune(result)
+                if await self._send_fortune_with_auto_revoke(
+                    event, [Comp.Plain(text)], config
+                ):
+                    return
+                yield event.plain_result(text)
         except Exception as e:
             text = self._message("fortune_get_failed", error=e)
             if result := self._plain(event, text):
                 yield result
+
+    async def _send_fortune_with_auto_revoke(
+        self,
+        event: AstrMessageEvent,
+        chain: list[Any],
+        config: Any,
+    ) -> bool:
+        """在启用且支持的情况下发送今日运势并登记可恢复撤回任务。"""
+        if not getattr(config, "auto_revoke_fortune_enabled", False):
+            return False
+        if config.auto_revoke_delay <= 0:
+            return False
+
+        platform_name = getattr(getattr(event, "platform", None), "name", None)
+        if not is_onebot_like_platform(platform_name):
+            return False
+
+        plugin_context = get_plugin_context()
+        if plugin_context is None:
+            logger.warning("[fortune] 自动撤回已启用但插件上下文未初始化")
+            return False
+
+        send_result = await DirectSendStrategy(plugin_context).send_with_status(
+            event, chain, auto_revoke=True
+        )
+        if not send_result.accepted:
+            return False
+        if not send_result.message_ids:
+            logger.warning("[fortune] 发送成功但未返回 message_id，无法登记自动撤回")
+            return True
+
+        scheduled = 0
+        for message_id in send_result.message_ids:
+            if await schedule_revoke(event, message_id, config.auto_revoke_delay):
+                scheduled += 1
+        if scheduled == 0:
+            logger.warning("[fortune] 未能登记今日运势自动撤回任务")
+        return True
 
     async def refresh_fortune_command(
         self, event: AstrMessageEvent

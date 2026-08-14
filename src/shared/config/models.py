@@ -64,6 +64,13 @@ class SendModeStr(str, Enum):
     AUTO = "auto"
 
 
+class DoujinshiSendModeStr(str, Enum):
+    """随机本子文件生成模式。"""
+
+    PDF = "pdf"
+    ARCHIVE = "archive"
+
+
 class AutoRevokeScopeStr(str, Enum):
     """Content scopes that should be auto-revoked after Setu sends."""
 
@@ -71,6 +78,14 @@ class AutoRevokeScopeStr(str, Enum):
     SFW = "sfw"
     R18 = "r18"
     ALL = "all"
+
+
+class AutoRevokeTargetStr(str, Enum):
+    """Content types that can enter the shared auto-revoke scheduler."""
+
+    SETU = "setu"
+    FORTUNE = "fortune"
+    DOUJINSHI = "doujinshi"
 
 
 def should_auto_revoke(scope: str | AutoRevokeScopeStr, is_r18: bool) -> bool:
@@ -189,12 +204,17 @@ class SetuGeneralConfig(BaseModel):
 
 
 class DeliveryConfig(BaseModel):
-    """Image delivery configuration."""
+    """消息发送与自动清理配置。"""
 
     send_mode: SendModeStr = SendModeStr.AUTO
+    doujinshi_send_mode: DoujinshiSendModeStr = DoujinshiSendModeStr.PDF
+    doujinshi_max_page: int = Field(default=0, ge=0)
     r18_docx_mode: bool = True
     auto_revoke_scope: AutoRevokeScopeStr = AutoRevokeScopeStr.NONE
-    auto_revoke_delay: int = Field(default=30, ge=5, le=300)
+    auto_revoke_targets: list[AutoRevokeTargetStr] = Field(
+        default_factory=lambda: [AutoRevokeTargetStr.DOUJINSHI]
+    )
+    auto_revoke_delay: int = Field(default=30, ge=0)
     platform_transports: list[PlatformTransportConfig] = Field(default_factory=list)
     # 兼容旧版平铺 NapCat 配置；新配置入口是 platform_transports 模板。
     napcat_stream_mode: NapcatStreamModeStr = NapcatStreamModeStr.FALLBACK
@@ -290,6 +310,8 @@ class MessagesConfig(BaseModel):
         "count_out_of_range": "图片数量必须在{min_count}-{max_count}之间哦~",
         "fetch_timeout": "获取图片超时，网络可能不稳定，请稍后再试。",
         "fetch_failed": "获取图片失败，请稍后再试",
+        "doujinshi_fetching": "正在获取随机本子并生成文件，请稍候...",
+        "doujinshi_failed": "随机本子获取或文件生成失败，请稍后再试。",
         "no_result": "未找到{tags_info}符合要求的图片~",
         "empty_payload": "运气不好，一张图都没拿到...",
         "r18_docx_failed": "R18 Docx 封装失败，请稍后再试或联系管理员。",
@@ -369,6 +391,16 @@ class MessagesConfig(BaseModel):
     )
     fetch_failed: MessageTextConfig = Field(
         default_factory=lambda: MessageTextConfig(text="获取图片失败，请稍后再试")
+    )
+    doujinshi_fetching: MessageTextConfig = Field(
+        default_factory=lambda: MessageTextConfig(
+            text="正在获取随机本子并生成文件，请稍候..."
+        )
+    )
+    doujinshi_failed: MessageTextConfig = Field(
+        default_factory=lambda: MessageTextConfig(
+            text="随机本子获取或文件生成失败，请稍后再试。"
+        )
     )
     no_result: MessageTextConfig = Field(
         default_factory=lambda: MessageTextConfig(
@@ -573,6 +605,16 @@ class SetuPluginConfig(BaseModel):
         return self.delivery.send_mode.value
 
     @property
+    def doujinshi_send_mode(self) -> str:
+        """Get random doujinshi file generation mode."""
+        return self.delivery.doujinshi_send_mode.value
+
+    @property
+    def doujinshi_max_page(self) -> int:
+        """Get random doujinshi max page filter; 0 表示不限页数。"""
+        return self.delivery.doujinshi_max_page
+
+    @property
     def r18_docx_mode(self) -> bool:
         """Get R18 DOCX mode."""
         return self.delivery.r18_docx_mode
@@ -590,6 +632,26 @@ class SetuPluginConfig(BaseModel):
     @property
     def auto_revoke_delay(self) -> int:
         """Get auto-revoke delay."""
+        return self.delivery.auto_revoke_delay
+
+    @property
+    def auto_revoke_setu_enabled(self) -> bool:
+        """Return whether Setu image sends may enter auto-revoke scheduling."""
+        return AutoRevokeTargetStr.SETU in self.delivery.auto_revoke_targets
+
+    @property
+    def auto_revoke_fortune_enabled(self) -> bool:
+        """Return whether today's-fortune responses may enter auto-revoke scheduling."""
+        return AutoRevokeTargetStr.FORTUNE in self.delivery.auto_revoke_targets
+
+    @property
+    def auto_revoke_doujinshi_enabled(self) -> bool:
+        """Return whether random doujinshi group files may enter cleanup scheduling."""
+        return AutoRevokeTargetStr.DOUJINSHI in self.delivery.auto_revoke_targets
+
+    @property
+    def doujinshi_file_cleanup_delay(self) -> int:
+        """兼容旧调用方：本子清理由统一撤回延迟控制。"""
         return self.delivery.auto_revoke_delay
 
     @property

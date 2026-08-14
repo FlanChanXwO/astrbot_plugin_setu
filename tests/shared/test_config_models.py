@@ -23,8 +23,44 @@ def test_auto_revoke_scope_defaults_to_none() -> None:
     config = SetuPluginConfig()
 
     assert config.auto_revoke_scope == "none"
+    assert config.auto_revoke_setu_enabled is False
+    assert config.auto_revoke_fortune_enabled is False
+    assert config.auto_revoke_doujinshi_enabled is True
     assert should_auto_revoke(config.auto_revoke_scope, is_r18=False) is False
     assert should_auto_revoke(config.auto_revoke_scope, is_r18=True) is False
+
+
+def test_doujinshi_send_mode_defaults_to_pdf_and_accepts_archive() -> None:
+    assert SetuPluginConfig().doujinshi_send_mode == "pdf"
+    assert (
+        SetuPluginConfig(
+            delivery={"doujinshi_send_mode": "archive"}
+        ).doujinshi_send_mode
+        == "archive"
+    )
+
+
+def test_doujinshi_max_page_defaults_to_zero_and_accepts_value() -> None:
+    assert SetuPluginConfig().doujinshi_max_page == 0
+    assert (
+        SetuPluginConfig(delivery={"doujinshi_max_page": 11}).doujinshi_max_page == 11
+    )
+
+
+def test_auto_revoke_delay_and_targets_are_configured_independently() -> None:
+    config = SetuPluginConfig(
+        delivery={
+            "auto_revoke_delay": 1800,
+            "auto_revoke_targets": ["setu", "fortune"],
+        }
+    )
+
+    assert config.auto_revoke_delay == 1800
+    assert config.doujinshi_file_cleanup_delay == 1800
+    assert config.auto_revoke_setu_enabled is True
+    assert config.auto_revoke_fortune_enabled is True
+    assert config.auto_revoke_doujinshi_enabled is False
+    assert SetuPluginConfig(delivery={"auto_revoke_delay": 0}).auto_revoke_delay == 0
 
 
 def test_auto_revoke_scope_validation(sample_config_dict) -> None:
@@ -90,6 +126,19 @@ def test_message_defaults_fill_text_when_message_object_omits_text() -> None:
     assert (
         config.resolve_message("revoke_scheduled", revoke_delay=30)
         == "已设置自动撤回，将在 30 秒后撤回。"
+    )
+
+
+def test_doujinshi_message_defaults_support_overrides() -> None:
+    config = SetuPluginConfig(messages={"doujinshi_fetching": {"enabled": True}})
+
+    assert (
+        config.resolve_message("doujinshi_fetching")
+        == "正在获取随机本子并生成文件，请稍候..."
+    )
+    assert (
+        config.resolve_message("doujinshi_failed")
+        == "随机本子获取或文件生成失败，请稍后再试。"
     )
 
 
@@ -174,6 +223,34 @@ def test_config_healer_keeps_new_auto_revoke_scope_when_legacy_exists() -> None:
     )
 
     assert healed["delivery"] == {"auto_revoke_scope": "all"}
+    assert changes
+
+
+def test_config_healer_migrates_legacy_doujinshi_cleanup_delay() -> None:
+    schema = {
+        "delivery": {
+            "type": "object",
+            "items": {"auto_revoke_delay": {"type": "int", "default": 30}},
+        }
+    }
+
+    healed, changes = heal_astrbot_plugin_config(
+        {"delivery": {"doujinshi_file_cleanup_delay": 1800}}, schema
+    )
+
+    assert healed["delivery"] == {"auto_revoke_delay": 1800}
+    assert changes
+
+    healed, changes = heal_astrbot_plugin_config(
+        {
+            "delivery": {
+                "auto_revoke_delay": 45,
+                "doujinshi_file_cleanup_delay": 1800,
+            }
+        },
+        schema,
+    )
+    assert healed["delivery"] == {"auto_revoke_delay": 45}
     assert changes
 
 

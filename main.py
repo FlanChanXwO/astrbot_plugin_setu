@@ -45,11 +45,19 @@ from .src.infrastructure.astrbot.session_config_api import (
     register_session_config_web_apis,
 )
 from .src.infrastructure.config import heal_astrbot_plugin_config
+from .src.infrastructure.sending import (
+    init_revoke_scheduler,
+    stop_revoke_scheduler,
+)
 from .src.shared.send_cache import clear_send_cache, init_send_cache
 
 # Regex patterns for command triggers
 SETU_REGEX_PATTERN = r"^/?(来\s*(.*?)(份|个|张|点))(.*?)(?:福利|色|瑟|涩|塞)?图$"
+DOUJINSHI_REGEX_PATTERN = r"^/?来\s*(?:一\s*)?份(?P<tags>.*?)本子$"
 FORTUNE_REGEX_PATTERN = r"^(?!/)(今日运势|jrys)$"
+REGEX_COMMAND_PATTERN = (
+    rf"(?:{SETU_REGEX_PATTERN}|{DOUJINSHI_REGEX_PATTERN}|{FORTUNE_REGEX_PATTERN})"
+)
 
 # Module-level handler singletons
 _setu_handler: SetuCommandHandler | None = None
@@ -133,6 +141,40 @@ def _is_fortune_command_invocation(event: AstrMessageEvent) -> bool:
     if not getattr(event, "is_at_or_wake_command", False):
         return False
     return _get_invoked_command(event) in {"今日运势", "jrys"}
+
+
+async def _route_regex_command(
+    event: AstrMessageEvent,
+    setu_handler: SetuCommandHandler | None,
+    fortune_handler: FortuneCommandHandler | None,
+) -> AsyncGenerator[Any, None]:
+    """把所有纯文本正则入口集中分发到对应命令处理器。"""
+    message = str(getattr(event, "message_str", "") or "").strip()
+    if re.match(SETU_REGEX_PATTERN, message):
+        if setu_handler is None:
+            yield event.plain_result("插件未初始化")
+            return
+        async for result in setu_handler.get_random_picture(event):
+            yield result
+        return
+
+    if doujinshi_match := re.match(DOUJINSHI_REGEX_PATTERN, message):
+        if setu_handler is None:
+            yield event.plain_result("插件未初始化")
+            return
+        tags = doujinshi_match.group("tags").strip()
+        async for result in setu_handler.random_doujinshi_command(event, tags=tags):
+            yield result
+        return
+
+    if re.match(FORTUNE_REGEX_PATTERN, message):
+        if _is_fortune_command_invocation(event):
+            return
+        if fortune_handler is None:
+            yield event.plain_result("插件未初始化")
+            return
+        async for result in fortune_handler.fortune_command(event):
+            yield result
 
 
 def _fortune_auto_refresh_enabled(config: Any) -> bool:
@@ -236,8 +278,13 @@ class SetuPlugin(Star):
             max_items=cfg.cache_max_items,
             cleanup_on_start=cfg.cache_cleanup_on_start,
         )
+        revoke_scheduler = await init_revoke_scheduler(data_dir, self.context)
 
-        _setu_handler = SetuCommandHandler()
+        _setu_handler = SetuCommandHandler(
+            data_dir=Path(data_dir),
+            plugin_context=self.context,
+            revoke_scheduler=revoke_scheduler,
+        )
         _fortune_handler = FortuneCommandHandler()
         _session_config_handler = SessionConfigCommandHandler()
         if _fortune_auto_refresh_enabled(cfg):
@@ -263,7 +310,6 @@ class SetuPlugin(Star):
             clear_repo,
             clear_session_config_repo,
         )
-        from .src.infrastructure.sending import clear_revoke_scheduler
 
         if self._fortune_pregenerate_task is not None:
             self._fortune_pregenerate_task.cancel()
@@ -282,7 +328,7 @@ class SetuPlugin(Star):
         clear_repo()
         clear_fortune_repo()
         clear_session_config_repo()
-        await clear_revoke_scheduler()
+        await stop_revoke_scheduler()
         clear_send_cache()
 
         _setu_handler = None
@@ -361,15 +407,12 @@ class SetuPlugin(Star):
 
     # ==================== Setu Commands ====================
 
-    @filter.regex(SETU_REGEX_PATTERN)
-    async def get_random_picture(
-        self, event: AstrMessageEvent
-    ) -> AsyncGenerator[Any, None]:
-        """来份色图 / 来张图 etc."""
-        if _setu_handler is None:
-            yield event.plain_result("插件未初始化")
-            return
-        async for result in _setu_handler.get_random_picture(event):
+    @filter.regex(REGEX_COMMAND_PATTERN)
+    async def regex_command(self, event: AstrMessageEvent) -> AsyncGenerator[Any, None]:
+        """集中处理所有纯文本正则命令入口。"""
+        async for result in _route_regex_command(
+            event, _setu_handler, _fortune_handler
+        ):
             yield result
 
     @filter.command("setu")
@@ -381,6 +424,17 @@ class SetuPlugin(Star):
             yield event.plain_result("插件未初始化")
             return
         async for result in _setu_handler.setu_command(event, count, tags=tags):
+            yield result
+
+    @filter.command("随机本子", alias={"本子", "doujinshi"})
+    async def random_doujinshi_command(
+        self, event: AstrMessageEvent, *, tags: str = ""
+    ) -> AsyncGenerator[Any, None]:
+        """获取可选标签的随机本子 PDF。"""
+        if _setu_handler is None:
+            yield event.plain_result("插件未初始化")
+            return
+        async for result in _setu_handler.random_doujinshi_command(event, tags=tags):
             yield result
 
     @filter.command("session_config")
@@ -401,19 +455,6 @@ class SetuPlugin(Star):
         self, event: AstrMessageEvent
     ) -> AsyncGenerator[Any, None]:
         """今日运势 / jrys"""
-        if _fortune_handler is None:
-            yield event.plain_result("插件未初始化")
-            return
-        async for result in _fortune_handler.fortune_command(event):
-            yield result
-
-    @filter.regex(FORTUNE_REGEX_PATTERN)
-    async def fortune_regex_command(
-        self, event: AstrMessageEvent
-    ) -> AsyncGenerator[Any, None]:
-        """纯文本今日运势/jrys入口（不带命令前缀）。"""
-        if _is_fortune_command_invocation(event):
-            return
         if _fortune_handler is None:
             yield event.plain_result("插件未初始化")
             return

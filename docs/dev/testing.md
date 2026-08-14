@@ -40,6 +40,7 @@
 - [ ] HTML 卡片 fallback 在原图发送失败时仍能触发。
 - [ ] 运势卡片渲染失败时降级为纯文本。
 - [ ] 会话配置读写不锁死（并发安全）。
-- [ ] `auto_revoke_scope` 的 `none` / `sfw` / `r18` / `all` 覆盖正确，旧 `setu.auto_revoke` 与 `auto_revoke_r18` 只通过迁移保留。
+- [ ] `auto_revoke_targets` 默认仅含 `doujinshi`，并能分别将 `setu`、`fortune`、`doujinshi` 传递到对应链路；`auto_revoke_scope` 的 `none` / `sfw` / `r18` / `all` 仅过滤已启用的色图。
+- [ ] OneBot 图片、今日运势和本子普通文件消息均使用 `auto_revoke_delay` 写入统一持久化消息任务；本子通过原始 `send_group_msg` 取得 `message_id` 并在到期后调用 `delete_msg`，旧字段与旧队列均可迁移；删除任务连续失败三次后会移除持久化记录。
 - [ ] `tests/conftest.py` 固定的 `ASTRBOT_ROOT` 仍能阻止插件目录污染。
 - [ ] 访问控制黑白名单互斥逻辑正常。

@@ -18,6 +18,27 @@
 - 数量范围支持中文数字
 - 标签支持空格、逗号、顿号分隔
 
+## 随机本子命令
+
+```text
+来份本子
+来一份本子
+来份碧蓝档案本子
+/随机本子
+/随机本子 碧蓝档案
+/本子
+/doujinshi
+```
+
+- 调用 `https://api.atri.rodeo/v1/doujinshi/random`，下载响应中的全部页图，并按 `delivery.doujinshi_send_mode` 生成 PDF 或 ZIP 压缩包（默认 PDF）。
+- 本子标签与 Setu 使用同一套空格、逗号、顿号分隔和标签别名映射；解析出的每个标签都会以重复 `tag` 查询参数传给 API。
+- 与 Setu 共用同一套用户和群组访问控制；被禁止使用色图的会话也不能获取随机本子。
+- 两种模式都在所有平台直接发送一个普通文件，不再创建 `Nodes` 合并转发，也不会追加标题或原始地址节点；`archive` 模式的 ZIP 成员按页码顺序命名并保留图片扩展名，若上游没有扩展名则使用 `.bin` 保留原始字节。
+- 文件名使用 API 返回的本子标题，并对平台不允许的路径字符做安全替换；PDF 使用 `.pdf`，压缩包使用 `.zip`。
+- 生成文件会写入插件运行数据目录，供 AstrBot 在发送期间读取；不使用插件目录下的 `data/`。
+- OneBot/NapCat 群聊的本子普通文件消息是否自动撤回由全局 `delivery.auto_revoke_targets` 中的 `doujinshi` 控制，默认启用；它与色图、今日运势共用 `delivery.auto_revoke_delay`。填 `1800` 即为 30 分钟，`0` 可关闭全部自动清理。任务保存在插件数据目录的可恢复队列中，重启后仍会恢复。
+- 启用自动撤回时，本子发送会使用 OneBot 原始 `send_group_msg` 取得普通文件消息的 `message_id`，到期调用 `delete_msg`；不依赖 `get_group_root_files` 或 `delete_group_file`。
+
 ## 会话配置命令（管理员设置）
 
 会话覆盖配置会写入插件数据目录下的 `session_overrides.json`，不会修改全局 WebUI 配置。
@@ -38,7 +59,7 @@
 
 可用配置项：`setu.content_mode`、`setu.r18_docx`、`setu.auto_revoke_scope`、`setu.send_mode`、`fortune.tags`、`fortune.content_mode`。
 
-`setu.auto_revoke_scope` 可选 `none`、`sfw`、`r18`、`all`，只作用于 Setu 图片发送；今日运势不自动撤回。
+`setu.auto_revoke_scope` 可选 `none`、`sfw`、`r18`、`all`，只作用于 Setu 图片发送。今日运势是否自动撤回由全局 `delivery.auto_revoke_targets` 的 `fortune` 值控制，默认禁用。
 
 ## 黑白名单管理命令（管理员）
 
@@ -89,5 +110,6 @@
 ## 命令行为说明
 
 - Setu 获取无结果时走 `MessagesConfig` 配置提示，不再硬编码文案。
+- 随机本子的获取中和失败提示分别使用 `doujinshi_fetching`、`doujinshi_failed` 消息键，可在提示消息覆盖中调整。
 - 运势卡片渲染失败时降级为纯文本提示。
 - 会话配置支持并发安全读写。
